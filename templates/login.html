@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="/static/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login / Sign Up</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .container { max-width: 400px; margin: 50px auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 10px 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Account Access</h2>
+        <p>Please choose an option:</p>
+        <div>
+            <!-- In a real app, these would trigger forms or JS actions -->
+            <button onclick="alert('Sign In form would go here. Use API: /api/user/login');">Sign In</button>
+            <button onclick="alert('Sign Up form would go here. Use API: /api/user/create');">Sign Up</button>
+            <button onclick="alert('Password recovery flow would start here.');">Forgotten Password?</button>
+        </div>
+         <p><a href="/">Back to Home</a></p>
+    </div>
+</body>
+</html>

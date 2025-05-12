@@ -1,0 +1,27 @@
+[package]
+name = "mma"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.28", features = ["full"] }
+scylla = "0.9"
+uuid = { version = "1.3", features = ["v4", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-trait = "0.1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+thiserror = "1.0"
+futures = "0.3"
+once_cell = "1.17"
+actix-web = "4.3"
+argon2 = "0.5.3"
+rand_core = { version = "0.9.3", features = ["std"] }
+rand = "0.8"
+chrono = "0.4"
+time = "0.3"
+futures-util = "0.3"
+dashmap = "5.5" # For concurrent HashMap
+notify = "6.1" # For file watching
+notify-debouncer-full = "0.3" # Debouncer for notify

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MMA Gym Management</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; }
+        h1, h2 { color: #333; }
+        .map-container { margin-top: 20px; }
+        iframe { border: 0; width: 100%; height: 450px; }
+    </style>
+</head>
+<body>
+
+
+    <h1>Welcome to MMA Gym Management</h1>
+    <nav>
+        <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/login">Login/Sign Up</a></li>
+            <li><a href="/gym-signup">Gym Sign Up</a></li>
+            <li><a href="/contact">Contact Us</a></li>
+            <!-- Add more links as needed -->
+        </ul>
+    </nav>
+
+
+    <p>
+        The premiera solution for managing your Mixed Martial Arts gym. Track members,
+        classes, attendance, gradings, and more, all in one place.
+    </p>
+    <p>
+        Find our affiliated gyms below.
+    </p>
+
+    <h2>Our Locations</h2>
+    <div class="map-container">
+        <p><strong>Leura Gym (Example)</strong></p>
+        <iframe
+            loading="lazy"
+            allowfullscreen
+            referrerpolicy="no-referrer-when-downgrade"
+            src="https://www.google.com/maps/embed/v1/place?key=YOUR_API_KEY&q=114+Mount+St,+Leura+NSW+2780,+Australia">
+        </iframe>
+        <p><small>Note: You'll need a Google Maps API key for the embed to work reliably in production.</small></p>
+    </div>
+
+    <div>
+        <p>
+            <a href="/login">Login or Sign Up</a> |
+            <a href="/gym-signup">Gym Owner? Sign Up Here</a> |
+            <a href="/contact">Contact Us</a>
+        </p>
+    </div>
+</body>
+</html>
