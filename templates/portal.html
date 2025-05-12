@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MMA Gym Portal</title>
+</head>
+<body>
+    <nav>
+        <ul>
+            <!-- Nav items for client-side tab switching -->
+            <li><a href="#" data-section="frontpage">Front Page</a></li>
+            <li><a href="#" data-section="classes">Classes</a></li>
+            <li><a href="#" data-section="styles">Styles</a></li>
+            <li><a href="#" data-section="locations">Locations</a></li>
+            <li><a href="#" data-section="account">Account</a></li>
+            <!-- Logout is a different action -->
+            <li><a href="#" id="logoutLink">Log out</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <!-- Section: Front Page -->
+        <div id="frontpageSection" class="portal-section">
+            <h2>Welcome to the Portal!</h2>
+            <p>This is your main dashboard area. Select an option from the navigation above.</p>
+            <!-- Add summary data, recent activity, etc. here -->
+        </div>
+
+        <!-- Section: Classes -->
+        <div id="classesSection" class="portal-section" style="display: none;">
+            <h2>Classes</h2>
+            <p>View and manage upcoming classes.</p>
+            <!-- Class listing or management interface goes here -->
+        </div>
+
+        <!-- Section: Styles -->
+        <div id="stylesSection" class="portal-section" style="display: none;">
+            <h2>Styles & Gradings</h2>
+            <p>Information about different styles and grading requirements.</p>
+            <!-- Style and grading details go here -->
+        </div>
+
+        <!-- Section: Locations -->
+        <div id="locationsSection" class="portal-section" style="display: none;">
+            <h2>Locations</h2>
+            <p>Find gym locations and details.</p>
+             <div class="map-container">
+                <p><strong>Leura Gym (Example)</strong></p>
+                <iframe
+                    loading="lazy"
+                    allowfullscreen
+                    referrerpolicy="no-referrer-when-downgrade"
+                    src="https://www.google.com/maps/embed/v1/place?key=YOUR_API_KEY&q=114+Mount+St,+Leura+NSW+2780,+Australia">
+                </iframe>
+                 <p><small>Note: Replace YOUR_API_KEY with your Google Maps Embed API key.</small></p>
+            </div>
+            <!-- Map or list of locations goes here -->
+        </div>
+
+        <!-- Section: Account -->
+        <div id="accountSection" class="portal-section" style="display: none;">
+            <h2>Account Settings</h2>
+
+            <!-- Profile Update Form -->
+            <form id="profileUpdateForm">
+                <h3>Your Profile</h3>
+                <div>
+                    <label for="email">Email:</label>
+                    <!-- Email is read-only here -->
+                    <input type="email" id="email" name="email" required readonly disabled>
+                </div>
+                <div>
+                    <label for="first_name">First Name:</label>
+                    <input type="text" id="first_name" name="first_name" required maxlength="64">
+                </div>
+                 <div>
+                    <label for="surname">Surname:</label>
+                    <input type="text" id="surname" name="surname" required maxlength="64">
+                </div>
+                <div>
+                    <label for="gender">Gender:</label>
+                    <!-- Use a dropdown for gender -->
+                    <select id="gender" name="gender">
+                        <option value="">Select Gender</option> <!-- Optional empty value -->
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <!-- Add other options if needed -->
+                    </select>
+                </div>
+                <div>
+                    <label for="phone">Phone:</label>
+                    <input type="tel" id="phone" name="phone" maxlength="64"> <!-- Use tel type for phone, max length 64 -->
+                </div>
+                 <div>
+                    <label for="dob">Date of Birth:</label>
+                    <!-- Use type="date" for calendar picker -->
+                    <input type="date" id="dob" name="dob">
+                </div>
+                 <div>
+                    <label for="address">Address:</label>
+                    <!-- Increased max length for address -->
+                    <input type="text" id="address" name="address" maxlength="512">
+                </div>
+                 <div>
+                    <label for="suburb">Suburb:</label>
+                    <input type="text" id="suburb" name="suburb" maxlength="64">
+                </div>
+                 <h4>Emergency Contact</h4>
+                 <div>
+                    <label for="emergency_name">Name:</label>
+                    <input type="text" id="emergency_name" name="emergency_name" maxlength="64">
+                </div>
+                 <div>
+                    <label for="emergency_relationship">Relationship:</label>
+                    <input type="text" id="emergency_relationship" name="emergency_relationship" maxlength="64">
+                </div>
+                 <div>
+                    <label for="emergency_phone">Phone:</label>
+                    <input type="tel" id="emergency_phone" name="emergency_phone" maxlength="64">
+                </div>
+                 <div>
+                    <label for="emergency_medical">Medical Notes:</label>
+                    <!-- Textarea doesn't use maxlength attribute in the same way, but backend validation is key -->
+                    <!-- You could add JS logic to limit input here if needed -->
+                    <textarea id="emergency_medical" name="emergency_medical"></textarea>
+                </div>
+                 <h4>Uniform Details</h4>
+                 <div>
+                    <label for="belt_size">Belt Size:</label>
+                    <!-- Use type="number" and min/max -->
+                    <input type="number" id="belt_size" name="belt_size" min="0" max="100">
+                </div>
+                 <div>
+                    <label for="uniform_size">Uniform Size:</label>
+                     <!-- Use type="number" and min/max -->
+                    <input type="number" id="uniform_size" name="uniform_size" min="0" max="100">
+                </div>
+                 <!-- Fields like waiver_id, stripe_payment_method_id, photo_id, member_number, contracted_until are read-only -->
+                 <div id="readOnlyFields">
+                     <!-- These will be populated by JS -->
+                     <p><strong>User ID:</strong> <span id="user_id_display"></span></p> <!-- Display User ID -->
+                     <p><strong>Member Number:</strong> <span id="member_number_display"></span></p>
+                     <p><strong>Joined:</strong> <span id="created_ts_display"></span></p>
+                     <p><strong>Contracted Until:</strong> <span id="contracted_until_display"></span></p>
+                     <p><strong>Email Verified:</strong> <span id="email_verified_display"></span></p>
+                     <p><strong>Waiver ID:</strong> <span id="waiver_id_display"></span></p>
+                     <p><strong>Photo ID:</strong> <span id="photo_id_display"></span></p>
+                     <p><strong>Stripe Payment Method ID:</strong> <span id="stripe_payment_method_id_display"></span></p>
+                     <!-- Add other read-only fields as needed -->
+                 </div>
+
+                <button type="submit">Update Profile</button>
+                 <div id="profileStatusMessage" style="margin-top: 10px;"></div>
+            </form>
+
+            <hr style="margin: 40px 0;"> <!-- Separator -->
+
+            <!-- Change Password Form -->
+            <form id="passwordChangeForm">
+                 <h3>Change Password</h3>
+                 <div>
+                    <label for="currentPassword">Current Password:</label>
+                    <input type="password" id="currentPassword" name="current_password" required>
+                </div>
+                 <div>
+                    <label for="newPassword">New Password:</label>
+                    <input type="password" id="newPassword" name="new_password" required>
+                </div>
+                 <div>
+                     <label for="confirmNewPassword">Confirm New Password:</label>
+                     <input type="password" id="confirmNewPassword" name="confirm_new_password" required>
+                 </div>
+
+
+                 <button type="submit" class="secondary">Change Password</button>
+                 <div id="passwordStatusMessage" style="margin-top: 10px;"></div>
+            </form>
+        </div>
+        <!-- Add more sections as needed -->
+    </div>
+
+    <footer>
+        <p>&copy; 2025 MMA Gym Management</p>
+    </footer>
+
+    <script>
+        // Helper function to display messages
+        function displayMessage(element, message, isSuccess) {
+            element.textContent = message;
+            element.style.color = isSuccess ? 'green' : 'red';
+        }
+
+         // Basic email format validation (simple check)
+         function isValidEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
+        }
+
+        // Basic phone number validation (allows numbers, +, -, spaces, parens)
+         function isValidPhoneNumber(phone) {
+            const phoneRegex = /^[\d\s\-\(\)\+]+$/;
+            return phoneRegex.test(phone);
+        }
+
+        // Basic name validation (allows letters, spaces, hyphens) - adjust regex for international names if needed
+         function isValidName(name) {
+             const nameRegex = /^[a-zA-Z\s-]+$/;
+             return nameRegex.test(name);
+         }
+
+
+        // Wait for the DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            const sections = document.querySelectorAll('.portal-section');
+            const navLinks = document.querySelectorAll('nav ul li a[data-section]');
+            const logoutLink = document.getElementById('logoutLink');
+
+            // Get form elements and message divs
+            const profileUpdateForm = document.getElementById('profileUpdateForm');
+            const passwordChangeForm = document.getElementById('passwordChangeForm');
+            const profileStatusMessageDiv = document.getElementById('profileStatusMessage');
+            const passwordStatusMessageDiv = document.getElementById('passwordStatusMessage');
+
+            // Get profile input fields by ID
+            const profileFields = {
+                email: document.getElementById('email'),
+                first_name: document.getElementById('first_name'),
+                surname: document.getElementById('surname'),
+                gender: document.getElementById('gender'), // This is now a select
+                phone: document.getElementById('phone'),
+                dob: document.getElementById('dob'), // This is now type="date"
+                address: document.getElementById('address'),
+                suburb: document.getElementById('suburb'),
+                emergency_name: document.getElementById('emergency_name'),
+                emergency_relationship: document.getElementById('emergency_relationship'),
+                emergency_phone: document.getElementById('emergency_phone'),
+                emergency_medical: document.getElementById('emergency_medical'), // Textarea
+                belt_size: document.getElementById('belt_size'), // This is now type="number"
+                uniform_size: document.getElementById('uniform_size'), // This is now type="number"
+
+                 // Read-only display spans (add user_id)
+                user_id_display: document.getElementById('user_id_display'),
+                member_number_display: document.getElementById('member_number_display'),
+                created_ts_display: document.getElementById('created_ts_display'),
+                contracted_until_display: document.getElementById('contracted_until_display'),
+                email_verified_display: document.getElementById('email_verified_display'),
+                waiver_id_display: document.getElementById('waiver_id_display'),
+                photo_id_display: document.getElementById('photo_id_display'),
+                stripe_payment_method_id_display: document.getElementById('stripe_payment_method_id_display'),
+            };
+
+            // Get password change fields
+            const currentPasswordField = document.getElementById('currentPassword');
+            const newPasswordField = document.getElementById('newPassword');
+            const confirmNewPasswordField = document.getElementById('confirmNewPassword');
+
+
+            // --- Section Switching Logic (Remains the same) ---
+            function showSection(sectionId) {
+                sections.forEach(section => {
+                    if (section.id === sectionId + 'Section') {
+                        section.style.display = 'block'; // Or 'flex'
+                    } else {
+                        section.style.display = 'none';
+                    }
+                });
+
+                navLinks.forEach(link => {
+                    if (link.getAttribute('data-section') === sectionId) {
+                        link.classList.add('active');
+                    } else {
+                        link.classList.remove('active');
+                    }
+                });
+                history.pushState(null, '', `#${sectionId}`);
+
+                 // --- Load profile data when Account section is shown ---
+                 if (sectionId === 'account') {
+                     loadUserProfile();
+                 } else {
+                     // Optional: Clear forms when leaving the section
+                     profileUpdateForm.reset();
+                     passwordChangeForm.reset();
+                     profileStatusMessageDiv.textContent = '';
+                     passwordStatusMessageDiv.textContent = '';
+                 }
+            }
+
+            navLinks.forEach(link => {
+                link.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    const sectionId = link.getAttribute('data-section');
+                    showSection(sectionId);
+                });
+            });
+
+            // Handle initial section display
+             const initialSection = window.location.hash ? window.location.hash.substring(1) : 'frontpage';
+             const validSections = Array.from(navLinks).map(link => link.getAttribute('data-section'));
+             if (validSections.includes(initialSection)) {
+                  showSection(initialSection);
+             } else {
+                 showSection('frontpage');
+             }
+
+
+            // --- Load User Profile Data ---
+            async function loadUserProfile() {
+                displayMessage(profileStatusMessageDiv, 'Loading profile...', false);
+                try {
+                     const response = await fetch('/api/user/profile_data', {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    // Check if response is OK (status 2xx)
+                    if (!response.ok) {
+                        // If not OK, it might be 401 Unauthorized if session expired
+                        if (response.status === 401) {
+                            console.warn('Session expired while loading profile.');
+                            alert('Your session has expired. Please log in again.');
+                            window.location.href = '/login'; // Redirect to login
+                            return; // Stop further processing
+                        }
+                         // Handle other non-OK statuses
+                        const errorResult = await response.json(); // Try to parse JSON error
+                        console.error('Failed to load profile (HTTP error):', response.status, errorResult);
+                        displayMessage(profileStatusMessageDiv, errorResult.error_message || `HTTP error ${response.status}`, false);
+                        return; // Stop further processing
+                    }
+
+
+                    const result = await response.json();
+
+                    if (result.success && result.user_profile) {
+                        const profile = result.user_profile;
+
+                        // Populate form fields
+                        profileFields.email.value = profile.email; // Email (read-only)
+                        profileFields.first_name.value = profile.first_name || '';
+                        profileFields.surname.value = profile.surname || '';
+                        profileFields.gender.value = profile.gender || ''; // Set select value
+                        profileFields.phone.value = profile.phone || '';
+                        profileFields.dob.value = profile.dob || ''; // YYYY-MM-DD format from backend expected by input[type="date"]
+                        profileFields.address.value = profile.address || '';
+                        profileFields.suburb.value = profile.suburb || '';
+                        profileFields.emergency_name.value = profile.emergency_name || '';
+                        profileFields.emergency_relationship.value = profile.emergency_relationship || '';
+                        profileFields.emergency_phone.value = profile.emergency_phone || '';
+                        profileFields.emergency_medical.value = profile.emergency_medical || ''; // Textarea
+                         // Handle number inputs - ensure they are numbers or empty strings
+                        profileFields.belt_size.value = profile.belt_size !== null && profile.belt_size !== undefined ? profile.belt_size : '';
+                        profileFields.uniform_size.value = profile.uniform_size !== null && profile.uniform_size !== undefined ? profile.uniform_size : '';
+
+
+                         // Populate read-only display spans
+                         profileFields.user_id_display.textContent = profile.user_id || 'N/A'; // Display User ID
+                         profileFields.member_number_display.textContent = profile.member_number || 'N/A';
+                         // Format timestamp for display (simple example)
+                         profileFields.created_ts_display.textContent = profile.created_ts ? new Date(profile.created_ts * 1000).toLocaleDateString() : 'N/A';
+                         profileFields.contracted_until_display.textContent = profile.contracted_until ? new Date(profile.contracted_until * 1000).toLocaleDateString() : 'N/A';
+                         profileFields.email_verified_display.textContent = profile.email_verified ? 'Yes' : 'No';
+                         profileFields.waiver_id_display.textContent = profile.waiver_id || 'N/A';
+                         profileFields.photo_id_display.textContent = profile.photo_id || 'N/A';
+                         profileFields.stripe_payment_method_id_display.textContent = profile.stripe_payment_method_id || 'N/A';
+
+
+                        displayMessage(profileStatusMessageDiv, 'Profile loaded.', true);
+                    } else {
+                         console.error('Failed to load profile:', result.error_message);
+                         displayMessage(profileStatusMessageDiv, result.error_message || 'Failed to load profile.', false);
+                    }
+
+                } catch (error) {
+                    console.error('Fetch error loading profile:', error);
+                    displayMessage(profileStatusMessageDiv, 'Failed to connect to the server to load profile.', false);
+                }
+            }
+
+
+            // --- Handle Profile Update Submission ---
+            profileUpdateForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                displayMessage(profileStatusMessageDiv, 'Saving profile...', false);
+                profileStatusMessageDiv.style.color = 'gray';
+
+                // --- Client-side Validation ---
+                if (profileFields.first_name.value.length === 0 || profileFields.surname.value.length === 0) {
+                     displayMessage(profileStatusMessageDiv, 'First name and Surname are required.', false);
+                     return;
+                }
+                 // Check max lengths (already handled by HTML maxlength, but double-checking here for consistency)
+                 if (profileFields.first_name.value.length > 64 || profileFields.surname.value.length > 64 || profileFields.gender.value.length > 64 ||
+                     profileFields.phone.value.length > 64 || profileFields.suburb.value.length > 64 || profileFields.emergency_name.value.length > 64 ||
+                     profileFields.emergency_relationship.value.length > 64 || profileFields.emergency_phone.value.length > 64 || profileFields.belt_size.value.length > 64 ||
+                     profileFields.uniform_size.value.length > 64)
+                 {
+                      displayMessage(profileStatusMessageDiv, 'Maximum length for most fields is 64 characters.', false);
+                      return;
+                 }
+                 if (profileFields.address.value.length > 512) {
+                     displayMessage(profileStatusMessageDiv, 'Maximum length for Address is 512 characters.', false);
+                     return;
+                 }
+                // Basic format validation
+                 if (profileFields.phone.value && !isValidPhoneNumber(profileFields.phone.value)) {
+                     displayMessage(profileStatusMessageDiv, 'Please enter a valid phone number format.', false);
+                     return;
+                 }
+                // Add more format validation for names, etc. if desired, but be cautious with international characters.
+
+                 // Validate number inputs (type="number" helps, but value might be empty or invalid)
+                 var beltSizeValue = profileFields.belt_size.value;
+                 if (beltSizeValue !== '') { // Only validate if not empty
+                    const numBeltSize = parseInt(beltSizeValue, 10);
+                     if (isNaN(numBeltSize) || numBeltSize < 0 || numBeltSize > 100 || beltSizeValue.includes('.')) { // Also check for decimals
+                         displayMessage(profileStatusMessageDiv, 'Belt Size must be an integer between 0 and 100.', false);
+                         return;
+                    }
+                    beltSizeValue = beltSizeValue.toString(); // Convert to string for consistency
+                 }
+                 const uniformSizeValue = profileFields.uniform_size.value;
+                 if (uniformSizeValue !== '') { // Only validate if not empty
+                     const numUniformSize = parseInt(uniformSizeValue, 10);
+                     if (isNaN(numUniformSize) || numUniformSize < 0 || numUniformSize > 100 || uniformSizeValue.includes('.')) { // Also check for decimals
+                         displayMessage(profileStatusMessageDiv, 'Uniform Size must be an integer between 0 and 100.', false);
+                         return;
+                     }
+                 }
+                // End Client-side Validation ---
+
+
+                // Collect data from the form fields matching UpdateUserProfileRequest
+                const updateData = {
+                     first_name: profileFields.first_name.value,
+                     surname: profileFields.surname.value,
+                     gender: profileFields.gender.value || null,
+                     phone: profileFields.phone.value || null,
+                     dob: profileFields.dob.value || null, // type="date" gives YYYY-MM-DD string or "" if empty
+                     address: profileFields.address.value || null,
+                     suburb: profileFields.suburb.value || null,
+                     emergency_name: profileFields.emergency_name.value || null,
+                     emergency_relationship: profileFields.emergency_relationship.value || null,
+                     emergency_phone: profileFields.emergency_phone.value || null,
+                     emergency_medical: profileFields.emergency_medical.value || null, // Send "" if empty, convert to null if needed backend
+                     belt_size: profileFields.belt_size.value || null, // Send number string or null if empty
+                     uniform_size: profileFields.uniform_size.value || null, // Send number string or null if empty
+                };
+                 // Convert number strings to numbers if they are not empty strings or null
+                //  if (updateData.belt_size !== null) updateData.belt_size = parseInt(updateData.belt_size, 10);
+                //  if (updateData.uniform_size !== null) updateData.uniform_size = parseInt(updateData.uniform_size, 10);
+
+
+                try {
+                     const response = await fetch('/api/user/update_profile', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updateData)
+                    });
+
+                    // Check if response is OK
+                     if (!response.ok) {
+                         if (response.status === 401) {
+                            console.warn('Session expired while updating profile.');
+                            alert('Your session has expired. Please log in again.');
+                            window.location.href = '/login';
+                            return;
+                        }
+                         const errorResult = await response.json();
+                         console.error('Profile update failed (HTTP error):', response.status, errorResult);
+                         displayMessage(profileStatusMessageDiv, errorResult.error_message || `HTTP error ${response.status}`, false);
+                         return;
+                     }
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        console.log('Profile updated successfully.');
+                        displayMessage(profileStatusMessageDiv, 'Profile updated successfully!', true);
+                    } else {
+                         console.error('Profile update failed:', result.error_message);
+                         displayMessage(profileStatusMessageDiv, result.error_message || 'Failed to update profile.', false);
+                    }
+
+                } catch (error) {
+                    console.error('Fetch error updating profile:', error);
+                    displayMessage(profileStatusMessageDiv, 'Failed to connect to the server to update profile.', false);
+                }
+            });
+
+            // --- Handle Password Change Submission ---
+             passwordChangeForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                displayMessage(passwordStatusMessageDiv, 'Changing password...', false);
+                passwordStatusMessageDiv.style.color = 'gray';
+
+                const currentPassword = currentPasswordField.value;
+                const newPassword = newPasswordField.value;
+                const confirmNewPassword = confirmNewPasswordField.value;
+
+                 // --- Client-side Validation ---
+                 if (!currentPassword || !newPassword || !confirmNewPassword) {
+                      displayMessage(passwordStatusMessageDiv, 'All password fields are required.', false);
+                      return;
+                 }
+                 if (newPassword !== confirmNewPassword) {
+                     displayMessage(passwordStatusMessageDiv, 'New Password and Confirm New Password must match.', false);
+                     // Clear both new password fields
+                     newPasswordField.value = '';
+                     confirmNewPasswordField.value = '';
+                     return;
+                 }
+                 if (currentPassword === newPassword) {
+                     displayMessage(passwordStatusMessageDiv, 'New password cannot be the same as the current password.', false);
+                     // Clear new password fields
+                     newPasswordField.value = '';
+                     confirmNewPasswordField.value = '';
+                     return;
+                 }
+                 // Add more validation (e.g., minimum password length, complexity)
+                 if (newPassword.length < 8) { // Example minimum length
+                      displayMessage(passwordStatusMessageDiv, 'New password must be at least 8 characters long.', false);
+                      // Clear new password fields
+                       newPasswordField.value = '';
+                       confirmNewPasswordField.value = '';
+                      return;
+                 }
+                 // End Client-side Validation ---
+
+
+                const passwordData = {
+                    current_password: currentPassword,
+                    new_password: newPassword
+                };
+
+                try {
+                    const response = await fetch('/api/user/change_password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(passwordData)
+                    });
+
+                    // Check if response is OK
+                     if (!response.ok) {
+                         if (response.status === 401) {
+                            // This could be session expired OR incorrect current password (if backend sends 401 for both)
+                            const errorResult = await response.json(); // Try to parse JSON error
+                             console.error('Password change failed (HTTP 401):', errorResult);
+                             // Check if the error message indicates incorrect password (based on your backend)
+                             if (errorResult.error_message && errorResult.error_message.includes('Incorrect current password')) {
+                                  displayMessage(passwordStatusMessageDiv, 'Incorrect current password.', false);
+                             } else {
+                                  // Assume session expired or other auth issue
+                                  console.warn('Session expired during password change or other authentication issue.');
+                                  alert('Your session has expired or there was an authentication issue. Please log in again.');
+                                  window.location.href = '/login';
+                             }
+                            currentPasswordField.value = ''; // Always clear current password on 401
+                             newPasswordField.value = '';
+                             confirmNewPasswordField.value = '';
+                             return;
+                         }
+                         // Handle other non-OK statuses
+                         const errorResult = await response.json(); // Try to parse JSON error
+                         console.error('Password change failed (HTTP error):', response.status, errorResult);
+                         displayMessage(passwordStatusMessageDiv, errorResult.error_message || `HTTP error ${response.status}`, false);
+                         // Optionally clear password fields on other failures
+                         currentPasswordField.value = '';
+                         newPasswordField.value = '';
+                         confirmNewPasswordField.value = '';
+                         return;
+                     }
+
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        console.log('Password changed successfully.');
+                        displayMessage(passwordStatusMessageDiv, 'Password changed successfully!', true);
+                        // Clear password fields on success
+                        currentPasswordField.value = '';
+                        newPasswordField.value = '';
+                        confirmNewPasswordField.value = '';
+                    } else {
+                        console.error('Password change failed:', result.error_message);
+                         displayMessage(passwordStatusMessageDiv, result.error_message || 'Failed to change password.', false);
+                         // Optionally clear current password field on failure for security
+                         currentPasswordField.value = '';
+                    }
+
+                } catch (error) {
+                     console.error('Fetch error changing password:', error);
+                     displayMessage(passwordStatusMessageDiv, 'Failed to connect to the server to change password.', false);
+                }
+            });
+
+            // --- Handle Logout Link Click (Existing Logic) ---
+            logoutLink.addEventListener('click', async (event) => {
+                event.preventDefault();
+
+                try {
+                    const response = await fetch('/api/user/logout', { method: 'POST' });
+
+                    // Check if response is OK
+                    if (!response.ok) {
+                         // Even logout might return non-OK (e.g., if session was already invalid)
+                         console.warn('Logout response not OK:', response.status);
+                         // We can still proceed to login page in most cases
+                    }
+
+                    console.log('Logout attempt finished, redirecting...');
+                    window.location.href = '/login'; // Always redirect to login after logout attempt
+
+                } catch (error) {
+                    console.error('Fetch error during logout:', error);
+                     alert('Failed to connect to the server for logout. Attempting redirect.');
+                     window.location.href = '/login'; // Redirect even on fetch error
+                }
+            });
+        });
+    </script>
+</body>
+</html>

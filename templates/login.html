@@ -2,26 +2,112 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/style.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login / Sign Up</title>
-    <style>
-        body { font-family: sans-serif; padding: 20px; }
-        .container { max-width: 400px; margin: 50px auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
-        button { padding: 10px 15px; margin: 10px 5px; cursor: pointer; }
-    </style>
+    <!-- Removed inline style block as it's in style.css -->
 </head>
 <body>
+    <nav>
+        <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/login">Login/Sign Up</a></li>
+            <li><a href="/gym-signup">Gym Sign Up</a></li>
+            <li><a href="/contact">Contact Us</a></li>
+            <!-- Add more links as needed -->
+        </ul>
+    </nav>
+
     <div class="container">
         <h2>Account Access</h2>
-        <p>Please choose an option:</p>
-        <div>
-            <!-- In a real app, these would trigger forms or JS actions -->
-            <button onclick="alert('Sign In form would go here. Use API: /api/user/login');">Sign In</button>
-            <button onclick="alert('Sign Up form would go here. Use API: /api/user/create');">Sign Up</button>
-            <button onclick="alert('Password recovery flow would start here.');">Forgotten Password?</button>
+
+        <!-- Login Form -->
+        <form id="loginForm">
+            <h3>Sign In</h3>
+            <div>
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <div>
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <div>
+                <button type="submit">Login</button>
+            </div>
+        </form>
+
+        <div style="margin-top: 20px;">
+             <!-- You could turn these into links to separate pages later -->
+            <button class="secondary" onclick="alert('Redirect to Sign Up page would go here. API: /api/user/create');">Sign Up</button>
+            <button class="secondary" onclick="alert('Forgotten password flow would start here.');">Forgotten Password?</button>
         </div>
-         <p><a href="/">Back to Home</a></p>
+
+        <div id="errorMessage" style="color: red; margin-top: 15px;"></div>
+
     </div>
+
+    <footer>
+        <p>&copy; 2025 MMA Gym Management</p>
+    </footer>
+
+    <script>
+        // Wait for the DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            const loginForm = document.getElementById('loginForm');
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const errorMessageDiv = document.getElementById('errorMessage');
+
+            loginForm.addEventListener('submit', async (event) => {
+                // Prevent the default form submission (which causes a page reload)
+                event.preventDefault();
+
+                // Clear previous error messages
+                errorMessageDiv.textContent = '';
+
+                // Get form values
+                const email = emailInput.value;
+                const password = passwordInput.value;
+
+                // Prepare data to send (matches your LoginRequest struct)
+                const data = {
+                    email: email,
+                    password: password
+                };
+
+                try {
+                    // Send POST request to your login API endpoint
+                    const response = await fetch('/api/user/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data) // Send data as JSON string
+                    });
+
+                    // Parse the JSON response
+                    const result = await response.json();
+
+                    if (result.success) {
+                        // Login successful!
+                        console.log('Login successful:', result);
+                        // The session cookie is automatically set by the browser
+                        // Redirect the user (e.g., to the home page or a dashboard)
+                        window.location.href = '/portal'; // Redirect to home page
+                    } else {
+                        // Login failed, display error message
+                        console.error('Login failed:', result.error_message);
+                        errorMessageDiv.textContent = result.error_message || 'An unknown error occurred.';
+                    }
+
+                } catch (error) {
+                    // Handle network errors or other exceptions
+                    console.error('Fetch error:', error);
+                    errorMessageDiv.textContent = 'Failed to connect to the server.';
+                }
+            });
+        });
+    </script>
 </body>
 </html>

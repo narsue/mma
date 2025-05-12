@@ -1,14 +1,15 @@
 use scylla::transport::query_result::FirstRowError;
+use scylla::transport::errors::QueryError; // Make sure QueryError is also imported
 use scylla::{Session, SessionBuilder};
 use std::sync::Arc;
 use uuid::Uuid;
 use std::time::SystemTime;
 use rand::{distributions::Alphanumeric, Rng};
 use std::net::IpAddr;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{NaiveDate, NaiveTime, DateTime, Duration, Utc};
 
 use crate::error::{AppError, Result};
-// use crate::models::{StockLevel, StockTransaction, TransactionStatus};
+use crate::api::{UserProfileData, UpdateUserProfileRequest}; // <-- Import new API structs
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -466,6 +467,140 @@ impl ScyllaConnector {
         
         Ok(user_id)
     }
+
+
+    // Get User Profile Data by ID ---
+    pub async fn get_user_profile(&self, user_id: Uuid) -> Result<Option<UserProfileData>> {
+        let result = self.session
+            .query(
+                "SELECT user_id, email, first_name, surname, gender, phone, dob, \
+                stripe_payment_method_id, created_ts, email_verified, waiver_id, \
+                photo_id, address, suburb, emergency_name, emergency_relationship, \
+                emergency_phone, emergency_medical, belt_size, uniform_size, \
+                member_number, contracted_until \
+                FROM mma.user WHERE user_id = ?",
+                (user_id,),
+            )
+            .await?;
+
+        match result.first_row() {
+            Ok(row) => {
+                // Extract each column by index
+                // Be careful with types and Optionals
+                let user_profile = UserProfileData {
+                    user_id: row.columns[0].as_ref().and_then(|v| v.as_uuid()).ok_or_else(|| AppError::Internal("Invalid user_id in DB".to_string()))?,
+                    email: row.columns[1].as_ref().and_then(|v| v.as_text()).ok_or_else(|| AppError::Internal("Invalid email in DB".to_string()))?.to_string(),
+                    first_name: row.columns[2].as_ref().and_then(|v| v.as_text()).ok_or_else(|| AppError::Internal("Invalid first_name in DB".to_string()))?.to_string(),
+                    surname: row.columns[3].as_ref().and_then(|v| v.as_text()).ok_or_else(|| AppError::Internal("Invalid surname in DB".to_string()))?.to_string(),
+                    gender: row.columns[4].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    phone: row.columns[5].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    dob: row.columns[6].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    stripe_payment_method_id: row.columns[7].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    // Timestamps are often i64 (microseconds since epoch) in Scylla/Cassandra
+                    created_ts: row.columns[8].as_ref().and_then(|v| v.as_bigint()).ok_or_else(|| AppError::Internal("Invalid created_ts in DB".to_string()))?,
+                    email_verified: row.columns[9].as_ref().and_then(|v| v.as_boolean()).ok_or_else(|| AppError::Internal("Invalid email_verified in DB".to_string()))?,
+                    waiver_id: row.columns[10].as_ref().and_then(|v| v.as_uuid()),
+                    photo_id: row.columns[11].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    address: row.columns[12].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    suburb: row.columns[13].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    emergency_name: row.columns[14].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    emergency_relationship: row.columns[15].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    emergency_phone: row.columns[16].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    emergency_medical: row.columns[17].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    belt_size: row.columns[18].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    uniform_size: row.columns[19].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    member_number: row.columns[20].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    // Dates are often stored as Unix timestamp in Scylla/Cassandra dates
+                    contracted_until: row.columns[21].as_ref().and_then(|v| v.as_date()).map(|date| {
+                            // Combine the NaiveDate with midnight time (00:00:00)
+                            let datetime_at_midnight = date.and_time(NaiveTime::default());
+                            // Get the Unix timestamp (seconds since epoch), treating the NaiveDateTime as UTC
+                            datetime_at_midnight.timestamp()
+                        }),
+                };
+                Ok(Some(user_profile))
+            },
+            // Err(FirstRowError::NotFound) => Ok(None), // User not found
+            Err(_) => Err(AppError::Internal(format!("Database error"))), // Other database errors
+        }
+    }
+
+    // Update User Profile ---
+    pub async fn update_user_profile(&self, user_id: Uuid, update_data: &UpdateUserProfileRequest) -> Result<()> {
+        self.session
+            .query(
+                "UPDATE mma.user \
+                SET first_name = ?, surname = ?, gender = ?, phone = ?, dob = ?, \
+                address = ?, suburb = ?, emergency_name = ?, emergency_relationship = ?, \
+                emergency_phone = ?, emergency_medical = ?, belt_size = ?, uniform_size = ? \
+                WHERE user_id = ?",
+                (
+                    &update_data.first_name,
+                    &update_data.surname,
+                    update_data.gender.as_deref().unwrap_or_default(), // Send "" for None
+                    update_data.phone.as_deref().unwrap_or_default(),
+                    update_data.dob.as_deref().unwrap_or_default(),
+                    update_data.address.as_deref().unwrap_or_default(),
+                    update_data.suburb.as_deref().unwrap_or_default(),
+                    update_data.emergency_name.as_deref().unwrap_or_default(),
+                    update_data.emergency_relationship.as_deref().unwrap_or_default(),
+                    update_data.emergency_phone.as_deref().unwrap_or_default(),
+                    update_data.emergency_medical.as_deref().unwrap_or_default(),
+                    update_data.belt_size.as_deref().unwrap_or_default(),
+                    update_data.uniform_size.as_deref().unwrap_or_default(),
+                    user_id,
+                ),
+            )
+            .await?;
+        Ok(())
+    }
+
+    // This is separate from get_user_profile for security
+    pub async fn get_password_hash(&self, user_id: Uuid) -> Result<Option<String>> {
+        let result = self.session
+        .query(
+            "SELECT password_hash FROM mma.user WHERE user_id = ?",
+            (user_id,),
+        )
+        .await?; // This ? works because QueryError has From<FirstRowError> or is mapped to AppError
+    
+        match result.first_row() {
+            Ok(row) => {
+                let password_hash = row.columns[0].as_ref()
+                    .and_then(|val| val.as_text())
+                    .ok_or_else(|| AppError::Internal(format!("Invalid password_hash format in DB for user {}", user_id)))?;
+    
+                Ok(Some(password_hash.to_string()))
+            },
+            Err(e) => {
+                use scylla::transport::query_result::FirstRowError; // Import FirstRowError here if not globally used
+    
+                match e {
+                     FirstRowError::RowsEmpty => Ok(None), // Correctly mapped NotFound to Ok(None)
+                     _ => {
+                          tracing::error!("Unexpected FirstRowError fetching password hash for user {}: {:?}", user_id, e);
+                          // Map other FirstRowError types to AppError::Internal as per previous fix
+                          Err(AppError::Internal(format!("Data retrieval error: {:?}", e)))
+                     }
+                 }
+            }
+        }
+    }
+
+    // Update Password Hash by ID ---
+    pub async fn update_password_hash(&self, user_id: Uuid, new_password_hash: String) -> Result<()> {
+        self.session
+            .query(
+                "UPDATE mma.user SET password_hash = ? WHERE user_id = ?",
+                (&new_password_hash, user_id),
+            )
+            .await?;
+        Ok(())
+    }
+
+
+
+
 
 
 }

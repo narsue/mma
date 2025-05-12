@@ -25,7 +25,6 @@ impl FromRequest for LoggedUser {
         
         // Get the session cookie
         let cookie = req.cookie("session");
-        println!("Cookie received: {:?}", req.cookie("session"));
         
         // Validate everything
         match (cookie) {
@@ -46,7 +45,6 @@ impl FromRequest for LoggedUser {
 // Helper method to validate the session in the handler
 impl LoggedUser {
     pub async fn validate(&mut self, state: &Arc<StoreStateManager>  ) -> Result<Uuid, actix_web::Error> {
-        println!("A. Validating session: {}", self.session_token);
         match state.db.verify_session(&self.session_token).await {
             Ok(Some(user_id)) => {
                 self.user_id = user_id;

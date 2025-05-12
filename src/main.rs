@@ -66,11 +66,16 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             // Public routes
             .service(handlers::user_login)
 
-            // Protected routes - no extra middleware needed!
+            // Protected routes
+            .service(handlers::portal_page)
             .service(handlers::user_logout)
             .service(handlers::user_profile)
             .service(handlers::create_user)
-            // Add more routes as needed
+
+            .service(handlers::get_user_profile_data)
+            .service(handlers::update_user_profile)
+            .service(handlers::change_password)
+
     })
     .bind("127.0.0.1:8080")?
     .run();

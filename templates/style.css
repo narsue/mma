@@ -13,8 +13,9 @@ body {
     color: #333;
     background-color: #f4f4f4;
     /* This line should push the content down */
-    padding-top: 60px; /* Add padding to prevent content from hiding behind fixed nav */
     padding: 20px; /* Add padding to the body */
+    padding-top: 60px; /* Add padding to prevent content from hiding behind fixed nav */
+
 }
 
 /* Navigation Bar */
@@ -83,6 +84,13 @@ h1 {
 a {
     color: #007bff;
     text-decoration: none;
+}
+
+nav ul li a.active {
+    /* Style for the currently active nav link */
+    font-weight: bold;
+    border-bottom: 2px solid #007bff; /* Example active indicator */
+    color: #007bff; /* Example active color */
 }
 
 a:hover {

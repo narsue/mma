@@ -14,6 +14,7 @@ pub type TemplateCache = Arc<DashMap<String, String>>;
 
 const TEMPLATE_DIR: &str = "templates";
 const TEMPLATE_FILES: &[&str] = &[
+    "portal.html",
     "home.html",
     "login.html",
     "gym_signup.html",
@@ -62,25 +63,14 @@ pub async fn watch_templates(cache: TemplateCache) -> notify::Result<()> {
 
             Ok(events) => {
                 for event in events {
-                    println!("start Event: {:?}", event);
                      if matches!(event.kind, EventKind::Modify(ModifyKind::Data(_)) | EventKind::Create(_)) {
                         for path in &event.paths {
-                            println!("B Event: {:?} {:?}", event, template_path_for_closure);
-
                             // --- Use the cloned path inside the closure ---
                             if path.starts_with(&template_path_for_closure) && path.is_file() {
-                                println!("C Event: {:?}", event);
-
                                 if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                                    println!("D Event: {:?}", event);
-
                                     if TEMPLATE_FILES.contains(&filename) {
-                                        println!("E Event: {:?}", event);
-
                                         match fs::read_to_string(path) {
                                             Ok(new_content) => {
-                                                println!("F Event: {:?}", event);
-
                                                 cache.insert(filename.to_string(), new_content);
                                                 tracing::info!("Reloaded template: {}", path.display());
                                             }
