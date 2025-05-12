@@ -75,7 +75,7 @@ pub struct UserProfileData {
     pub stripe_payment_method_id: Option<String>, // Could be null
     pub created_ts: i64, // Unix timestamp
     pub email_verified: bool,
-    pub waiver_id: Option<Uuid>, // Could be null
+    // pub waiver_id: Option<Uuid>, // Could be null
     pub photo_id: Option<String>, // Could be null
     pub address: Option<String>,
     pub suburb: Option<String>,
@@ -133,5 +133,43 @@ pub struct ChangePasswordRequest {
 #[derive(Debug, Serialize)]
 pub struct ChangePasswordResponse {
     pub success: bool,
+    pub error_message: Option<String>,
+}
+
+
+#[derive(Debug, Serialize)]
+pub struct GetWaiverResponse {
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub waiver: Option<String>,
+    pub waiver_id: Option<Uuid>,
+}
+
+#[derive(Deserialize)]
+pub struct AcceptWaiverRequest {
+    pub waiver_id: Uuid, // The ID of the waiver the user accepted
+}
+
+#[derive(Serialize)]
+pub struct AcceptWaiverResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+}
+
+
+// Assuming you have a struct for the waiver creation request
+#[derive(Deserialize)]
+pub struct CreateWaiverRequest {
+    pub content: String, // The content of the new waiver
+}
+
+// Assuming you have a struct for the waiver creation response
+#[derive(Serialize)]
+pub struct CreateWaiverResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<Uuid>, // Return the ID of the newly created waiver
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
 }

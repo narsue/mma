@@ -3,17 +3,19 @@ pub mod handlers {
     use std::{error::Error, sync::Arc};
     use uuid::Uuid;
     use crate::state::StoreStateManager;
-    use crate::error::AppError;
+    // use crate::error::AppError;
     use crate::api::{
         LoginRequest, LoginResponse, CreateUserRequest, CreateUserResponse, ContactForm,
         GetUserProfileResponse, UpdateUserProfileRequest, UpdateUserProfileResponse,
-        ChangePasswordRequest, ChangePasswordResponse, SetGenericResponse // Re-using or adjusting generic response
+        ChangePasswordRequest, ChangePasswordResponse, SetGenericResponse, GetWaiverResponse,
+        AcceptWaiverRequest, AcceptWaiverResponse, CreateWaiverResponse, CreateWaiverRequest,  // Re-using or adjusting generic response
     };
     use crate::auth::LoggedUser;
     use crate::db::{verify_password, hash_password};
     use crate::templates::{TemplateCache, get_template_content};
     use actix_web::error::Error as ActixError;
-
+    use crate::error::{AppError, Result as AppResult};
+    use actix_web::error::ErrorInternalServerError;
 
     // Get User Profile Handler ---
     #[get("/api/user/profile_data")]
@@ -463,6 +465,165 @@ pub mod handlers {
             "user_id": user_id
         })))
     }
+
+    #[get("/api/waiver/get_latest_waiver")]
+    pub async fn get_latest_waiver(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser,
+    ) -> Result<HttpResponse, actix_web::Error> {
+        // Validate the session
+        let user_id = user.validate(&state_manager).await?;
+        
+        // Fetch the latest waiver for the user
+        match state_manager.db.get_latest_waiver(None, None, None).await {
+            Ok(Some(waiver)) => {
+                Ok(HttpResponse::Ok().json(GetWaiverResponse {
+                    success: true,
+                    error_message: None,
+                    waiver: Some(waiver.1),
+                    waiver_id: Some(waiver.0),
+                }))
+            },
+            Ok(None) => {
+                Ok(HttpResponse::NotFound().json(GetWaiverResponse {
+                    success: false,
+                    error_message: Some("No waiver found.".to_string()),
+                    waiver: None,
+                    waiver_id: None,
+                }))
+            },
+            Err(e) => {
+                tracing::error!("Database error fetching waiver for {}: {:?}", user_id, e);
+                Ok(HttpResponse::InternalServerError().json(GetWaiverResponse {
+                    success: false,
+                    error_message: Some("Failed to retrieve waiver.".to_string()),
+                    waiver: None,
+                    waiver_id: None,
+                }))
+            }
+        }
+    }
+
+
+
+    // Handler for the user to accept a waiver
+    #[post("/api/user/accept_waiver")]
+    pub async fn accept_waiver_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser, // Require user to be logged in
+        waiver_data: web::Json<AcceptWaiverRequest>,
+    ) -> Result<HttpResponse, ActixError> {
+        // Validate the session and get the user_id
+        let user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+
+        let req_data = waiver_data.into_inner();
+        let accepted_waiver_id = req_data.waiver_id;
+
+        // Optional: Verify the accepted_waiver_id against the current latest waiver ID
+        // This prevents a user from accepting an outdated waiver if a new one has been published
+        let latest_waiver_check: AppResult<Option<(Uuid, String)>> = state_manager.db.get_latest_waiver(None, None, None).await;
+
+        let latest_waiver_id = match latest_waiver_check {
+            Ok(Some((id, _))) => id,
+            Ok(None) => {
+                // No current waiver exists, but user tried to accept one.
+                // This is a client issue or timing issue.
+                tracing::warn!("User {} attempted to accept waiver ID {} but no current waiver exists.", user_id, accepted_waiver_id);
+                return Ok(HttpResponse::BadRequest().json(AcceptWaiverResponse {
+                    success: false,
+                    error_message: Some("No active waiver is available to accept.".to_string()),
+                }));
+            },
+            Err(app_err) => {
+                // DB error during latest waiver check
+                tracing::error!("Database error checking latest waiver during acceptance for user {}: {:?}", user_id, app_err);
+                return Err(ErrorInternalServerError(app_err)); // Propagate DB error
+            }
+        };
+
+        if accepted_waiver_id != latest_waiver_id {
+            // The ID the user accepted does not match the current latest ID
+            tracing::warn!("User {} attempted to accept outdated waiver ID {}. Current is {}.", user_id, accepted_waiver_id, latest_waiver_id);
+            return Ok(HttpResponse::Conflict().json(AcceptWaiverResponse { // 409 Conflict
+                success: false,
+                error_message: Some("The waiver version you accepted is outdated. Please refresh and accept the current version.".to_string()),
+            }));
+        }
+
+        // If verification passed, update the user's waiver_id
+        let update_result: AppResult<()> = state_manager.db.insert_user_accept_waiver_id(user_id, accepted_waiver_id).await;
+
+        match update_result {
+            Ok(_) => {
+                // Update successful
+                tracing::info!("User {} successfully accepted waiver ID {}", user_id, accepted_waiver_id);
+                Ok(HttpResponse::Ok().json(AcceptWaiverResponse {
+                    success: true,
+                    error_message: None,
+                }))
+            }
+            Err(app_err) => {
+                // Database error during update
+                tracing::error!("Database error updating waiver_id for user {}: {:?}", user_id, app_err);
+                Err(ErrorInternalServerError(app_err)) // Manually convert AppError to ActixError
+            }
+        }
+    }
+
+
+    // Handler to create a new waiver
+    // This should likely be restricted to admin users if you have roles
+    #[post("/api/waiver/create")]
+    pub async fn create_waiver_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser, // Protect the endpoint (consider checking for admin role)
+        waiver_data: web::Json<CreateWaiverRequest>,
+    ) -> Result<HttpResponse, ActixError> {
+        // Validate the session and get the user_id
+        let user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?;
+
+        // *** Optional: Check user role here to ensure only authorized users can create waivers ***
+        // If user.role is not "admin", return HttpResponse::Forbidden()
+
+        let req_data = waiver_data.into_inner();
+        let waiver_content = req_data.content.trim();
+
+        if waiver_content.is_empty() {
+            return Ok(HttpResponse::BadRequest().json(CreateWaiverResponse {
+                success: false,
+                id: None,
+                error_message: Some("Waiver content cannot be empty.".to_string()),
+            }));
+        }
+
+        let new_waiver_id = Uuid::new_v4();
+        // You'll need to implement the logic to insert the new waiver into the database
+        // and mark it as the current one, potentially setting the previous 'is_current' to false.
+        // This might require multiple DB queries.
+
+        // Example DB interaction (you'll need to implement this in your db.rs)
+        // pub async fn create_new_waiver(&self, id: Uuid, content: &str) -> AppResult<()> { ... }
+        let create_result: AppResult<()> = state_manager.db.create_new_waiver(user_id, new_waiver_id, waiver_content.to_string()).await;
+
+
+        match create_result {
+            Ok(_) => {
+                tracing::info!("New waiver created with ID {}", new_waiver_id);
+                Ok(HttpResponse::Ok().json(CreateWaiverResponse {
+                    success: true,
+                    id: Some(new_waiver_id),
+                    error_message: None,
+                }))
+            }
+            Err(app_err) => {
+                tracing::error!("Database error creating new waiver: {:?}", app_err);
+                Err(ErrorInternalServerError(app_err))
+            }
+        }
+    }
+
 
 
 }

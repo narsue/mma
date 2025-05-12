@@ -1,3 +1,4 @@
+use actix_web::http::header::q;
 use scylla::transport::query_result::FirstRowError;
 use scylla::transport::errors::QueryError; // Make sure QueryError is also imported
 use scylla::{Session, SessionBuilder};
@@ -8,14 +9,13 @@ use rand::{distributions::Alphanumeric, Rng};
 use std::net::IpAddr;
 use chrono::{NaiveDate, NaiveTime, DateTime, Duration, Utc};
 
-use crate::error::{AppError, Result};
+use crate::error::{AppError, Result, Result as AppResult};
 use crate::api::{UserProfileData, UpdateUserProfileRequest}; // <-- Import new API structs
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-
 
 pub fn hash_password(password: &str) -> Result<String> {
     // Generate a random salt
@@ -80,7 +80,7 @@ impl ScyllaConnector {
         self.session
             .query(
                 "CREATE TABLE IF NOT EXISTS mma.user \
-                (user_id uuid, email text, password_hash text, first_name text, surname text, gender text, phone text, dob text, stripe_payment_method_id text, created_ts timestamp, email_verified boolean, waiver_id uuid, photo_id text, address text, suburb text, emergency_name text, emergency_relationship text, emergency_phone text, emergency_medical text, belt_size text, uniform_size text, member_number text, contracted_until date, PRIMARY KEY (user_id))",
+                (user_id uuid, email text, password_hash text, first_name text, surname text, gender text, phone text, dob text, stripe_payment_method_id text, created_ts timestamp, email_verified boolean, photo_id text, address text, suburb text, emergency_name text, emergency_relationship text, emergency_phone text, emergency_medical text, belt_size text, uniform_size text, member_number text, contracted_until date, PRIMARY KEY (user_id))",
                 &[],
             )
             .await?;
@@ -128,12 +128,33 @@ impl ScyllaConnector {
         self.session
             .query(
                 "CREATE TABLE IF NOT EXISTS mma.waiver \
-                (waiver_id uuid, waiver text, created_ts timestamp, \
+                (waiver_id uuid, waiver text, created_ts timestamp, creator_user_id uuid, \
                  PRIMARY KEY (waiver_id))",
                 &[],
             )
             .await?;
         println!("Waiver table created");
+
+        self.session
+            .query(
+                "CREATE TABLE IF NOT EXISTS mma.latest_waiver \
+                (waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, created_ts timestamp, \
+                 PRIMARY KEY (style_id, class_id, club_id))",
+                &[],
+            )
+            .await?;
+        println!("Latest waiver table created");
+
+        self.session
+            .query(
+                "CREATE TABLE IF NOT EXISTS mma.signed_waiver \
+                (waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, user_id uuid, accepted_ts timestamp, \
+                 PRIMARY KEY (user_id, waiver_id, style_id, class_id, club_id))",
+                &[],
+            )
+            .await?;
+        println!("signed_waiver table created");
+
 
         self.session
         .query(
@@ -322,7 +343,7 @@ impl ScyllaConnector {
 
     // Verify a session token and return the user ID if valid
     pub async fn verify_session(&self, session_token: &str) -> Result<Option<Uuid>> {
-        println!("Verifying session: {}", session_token);
+        // println!("Verifying session: {}", session_token);
         let result = self.session
             .query(
                 "SELECT user_id, expires_ts, is_active FROM mma.session WHERE session_token = ?",
@@ -427,7 +448,7 @@ impl ScyllaConnector {
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs() as i64;
+            .as_millis() as i64;
         
         // Insert main user record
         self.session
@@ -474,7 +495,7 @@ impl ScyllaConnector {
         let result = self.session
             .query(
                 "SELECT user_id, email, first_name, surname, gender, phone, dob, \
-                stripe_payment_method_id, created_ts, email_verified, waiver_id, \
+                stripe_payment_method_id, created_ts, email_verified, \
                 photo_id, address, suburb, emergency_name, emergency_relationship, \
                 emergency_phone, emergency_medical, belt_size, uniform_size, \
                 member_number, contracted_until \
@@ -499,19 +520,19 @@ impl ScyllaConnector {
                     // Timestamps are often i64 (microseconds since epoch) in Scylla/Cassandra
                     created_ts: row.columns[8].as_ref().and_then(|v| v.as_bigint()).ok_or_else(|| AppError::Internal("Invalid created_ts in DB".to_string()))?,
                     email_verified: row.columns[9].as_ref().and_then(|v| v.as_boolean()).ok_or_else(|| AppError::Internal("Invalid email_verified in DB".to_string()))?,
-                    waiver_id: row.columns[10].as_ref().and_then(|v| v.as_uuid()),
-                    photo_id: row.columns[11].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    address: row.columns[12].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    suburb: row.columns[13].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    emergency_name: row.columns[14].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    emergency_relationship: row.columns[15].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    emergency_phone: row.columns[16].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    emergency_medical: row.columns[17].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    belt_size: row.columns[18].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    uniform_size: row.columns[19].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    member_number: row.columns[20].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    // waiver_id: row.columns[10].as_ref().and_then(|v| v.as_uuid()),
+                    photo_id: row.columns[10].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    address: row.columns[11].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    suburb: row.columns[12].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    emergency_name: row.columns[13].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    emergency_relationship: row.columns[14].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    emergency_phone: row.columns[15].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    emergency_medical: row.columns[16].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    belt_size: row.columns[17].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    uniform_size: row.columns[18].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
+                    member_number: row.columns[19].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
                     // Dates are often stored as Unix timestamp in Scylla/Cassandra dates
-                    contracted_until: row.columns[21].as_ref().and_then(|v| v.as_date()).map(|date| {
+                    contracted_until: row.columns[20].as_ref().and_then(|v| v.as_date()).map(|date| {
                             // Combine the NaiveDate with midnight time (00:00:00)
                             let datetime_at_midnight = date.and_time(NaiveTime::default());
                             // Get the Unix timestamp (seconds since epoch), treating the NaiveDateTime as UTC
@@ -595,6 +616,135 @@ impl ScyllaConnector {
                 (&new_password_hash, user_id),
             )
             .await?;
+        Ok(())
+    }
+
+    pub async fn get_latest_waiver(&self, club_id: Option<Uuid>, class_id: Option<Uuid>, style_id: Option<Uuid>) -> AppResult<Option<(Uuid, String)>> {
+        // Example query: Assumes a 'version' column and ordering by it
+        // SELECT id, content FROM mma.waivers ORDER BY version DESC LIMIT 1
+        // Or if you use an 'is_current' flag:
+        // SELECT id, content FROM mma.waivers WHERE is_current = true LIMIT 1
+    
+        // Using a simple query assuming `is_current` for demonstration
+        let zero_guuid = Uuid::nil();
+        let club_id = club_id.unwrap_or(zero_guuid);
+        let class_id = class_id.unwrap_or(zero_guuid);
+        let style_id = style_id.unwrap_or(zero_guuid);
+        let result = self.session
+            .query(
+                // "SELECT waiver_id FROM mma.latest_waiver where club_id = ? and class_id = ? and style_id = ?",
+                // (&club_id, &class_id, &style_id),
+                "SELECT waiver_id FROM mma.latest_waiver",
+                ()
+            )
+            .await?; // QueryError is mapped by AppError #[from]
+    
+        match result.first_row() {
+            Ok(row) => {
+                let waiver_id: Uuid = row.columns[0].as_ref()
+                    .and_then(|val| val.as_uuid())
+                    .ok_or_else(|| AppError::Internal("Invalid waiver_id format in DB".to_string()))?;
+    
+                let waiver_tuple = self.get_waiver(waiver_id).await?
+                    .ok_or_else(|| AppError::Internal("Waiver content not found".to_string()))?;
+                // println!("Latest waiver: {:?}", waiver_tuple);
+                Ok(Some(waiver_tuple))
+            },
+            Err(e) => {
+                match e {
+                    FirstRowError::RowsEmpty => Ok(None), // No current waiver found
+                    _ => {
+                        tracing::error!("Unexpected FirstRowError fetching latest waiver: {:?}", e);
+                        // Map other FirstRowError types to AppError::Internal
+                        Err(AppError::Internal(format!("Waiver data retrieval error: {:?}", e)))
+                    }
+                }
+            }
+        }
+    }
+
+
+    pub async fn get_waiver(&self, waiver_id: Uuid) -> AppResult<Option<(Uuid, String)>> {
+        println!("Getting waiver with ID: {}", waiver_id);
+        let result = self.session
+            .query(
+                "SELECT waiver FROM mma.waiver WHERE waiver_id = ?",
+                (waiver_id,),
+            )
+            .await?; // QueryError is mapped by AppError #[from]
+    
+        match result.first_row() {
+            Ok(row) => {
+                let content: String = row.columns[0].as_ref()
+                    .and_then(|val| val.as_text())
+                    .map(|s| s.to_string())
+                    .ok_or_else(|| AppError::Internal("Invalid waiver_content format in DB".to_string()))?;
+    
+                Ok(Some((waiver_id, content)))
+            },
+            Err(e) => {
+                match e {
+                    FirstRowError::RowsEmpty => Ok(None), // No current waiver found
+                    _ => {
+                        tracing::error!("Unexpected FirstRowError fetching latest waiver: {:?}", e);
+                        // Map other FirstRowError types to AppError::Internal
+                        Err(AppError::Internal(format!("Waiver data retrieval error: {:?}", e)))
+                    }
+                }
+            }
+        }
+    }
+
+    pub async fn insert_user_accept_waiver_id(&self, user_id: Uuid, waiver_id: Uuid) -> AppResult<()> {
+
+        let guuid_nil = Uuid::nil();
+        self.session
+            .query(
+                "INSERT INTO mma.signed_waiver (waiver_id, user_id, accepted_ts, style_id, class_id, club_id) \
+                 VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    waiver_id,
+                    user_id,
+                    Utc::now().timestamp(),
+                    guuid_nil,
+                    guuid_nil,
+                    guuid_nil
+                ),
+            )
+            .await?;
+
+        Ok(())
+    }
+
+
+    // Function to create a new waiver and make it current
+    pub async fn create_new_waiver(&self, creator_user_id: Uuid, id: Uuid, content: String) -> AppResult<()> {
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+
+        self.session
+            .query(
+                "INSERT INTO mma.waiver (waiver_id, waiver, creator_user_id, created_ts) VALUES (?, ?, ?, ?)",
+                (id, content, creator_user_id, now), // Include other fields as per your schema
+            )
+            .await?;
+
+            // "CREATE TABLE IF NOT EXISTS mma.latest_waiver \
+            // (waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, created_ts timestamp, \
+            //  PRIMARY KEY (style_id, class_id, club_id))",
+        let zero_guuid = Uuid::nil();
+        self.session.query("Insert into mma.latest_waiver (waiver_id, created_ts, club_id, class_id, style_id) VALUES (?, ?, ?, ?, ?)", 
+            (id, now, zero_guuid, zero_guuid, zero_guuid)
+        ).await?;
+
+
+        // self.session.query("Update mma.latest_waiver set waiver_id = ?, created_ts = ?",  //  where club_id = ? and class_id = ? and style_id = ?
+        //     (id, now) // , None, None, None
+        // ).await?;
+
         Ok(())
     }
 

@@ -5,6 +5,79 @@
     <link rel="stylesheet" href="/style.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MMA Gym Portal</title>
+
+
+    <style>
+        /* Basic CSS for tabs (example - adapt to your existing style) */
+        .tabs { list-style: none; padding: 0; }
+        .tabs li { display: inline-block; margin-right: 10px; }
+        .tabs a { cursor: pointer; text-decoration: none; padding: 5px; border: 1px solid #ccc; }
+        .tab-content { display: none; border: 1px solid #ccc; padding: 10px; margin-top: 10px; }
+        .tab-content.active { display: block; }
+
+        /* Basic CSS for modal */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgb(0,0,0); /* Fallback color */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto; /* 15% from the top and centered */
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%; /* Could be more responsive */
+            max-width: 600px; /* Max width */
+            position: relative;
+        }
+
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-button:hover,
+        .close-button:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+         #new-waiver-content {
+             width: 100%;
+             box-sizing: border-box; /* Include padding in width */
+             margin-bottom: 10px;
+         }
+
+         #create-waiver-error, #accept-waiver-message {
+             margin-top: 10px;
+             padding: 5px;
+             border-radius: 4px;
+         }
+         #create-waiver-error, #accept-waiver-message.error {
+             color: red;
+             border: 1px solid red;
+             background-color: #ffebeb;
+         }
+          #accept-waiver-message.success {
+             color: green;
+             border: 1px solid green;
+             background-color: #ebffeb;
+         }
+
+    </style>
+
 </head>
 <body>
     <nav>
@@ -13,6 +86,7 @@
             <li><a href="#" data-section="frontpage">Front Page</a></li>
             <li><a href="#" data-section="classes">Classes</a></li>
             <li><a href="#" data-section="styles">Styles</a></li>
+            <li><a href="#" data-section="waivers">Waivers</a></li>
             <li><a href="#" data-section="locations">Locations</a></li>
             <li><a href="#" data-section="account">Account</a></li>
             <!-- Logout is a different action -->
@@ -40,6 +114,37 @@
             <h2>Styles & Gradings</h2>
             <p>Information about different styles and grading requirements.</p>
             <!-- Style and grading details go here -->
+        </div>
+
+        <!-- Add the Waiver tab content -->
+        <div id="waiversSection" class="portal-section" style="display: none;">
+            <h2>Waiver Management</h2>
+
+            <div id="latest-waiver-display">
+                <!-- Latest waiver content will be loaded here by JavaScript -->
+                <p>Loading waiver...</p>
+            </div>
+
+            <div id="accept-waiver-area">
+                <!-- Accept button and messages will appear here -->
+                <div id="accept-waiver-message"></div>
+                <button id="accept-waiver-button" style="display: none;">Accept Waiver</button>
+            </div>
+
+
+            <button id="create-waiver-button">Create New Waiver</button>
+
+            <!-- Waiver Creation Modal -->
+            <div id="create-waiver-modal" class="modal">
+                <div class="modal-content">
+                    <span class="close-button">&times;</span>
+                    <h3>Create New Waiver Version</h3>
+                    <textarea id="new-waiver-content" rows="15" placeholder="Enter the new waiver content here..."></textarea>
+                    <button id="submit-new-waiver">Submit Waiver</button>
+                    <div id="create-waiver-error"></div>
+                </div>
+            </div>
+
         </div>
 
         <!-- Section: Locations -->
@@ -210,6 +315,256 @@
              return nameRegex.test(name);
          }
 
+        // Get elements related to accepting the waiver
+        const acceptWaiverButton = document.getElementById('accept-waiver-button');
+        const acceptWaiverMessageDiv = document.getElementById('accept-waiver-message');
+
+        // Function to fetch and display the latest waiver
+        async function fetchLatestWaiver() {
+            const waiverDisplay = document.getElementById('latest-waiver-display');
+            waiverDisplay.innerHTML = '<p>Loading waiver...</p>'; // Show loading state
+            acceptWaiverButton.style.display = 'none'; // Hide button while loading
+            acceptWaiverMessageDiv.textContent = ''; // Clear previous messages
+            acceptWaiverMessageDiv.className = '';
+
+            // const token = getAuthToken();
+            // if (!token) {
+            //      waiverDisplay.innerHTML = '<p style="color: red;">Error: Authentication token not found.</p>';
+            //      console.error("Authentication token missing for waiver fetch.");
+            //      return;
+            // }
+
+
+            try {
+                const response = await fetch('/api/waiver/get_latest_waiver', {
+                    method: 'GET',
+                    // headers: {
+                    //     'Authorization': `Bearer ${token}`
+                    //     // Add other headers like Content-Type if needed, but not for GET body
+                    // }
+                });
+
+                if (response.ok) { // Status 200-299
+                    const waiverData = await response.json();
+                    // Store the waiver ID just in case you need it later, though not displayed
+                    waiverDisplay.dataset.waiverId = waiverData.waiver_id;
+                    waiverDisplay.innerHTML = `
+                        <p><strong>Latest Waiver Version:</strong></p>
+                        <div style="border: 1px dashed #ccc; padding: 10px; max-height: 300px; overflow-y: auto;">
+                            <pre>${waiverData.waiver}</pre> <!-- Use pre for preformatted text -->
+                        </div>
+                    `;
+
+                    // Show the accept button if a waiver was found
+                    acceptWaiverButton.style.display = 'block';
+                } else if (response.status === 404) {
+                     // No active waiver found
+                     waiverDisplay.innerHTML = '<p>No current waiver has been published yet.</p>';
+                     acceptWaiverButton.style.display = 'none'; // Ensure button is hidden
+                }
+                 else if (response.status === 401 || response.status === 403) {
+                     // Authentication/Authorization error
+                      waiverDisplay.innerHTML = '<p style="color: red;">Error: You are not authorized to view waiver information.</p>';
+                      console.error("Authorization error fetching waiver:", response.status);
+                      acceptWaiverButton.style.display = 'none'; // Ensure button is hidden
+                 }
+                 else {
+                    // Other server errors (5xx) or client errors (4xx)
+                    const errorText = await response.text();
+                    waiverDisplay.innerHTML = `<p style="color: red;">Error loading waiver: ${response.status} - ${errorText.substring(0, 100)}...</p>`;
+                    console.error("Error fetching waiver:", response.status, errorText);
+                    acceptWaiverButton.style.display = 'none'; // Ensure button is hidden
+                }
+            } catch (error) {
+                // Network errors etc.
+                waiverDisplay.innerHTML = `<p style="color: red;">Network error loading waiver.</p>`;
+                console.error("Fetch error for waiver:", error);
+                acceptWaiverButton.style.display = 'none'; // Ensure button is hidden
+            }
+        }
+
+
+// --- Accept Waiver Logic ---
+
+        // Event listener for the Accept button
+        acceptWaiverButton.addEventListener('click', async () => {
+            const waiverId = document.getElementById('latest-waiver-display').dataset.waiverId;
+
+             if (!waiverId) {
+                 acceptWaiverMessageDiv.textContent = 'Error: Could not determine waiver ID to accept.';
+                 acceptWaiverMessageDiv.className = 'error';
+                 console.error("Waiver ID data attribute missing.");
+                 return;
+             }
+
+            // const token = getAuthToken();
+            // if (!token) {
+            //      acceptWaiverMessageDiv.textContent = 'Authentication token missing.';
+            //      acceptWaiverMessageDiv.className = 'error';
+            //      console.error("Authentication token missing for waiver acceptance.");
+            //      return;
+            // }
+
+             // Optional: Disable button and show loading state
+             acceptWaiverButton.disabled = true;
+             acceptWaiverMessageDiv.textContent = 'Submitting acceptance...';
+             acceptWaiverMessageDiv.className = ''; // Clear previous classes
+
+
+            try {
+                 const response = await fetch('/api/user/accept_waiver', {
+                     method: 'POST',
+                     headers: {
+                         'Content-Type': 'application/json',
+                        //  'Authorization': `Bearer ${token}`
+                     },
+                     body: JSON.stringify({ waiver_id: waiverId })
+                 });
+
+                 const responseData = await response.json(); // Assuming response is JSON
+
+
+                 if (response.ok && responseData.success) { // Check both HTTP status and custom success flag
+
+                     acceptWaiverMessageDiv.textContent = 'Waiver accepted successfully!';
+                     acceptWaiverMessageDiv.className = 'success';
+                     acceptWaiverButton.style.display = 'none'; // Hide the button on success
+                     // Optional: You might want to update the user's local state here
+                     // or refetch the user profile to show the waiver_id is now set.
+                 } else if (responseData && responseData.error_message) {
+                     // Server returned a specific error message in the JSON body
+                     acceptWaiverMessageDiv.textContent = `Acceptance failed: ${responseData.error_message}`;
+                     acceptWaiverMessageDiv.className = 'error';
+                     console.error("Server error accepting waiver:", response.status, responseData.error_message);
+                 }
+                  else if (response.status === 401 || response.status === 403) {
+                     // Authentication/Authorization error
+                      acceptWaiverMessageDiv.textContent = 'Error: You are not authorized to accept waivers.';
+                      acceptWaiverMessageDiv.className = 'error';
+                      console.error("Authorization error accepting waiver:", response.status);
+                 }
+                  else if (response.status === 409) { // Conflict (e.g., outdated waiver)
+                       acceptWaiverMessageDiv.textContent = responseData.error_message || 'Waiver version is outdated. Please refresh.';
+                       acceptWaiverMessageDiv.className = 'error';
+                       console.warn("Conflict accepting waiver:", response.status, responseData.error_message);
+                        // Consider prompting user to refresh or automatically refreshing the waiver display
+                        fetchLatestWaiver();
+                  }
+                 else {
+                     // Other errors
+                      const errorText = await response.text();
+                      acceptWaiverMessageDiv.textContent = `Error accepting waiver: ${response.status} - ${errorText.substring(0, 100)}...`;
+                      acceptWaiverMessageDiv.className = 'error';
+                      console.error("Error accepting waiver:", response.status, errorText);
+                 }
+
+            } catch (error) {
+                 // Network errors etc.
+                 acceptWaiverMessageDiv.textContent = 'Network error submitting waiver acceptance.';
+                 acceptWaiverMessageDiv.className = 'error';
+                 console.error("Fetch error for waiver acceptance:", error);
+            } finally {
+                 // Re-enable button regardless of success/failure, unless hidden
+                 if (acceptWaiverButton.style.display !== 'none') {
+                     acceptWaiverButton.disabled = false;
+                 }
+            }
+        });
+
+
+
+
+
+        // Get modal elements
+        const createWaiverModal = document.getElementById('create-waiver-modal');
+        const createWaiverButton = document.getElementById('create-waiver-button');
+        const closeButton = createWaiverModal.querySelector('.close-button');
+        const submitWaiverButton = document.getElementById('submit-new-waiver');
+        const newWaiverContentArea = document.getElementById('new-waiver-content');
+        const createWaiverErrorDiv = document.getElementById('create-waiver-error');
+
+
+        // Open the modal
+        createWaiverButton.onclick = function() {
+            createWaiverModal.style.display = 'block';
+             createWaiverErrorDiv.textContent = ''; // Clear previous errors
+             newWaiverContentArea.value = ''; // Clear previous content
+        }
+
+        // Close the modal using the close button
+        closeButton.onclick = function() {
+            createWaiverModal.style.display = 'none';
+        }
+
+        // Close the modal when clicking outside of it
+        window.onclick = function(event) {
+            if (event.target == createWaiverModal) {
+                createWaiverModal.style.display = 'none';
+            }
+        }
+
+        // Submit the new waiver
+        submitWaiverButton.onclick = async function() {
+             const waiverContent = newWaiverContentArea.value.trim(); // Trim whitespace
+
+             if (!waiverContent) {
+                 createWaiverErrorDiv.textContent = 'Waiver content cannot be empty.';
+                 return;
+             }
+
+            // const token = getAuthToken();
+            // if (!token) {
+            //      createWaiverErrorDiv.textContent = 'Authentication token missing.';
+            //      console.error("Authentication token missing for waiver creation.");
+            //      return;
+            // }
+
+             createWaiverErrorDiv.textContent = 'Submitting...'; // Show submitting state
+
+             try {
+                 const response = await fetch('/api/waiver/create', { // *** You'll need to implement this backend endpoint ***
+                     method: 'POST',
+                     headers: {
+                         'Content-Type': 'application/json',
+                        //  'Authorization': `Bearer ${token}`
+                     },
+                     body: JSON.stringify({ content: waiverContent })
+                 });
+
+                 const responseData = await response.json(); // Assuming the response is JSON
+
+                 if (response.ok) { // Status 200-299
+                     console.log("Waiver created successfully:", responseData);
+                     createWaiverModal.style.display = 'none'; // Hide modal on success
+                     newWaiverContentArea.value = ''; // Clear the text area
+                     fetchLatestWaiver(); // Refresh the displayed waiver
+                 } else if (responseData && responseData.error_message) {
+                      // Server returned a specific error message in the JSON body
+                      createWaiverErrorDiv.textContent = `Error: ${responseData.error_message}`;
+                      console.error("Server error creating waiver:", response.status, responseData.error_message);
+                 }
+                  else if (response.status === 401 || response.status === 403) {
+                     // Authentication/Authorization error
+                      createWaiverErrorDiv.textContent = 'Error: You are not authorized to create waivers.';
+                      console.error("Authorization error creating waiver:", response.status);
+                 }
+                 else {
+                     // Other errors
+                      const errorText = await response.text(); // Try to get any response text
+                      createWaiverErrorDiv.textContent = `Error creating waiver: ${response.status} - ${errorText.substring(0, 100)}...`;
+                      console.error("Error creating waiver:", response.status, errorText);
+                 }
+
+             } catch (error) {
+                 // Network errors etc.
+                 createWaiverErrorDiv.textContent = 'Network error submitting waiver.';
+                 console.error("Fetch error for waiver creation:", error);
+             }
+        }
+
+
+
+
 
         // Wait for the DOM to be fully loaded
         document.addEventListener('DOMContentLoaded', () => {
@@ -285,6 +640,10 @@
                      passwordChangeForm.reset();
                      profileStatusMessageDiv.textContent = '';
                      passwordStatusMessageDiv.textContent = '';
+                 }
+
+                 if (sectionId === 'waivers') {
+                     fetchLatestWaiver(); // Load the latest waiver when this section is shown
                  }
             }
 

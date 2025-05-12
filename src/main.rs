@@ -75,7 +75,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::get_user_profile_data)
             .service(handlers::update_user_profile)
             .service(handlers::change_password)
+            .service(handlers::get_latest_waiver)
+            .service(handlers::accept_waiver_handler)
+            .service(handlers::create_waiver_handler)
 
+
+            
     })
     .bind("127.0.0.1:8080")?
     .run();
