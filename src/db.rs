@@ -1,4 +1,3 @@
-use bigdecimal::num_bigint::BigInt;
 // use actix_web::http::header::q;
 // use argon2::password_hash::Decimal;
 // use scylla::transport::query_result::FirstRowError;
@@ -6,18 +5,15 @@ use bigdecimal::num_bigint::BigInt;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::DeserializeRow;
-use scylla::deserialize::row::DeserializeRow;
 
 use std::sync::Arc;
 use uuid::Uuid;
 use std::time::SystemTime;
 use rand::{distributions::Alphanumeric, Rng};
 // use std::net::IpAddr;
-use chrono::{NaiveDate, NaiveTime, DateTime, Duration, Utc};
-use bigdecimal::BigDecimal;
-use scylla::value::{CqlDate, CqlDecimal, CqlTimestamp};
-use scylla::errors::RowsError; // Import FirstRowError here if not globally used
-use crate::api::ClassFrequency;
+use chrono::{NaiveDate, Utc};
+use scylla::value::CqlTimestamp;
+ // Import FirstRowError here if not globally used
 
 use crate::error::{AppError, Result, Result as AppResult};
 use crate::api::{UserProfileData, UpdateUserProfileRequest}; // <-- Import new API structs
@@ -675,9 +671,9 @@ impl ScyllaConnector {
 
     pub async fn get_latest_waiver(&self, club_id: Option<Uuid>, class_id: Option<Uuid>, style_id: Option<Uuid>) -> AppResult<Option<(Uuid, String, String)>> {
         let zero_guuid = Uuid::nil();
-        let club_id = club_id.unwrap_or(zero_guuid);
-        let class_id = class_id.unwrap_or(zero_guuid);
-        let style_id = style_id.unwrap_or(zero_guuid);
+        let _club_id = club_id.unwrap_or(zero_guuid);
+        let _class_id = class_id.unwrap_or(zero_guuid);
+        let _style_id = style_id.unwrap_or(zero_guuid);
         let result = self.session
             .query_unpaged(
                 "SELECT waiver_id FROM mma.latest_waiver",
@@ -712,7 +708,7 @@ impl ScyllaConnector {
             .await?
             .into_rows_result()?;          
             
-        if (result.rows_num() == 0) {
+        if result.rows_num() == 0 {
             println!("No waiver found with ID: {}", waiver_id);
             return Ok(None);
         }

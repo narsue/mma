@@ -5,7 +5,7 @@ use notify_debouncer_full::{new_debouncer, DebounceEventResult};
 use std::{
     fs,
     io,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };

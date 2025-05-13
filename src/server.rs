@@ -1,6 +1,6 @@
 pub mod handlers {
-    use actix_web::{post, get, web, http::{header::{ContentType, CONTENT_TYPE}, StatusCode}, HttpRequest, HttpResponse, cookie::{Cookie, SameSite}};
-    use std::{error::Error, sync::Arc};
+    use actix_web::{post, get, web, http::header::CONTENT_TYPE, HttpRequest, HttpResponse, cookie::{Cookie, SameSite}};
+    use std::sync::Arc;
     use uuid::Uuid;
     use crate::state::StoreStateManager;
     // use crate::error::AppError;
