@@ -1,3 +1,5 @@
+// use bigdecimal::BigDecimal;
+use chrono::{NaiveDate, NaiveTime};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -184,12 +186,19 @@ pub enum ClassFrequencyType {
     Yearly,
 }
 
-#[derive(Deserialize)]
 pub struct ClassFrequency {
-    pub frequency: ClassFrequencyType,
+    pub frequency: i32,
+    pub start_date: NaiveDate,
+    pub end_date: NaiveDate,
+    pub start_time: NaiveTime,
+    pub end_time: NaiveTime,
+}
+
+#[derive(Deserialize)]
+pub struct ClassFrequencyRequest {
+    pub frequency: i32,
     pub start_date: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub end_date: Option<String>,
+    pub end_date: String,
     pub start_time: String,
     pub end_time: String,
 }
@@ -199,11 +208,25 @@ pub struct ClassFrequency {
 pub struct CreateClassRequest {
     pub title: String, 
     pub description: String, 
-    pub frequency: Vec<ClassFrequency>,
-    pub venue_id: String,
+    pub frequency: Vec<ClassFrequencyRequest>,
+    pub venue_id: Uuid,
     pub notify_booking: bool,
     pub capacity: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub price: Option<String>,
-    pub grading_required: Vec<String>,
+    pub grading_ids: Vec<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub waiver_id: Option<Uuid>,
+    pub publish_mode: i32,
+    pub style_ids: Vec<Uuid>,
+}
+
+// Struct for the JSON response after trying to create a class
+#[derive(Debug, Serialize)] // Derive Serialize for sending JSON
+pub struct CreateClassResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")] // Optional field
+    pub class_id: Option<Uuid>, // Return the ID of the created class on success
+    #[serde(skip_serializing_if = "Option::is_none")] // Optional field
+    pub error_message: Option<String>, // Return error message on failure
 }

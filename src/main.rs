@@ -79,7 +79,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::accept_waiver_handler)
             .service(handlers::create_waiver_handler)
 
-
+            // Class routes
+            .service(handlers::create_class_handler)
             
     })
     .bind("127.0.0.1:8080")?

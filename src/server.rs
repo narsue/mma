@@ -9,7 +9,10 @@ pub mod handlers {
         GetUserProfileResponse, UpdateUserProfileRequest, UpdateUserProfileResponse,
         ChangePasswordRequest, ChangePasswordResponse, GetWaiverResponse,
         AcceptWaiverRequest, AcceptWaiverResponse, CreateWaiverResponse, CreateWaiverRequest,  // Re-using or adjusting generic response
+        CreateClassRequest, CreateClassResponse, ClassFrequency, ClassFrequencyRequest
     };
+    use chrono::{NaiveDate, NaiveTime, Utc};
+    use bigdecimal::BigDecimal;
     use crate::auth::LoggedUser;
     use crate::db::{verify_password, hash_password};
     use crate::templates::{TemplateCache, get_template_content};
@@ -645,6 +648,150 @@ pub mod handlers {
         }
     }
 
+
+
+    // --- Class Creation Handler ---
+    #[post("/api/class/create")]
+    pub async fn create_class_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser, // Authenticate the request
+        class_data: web::Json<CreateClassRequest>, // Extract JSON request body
+    ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
+
+        // 1. Validate the session and get the creator user_id
+        let creator_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+
+        let req_data = class_data.into_inner(); // Get the raw request data
+
+        // 2. Validate and parse incoming data
+        // You might want more robust validation here (e.g., check min/max values, non-empty strings)
+
+        // Generate a unique ID for the new class
+        let class_id = Uuid::new_v4();
+
+        // Parse the frequency dates and times from strings
+        let mut parsed_frequency = Vec::new();
+        for freq_req in req_data.frequency {
+            let start_date_naive = match NaiveDate::parse_from_str(&freq_req.start_date, "%Y-%m-%d") {
+                Ok(date) => date,
+                Err(e) => {
+                    tracing::warn!("Failed to parse start_date '{}': {:?}", freq_req.start_date, e);
+                    // Return a BadRequest error for invalid input format
+                    return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
+                        success: false,
+                        class_id: None,
+                        error_message: Some(format!("Invalid start date format: {}. Expected YYYY-MM-DD", freq_req.start_date)),
+                    }));
+                }
+            };
+
+            let end_date_naive = match NaiveDate::parse_from_str(&freq_req.end_date, "%Y-%m-%d") {
+                Ok(date) => date,
+                Err(e) => {
+                    tracing::warn!("Failed to parse end_date '{}': {:?}", freq_req.end_date, e);
+                    // Return a BadRequest error for invalid input format
+                    return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
+                        success: false,
+                        class_id: None,
+                        error_message: Some(format!("Invalid end date format: {}. Expected YYYY-MM-DD", freq_req.end_date)),
+                    }));
+                }
+            };
+
+            let start_time_naive = match NaiveTime::parse_from_str(&freq_req.start_time, "%H:%M:%S") {
+                Ok(time) => time,
+                Err(e) => {
+                    tracing::warn!("Failed to parse start_time '{}': {:?}", freq_req.start_time, e);
+                    // Return a BadRequest error for invalid input format
+                    return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
+                        success: false,
+                        class_id: None,
+                        error_message: Some(format!("Invalid start time format: {}. Expected HH:MM:SS", freq_req.start_time)),
+                    }));
+                }
+            };
+
+            let end_time_naive = match NaiveTime::parse_from_str(&freq_req.end_time, "%H:%M:%S") {
+                Ok(time) => time,
+                Err(e) => {
+                    tracing::warn!("Failed to parse end_time '{}': {:?}", freq_req.end_time, e);
+                    // Return a BadRequest error for invalid input format
+                    return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
+                        success: false,
+                        class_id: None,
+                        error_message: Some(format!("Invalid end time format: {}. Expected HH:MM:SS", freq_req.end_time)),
+                    }));
+                }
+            };
+
+            // Push the parsed, strongly typed frequency into the vector
+            parsed_frequency.push(ClassFrequency { // Use the struct defined in db.rs
+                frequency: freq_req.frequency,
+                start_date: start_date_naive,
+                end_date: end_date_naive,
+                start_time: start_time_naive,
+                end_time: end_time_naive,
+            });
+        }
+
+        let price: Option<BigDecimal> = match req_data.price {
+            Some(price_str) => {
+                match price_str.parse::<BigDecimal>() {
+                    Ok(price) => Some(price),
+                    Err(e) => {
+                        tracing::warn!("Failed to parse price '{}': {:?}", price_str, e);
+                        // Return a BadRequest error for invalid input format
+                        return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
+                            success: false,
+                            class_id: None,
+                            error_message: Some(format!("Invalid price format: {}", price_str)),
+                        }));
+                    }
+                }
+            },
+            None => None, // Default value if not provided
+        };
+        // pub async fn create_new_class(&self, creator_user_id: Uuid, class_id: Uuid, title: String, description: String, venue_id: Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: BigDecimal, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequency>, notify_booking: bool) -> AppResult<()> {
+
+        // 3. Call the database function to create the class and related entries
+        let create_result: AppResult<()> = state_manager.db.create_new_class(
+            creator_user_id,
+            class_id, // Pass the generated class_id
+            req_data.title,
+            req_data.description,
+            req_data.venue_id,
+            &req_data.style_ids, // Pass slices
+            &req_data.grading_ids, // Pass slices
+            price,
+            req_data.publish_mode,
+            req_data.capacity,
+            &parsed_frequency, // Pass the parsed frequency as a slice
+            req_data.notify_booking,
+            req_data.waiver_id, // Pass optional waiver_id
+        ).await;
+
+
+        // 4. Handle the result of the database operation
+        match create_result {
+            Ok(_) => {
+                // Class created successfully
+                tracing::info!("Class {} created successfully by user {}", class_id, creator_user_id);
+                // Return a success response with the newly created class ID
+                Ok(HttpResponse::Ok().json(CreateClassResponse {
+                    success: true,
+                    class_id: Some(class_id),
+                    error_message: None,
+                }))
+            }
+            Err(app_err) => {
+                // Database error occurred during creation
+                tracing::error!("Database error creating class for user {}: {:?}", creator_user_id, app_err);
+                // Manually convert AppError to ActixError using ErrorInternalServerError
+                Err(ErrorInternalServerError(app_err))
+            }
+        }
+    }
 
 
 }

@@ -1,7 +1,3 @@
-// use actix_web::http::header::q;
-// use argon2::password_hash::Decimal;
-// use scylla::transport::query_result::FirstRowError;
-// use scylla::transport::errors::QueryError; // Make sure QueryError is also imported
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::DeserializeRow;
@@ -10,13 +6,12 @@ use std::sync::Arc;
 use uuid::Uuid;
 use std::time::SystemTime;
 use rand::{distributions::Alphanumeric, Rng};
-// use std::net::IpAddr;
-use chrono::{NaiveDate, Utc};
+use chrono::{NaiveDate, NaiveTime, Utc};
 use scylla::value::CqlTimestamp;
- // Import FirstRowError here if not globally used
-
+use bigdecimal::BigDecimal;
 use crate::error::{AppError, Result, Result as AppResult};
 use crate::api::{UserProfileData, UpdateUserProfileRequest}; // <-- Import new API structs
+use crate::api::ClassFrequency;
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -687,7 +682,7 @@ impl ScyllaConnector {
             let (waiver_id,): (Uuid,) = row?;
             let waiver_tuple = self.get_waiver(waiver_id).await?;
             if waiver_tuple.is_none() {
-                println!("No waiver found with ID: {}", waiver_id);
+                // println!("No waiver found with ID: {}", waiver_id);
                 return Ok(None);
             }
 
@@ -699,7 +694,7 @@ impl ScyllaConnector {
 
 
     pub async fn get_waiver(&self, waiver_id: Uuid) -> AppResult<Option<(String, String)>> {
-        println!("Getting waiver with ID: {}", waiver_id);
+        // println!("Getting waiver with ID: {}", waiver_id);
         let result = self.session
             .query_unpaged(
                 "SELECT title, waiver FROM mma.waiver WHERE waiver_id = ?",
@@ -709,7 +704,7 @@ impl ScyllaConnector {
             .into_rows_result()?;          
             
         if result.rows_num() == 0 {
-            println!("No waiver found with ID: {}", waiver_id);
+            // println!("No waiver found with ID: {}", waiver_id);
             return Ok(None);
         }
         
@@ -769,29 +764,102 @@ impl ScyllaConnector {
         Ok(())
     }
 
-/* 
+
     // Function to create a new waiver and make it current
-    pub async fn create_new_class(&self, creator_user_id: Uuid, class_id: Uuid, title: String, description: String, venue_id: Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: BigDecimal, publish_mode: i32, capacity: i32, frequency: &Vec<ClassFrequency>, notify_booking: bool) -> AppResult<()> {
+    pub async fn create_new_class(&self, creator_user_id: Uuid, class_id: Uuid, title: String, description: String, venue_id: Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequency>, notify_booking: bool, waiver_id: Option<Uuid>) -> AppResult<()> {
         // Get current timestamp
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as i64;
+        let now = scylla::value::CqlTimestamp(now);
         // let price: Option<CqlDecimal> = price
         //     .map(|p| CqlDecimal::from(p));
 
-        let a = self.session
+        self.session
             .query_unpaged(
-                "INSERT INTO mma.class (creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price), 
+                "INSERT INTO mma.class (creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price, waiver_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id), 
             )
-            .await;
+            .await?;
 
-        let zero_guuid = Uuid::nil();
- 
+        for style_id in style_ids {
+            self.session
+                .query_unpaged(
+                    "INSERT INTO mma.class_styles (class_id, style_id) VALUES (?, ?)",
+                    (class_id, *style_id), 
+                )
+                .await?;
+        }
+
+        for grade_id in grading_ids {
+            self.session
+                .query_unpaged(
+                    "INSERT INTO mma.class_grades (class_id, grade_id) VALUES (?, ?)",
+                    (class_id, *grade_id), 
+                )
+                .await?;
+        }
+
+        for frequency in class_frequency {
+            let class_frequency_id = Uuid::new_v4();
+
+            // --- PARSING STRING DATES/TIMES HERE ---
+            // let start_date_naive = match NaiveDate::parse_from_str(&frequency.start_date, "%Y-%m-%d") {
+            //     Ok(date) => date,
+            //     Err(e) => {
+            //         tracing::error!("Failed to parse start_date '{}' for class {}: {:?}", frequency.start_date, class_id, e);
+            //         return Err(AppError::Internal(format!("Invalid start date format for frequency: {}", frequency.start_date)));
+            //     }
+            // };
+
+            // let end_date_naive = match NaiveDate::parse_from_str(&frequency.end_date, "%Y-%m-%d") {
+            //     Ok(date) => date,
+            //     Err(e) => {
+            //         tracing::error!("Failed to parse end_date '{}' for class {}: {:?}", frequency.end_date, class_id, e);
+            //         return Err(AppError::Internal(format!("Invalid end date format for frequency: {}", frequency.end_date)));
+            //     }
+            // };
+
+            // // Assuming time is "HH:MM:SS"
+            // let start_time_naive = match NaiveTime::parse_from_str(&frequency.start_time, "%H:%M:%S") {
+            //     Ok(time) => time,
+            //     Err(e) => {
+            //         tracing::error!("Failed to parse start_time '{}' for class {}: {:?}", frequency.start_time, class_id, e);
+            //         return Err(AppError::Internal(format!("Invalid start time format for frequency: {}", frequency.start_time)));
+            //     }
+            // };
+
+            // let end_time_naive = match NaiveTime::parse_from_str(&frequency.end_time, "%H:%M:%S") {
+            //     Ok(time) => time,
+            //     Err(e) => {
+            //         tracing::error!("Failed to parse end_time '{}' for class {}: {:?}", frequency.end_time, class_id, e);
+            //         return Err(AppError::Internal(format!("Invalid end time format for frequency: {}", frequency.end_time)));
+            //     }
+            // };
+
+            // // Check that end date / time is after start date / time
+            // if end_date_naive < start_date_naive {
+            //     tracing::error!("End date {} is before start date {} for class {}", end_date_naive, start_date_naive, class_id);
+            //     return Err(AppError::Internal(format!("End date {} is before start date {}", end_date_naive, start_date_naive)));
+            // }
+            // if end_time_naive < start_time_naive && end_date_naive == start_date_naive {
+            //     tracing::error!("End time {} is before start time {} for class {}", end_time_naive, start_time_naive, class_id);
+            //     return Err(AppError::Internal(format!("End time {} is before start time {}", end_time_naive, start_time_naive)));
+            // }
+            // --- END PARSING ---
+
+
+            self.session
+                .query_unpaged(
+                    "INSERT INTO mma.class_frequency (class_id, class_frequency_id, frequency, start_date, end_date, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (class_id, class_frequency_id, frequency.frequency, &frequency.start_date, &frequency.end_date, &frequency.start_time, &frequency.end_time), 
+                )
+                .await?;
+        }
 
         Ok(())
-    }*/
+    }
 
 
 
