@@ -81,6 +81,15 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
             // Class routes
             .service(handlers::create_class_handler)
+            .service(handlers::get_class_list_handler)
+
+            // Venue routes
+            .service(handlers::create_venue_handler)
+            .service(handlers::get_venue_list_handler)
+
+            // Style routes
+            .service(handlers::create_style_handler)
+            .service(handlers::get_style_list_handler)
             
     })
     .bind("127.0.0.1:8080")?

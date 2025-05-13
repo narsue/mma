@@ -19,10 +19,10 @@ actix-web = "4.3"
 argon2 = "0.5.3"
 rand_core = { version = "0.9.3", features = ["std"] }
 rand = "0.8"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"]}
 time = "0.3"
 futures-util = "0.3"
 dashmap = "5.5" # For concurrent HashMap
 notify = "6.1" # For file watching
 notify-debouncer-full = "0.3" # Debouncer for notify
-bigdecimal = "0.4" 
+bigdecimal = { version = "0.4", features = ["serde"]}

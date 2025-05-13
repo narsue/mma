@@ -209,6 +209,7 @@
             <!-- Nav items for client-side tab switching -->
             <li><a href="#" data-section="frontpage">Front Page</a></li>
             <li><a href="#" data-section="classes">Classes</a></li>
+            <li><a href="#" data-section="venues">Venues</a></li>
             <li><a href="#" data-section="styles">Styles</a></li>
             <li><a href="#" data-section="waivers">Waivers</a></li>
             <li><a href="#" data-section="locations">Locations</a></li>
@@ -257,16 +258,22 @@
                                 <label for="class-description">Description:</label>
                                 <textarea id="class-description" rows="4" required></textarea>
                             </div>
-                             <div class="form-group">
-                                <label for="class-venue-id">Venue ID:</label>
-                                 <!-- Consider replacing with a select/dropdown fetched from server -->
-                                <input type="text" id="class-venue-id" placeholder="e.g., a1b2c3d4-e5f6-7890-1234-567890abcdef" required>
-                            </div>
                             <div class="form-group">
-                                <label for="class-style-ids">Style IDs (comma-separated):</label>
-                                <!-- Consider replacing with multiple select/checkboxes fetched from server -->
-                                <input type="text" id="class-style-ids" placeholder="e.g., uuid1,uuid2,uuid3">
+                                <label for="class-venue-id">Venue:</label> <!-- Updated label text -->
+                                 <!-- Replaced input with select dropdown -->
+                                <select id="class-venue-id" required>
+                                     <option value="">Loading venues...</option> <!-- Initial loading state -->
+                                </select>
                             </div>
+
+                            <div class="form-group">
+                                <label for="class-style-ids">Styles:</label> <!-- Updated label text -->
+                                 <!-- Replaced input with select dropdown -->
+                                <select id="class-style-ids" required>
+                                     <option value="">Loading styles...</option> <!-- Initial loading state -->
+                                </select>
+                            </div>
+
                             <div class="form-group">
                                 <label for="class-grading-ids">Grading IDs (comma-separated):</label>
                                 <!-- Consider replacing with multiple select/checkboxes fetched from server -->
@@ -319,11 +326,142 @@
 
         </div>
 
+        <!-- Section: Venues -->
+        <!-- Rename id to match tab href -->
+        <div id="venuesSection" class="portal-section">
+            <h2>Venues Management</h2>
+            <p>Information about different available venues.</p>
+
+            <button id="add-venue-button">Add New Venue</button>
+
+            <!-- Placeholder for displaying the list of venues -->
+            <div id="venue-list">
+                <p>Loading venues...</p>
+                <!-- Venue data will be loaded here by JavaScript -->
+            </div>
+
+
+             <!-- Add Venue Modal -->
+            <div id="add-venue-modal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Add New Venue</h3>
+                        <span class="close-button">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <form id="add-venue-form">
+                            <div class="form-group">
+                                <label for="venue-title">Title:</label>
+                                <input type="text" id="venue-title" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="venue-description">Description (optional):</label>
+                                <textarea id="venue-description" rows="4"></textarea>
+                            </div>
+                             <div class="form-group">
+                                <label for="venue-address">Address (optional):</label>
+                                <input type="text" id="venue-address">
+                            </div>
+                            <div class="form-group">
+                                <label for="venue-suburb">Suburb (optional):</label>
+                                <input type="text" id="venue-suburb">
+                            </div>
+                            <div class="form-group">
+                                <label for="venue-state">State (optional):</label>
+                                <input type="text" id="venue-state">
+                            </div>
+                             <div class="form-group">
+                                <label for="venue-postcode">Postcode (optional):</label>
+                                <input type="text" id="venue-postcode">
+                            </div>
+                            <div class="form-group">
+                                <label for="venue-country">Country (optional):</label>
+                                <input type="text" id="venue-country">
+                            </div>
+                            <div class="form-group">
+                                <label for="venue-latitude">Latitude (optional):</label>
+                                <!-- Use text for potential decimal/empty string handling -->
+                                <input type="text" id="venue-latitude" placeholder="e.g., -33.8688">
+                            </div>
+                            <div class="form-group">
+                                <label for="venue-longitude">Longitude (optional):</label>
+                                <!-- Use text for potential decimal/empty string handling -->
+                                <input type="text" id="venue-longitude" placeholder="e.g., 151.2093">
+                            </div>
+                             <div class="form-group">
+                                <label for="venue-contact-phone">Contact Phone (optional):</label>
+                                <input type="text" id="venue-contact-phone">
+                            </div>
+
+                            <div id="create-venue-message" class="message"></div>
+
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-button">Cancel</button>
+                        <button type="button" class="submit-button" id="submit-create-venue">Create Venue</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
         <!-- Section: Styles -->
-        <div id="stylesSection" class="portal-section" style="display: none;">
-            <h2>Styles & Gradings</h2>
-            <p>Information about different styles and grading requirements.</p>
-            <!-- Style and grading details go here -->
+        <!-- Updated ID to match tab href -->
+        <div id="stylesSection" class="portal-section">
+            <h2>Styles Management</h2>
+            <p>Information about different styles.</p>
+
+             <button id="add-style-button">Add New Style</button>
+
+            <!-- Placeholder for displaying the list of styles -->
+            <div id="style-list">
+                <p>Loading styles...</p>
+                <!-- Style data will be loaded here by JavaScript -->
+            </div>
+
+             <!-- Add Style Modal -->
+            <div id="add-style-modal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Add New Style</h3>
+                        <span class="close-button">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <form id="add-style-form">
+                            <div class="form-group">
+                                <label for="style-title">Title:</label>
+                                <input type="text" id="style-title" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="style-description">Description (optional):</label>
+                                <textarea id="style-description" rows="4"></textarea>
+                            </div>
+
+                            <div id="create-style-message" class="message"></div>
+
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-button">Cancel</button>
+                        <button type="button" class="submit-button" id="submit-create-style">Create Style</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+         <!-- Section: Gradings (Optional placeholder) -->
+         <!-- You might want a similar structure for Gradings -->
+        <div id="gradings-tab" class="tab-content">
+             <h2>Gradings Management</h2>
+             <p>Information about different grading requirements.</p>
+             <!-- Add Grading button, list, and modal here -->
+             <button id="add-grading-button">Add New Grading</button>
+             <div id="grading-list">
+                  <p>Loading gradings...</p>
+             </div>
+             <!-- Add Grading Modal structure here -->
         </div>
 
         <!-- Add the Waiver tab content -->
@@ -684,7 +822,7 @@
         }
 
 
-// --- Accept Waiver Logic ---
+        // --- Accept Waiver Logic ---
 
         // Event listener for the Accept button
         acceptWaiverButton.addEventListener('click', async () => {
@@ -935,6 +1073,16 @@
                     }
                 });
                 history.pushState(null, '', `#${sectionId}`);
+
+                if (sectionId === 'classes') {
+                    fetchClasses();
+                }
+                if (sectionId === 'venues') {
+                    getVenues();
+                }
+                if (sectionId === 'styles') {
+                    getStyles();
+                }
 
                  // --- Load profile data when Account section is shown ---
                  if (sectionId === 'account') {
@@ -1290,6 +1438,338 @@
 
 
             handleClassSection();
+
+
+            // Get elements related to adding a venue
+            const addVenueButton = document.getElementById('add-venue-button');
+            const addVenueModal = document.getElementById('add-venue-modal');
+            const addVenueForm = document.getElementById('add-venue-form');
+            const addVenueMessageDiv = document.getElementById('create-venue-message'); // Message area in modal
+
+            // Get all close/cancel buttons for the ADD VENUE modal specifically
+            const addVenueModalCloseButtons = addVenueModal.querySelectorAll('.close-button, .cancel-button');
+
+            const submitCreateVenueButton = document.getElementById('submit-create-venue');
+
+            // Get the div where the venue list will be displayed
+            const venueListDiv = document.getElementById('venue-list');
+
+
+
+            // Open the Add Venue modal
+            addVenueButton.onclick = function() { // *** CORRECTED BUTTON ID ***
+                addVenueModal.style.display = 'block';
+                addVenueMessageDiv.style.display = 'none'; // Hide any previous message
+                addVenueMessageDiv.textContent = '';
+                addVenueForm.reset(); // Clear the form fields
+            }
+
+
+            // Close the Add Venue modal using close buttons (X and Cancel)
+            addVenueModalCloseButtons.forEach(button => {
+                button.onclick = function() {
+                    addVenueModal.style.display = 'none';
+                }
+            });
+
+            // Close modals when clicking outside of them (Updated to handle multiple modals)
+            // This function should already exist and handle multiple modals,
+            // just ensure 'addVenueModal' is included in its checks.
+            // window.onclick = function(event) { ... }
+
+
+            // --- Submit New Venue Logic ---
+            submitCreateVenueButton.onclick = async function() {
+                addVenueMessageDiv.style.display = 'none'; // Hide previous messages
+                addVenueMessageDiv.textContent = '';
+                // Optional: Disable submit button to prevent double clicks
+                submitCreateVenueButton.disabled = true;
+
+                // --- 1. Gather data from the form ---
+                const title = document.getElementById('venue-title').value.trim();
+                const description = document.getElementById('venue-description').value.trim();
+                const address = document.getElementById('venue-address').value.trim();
+                const suburb = document.getElementById('venue-suburb').value.trim();
+                const state = document.getElementById('venue-state').value.trim();
+                const postcode = document.getElementById('venue-postcode').value.trim();
+                const country = document.getElementById('venue-country').value.trim();
+                const latitudeString = document.getElementById('venue-latitude').value.trim();
+                const longitudeString = document.getElementById('venue-longitude').value.trim();
+                const contactPhone = document.getElementById('venue-contact-phone').value.trim();
+
+
+                // --- 2. Validate and Format Complex Fields ---
+
+                // Validate required fields (simple check based on your handler logic)
+                if (!title || !description || !address || !suburb || !postcode) {
+                    addVenueMessageDiv.style.display = 'block';
+                    addVenueMessageDiv.textContent = 'Please fill in all required fields (Title, Description, Address, Suburb, Postcode).';
+                    submitCreateVenueButton.disabled = false; // Re-enable button
+                    return;
+                }
+
+                // Optional fields should be sent as null if empty string
+                const formattedDescription = description === '' ? null : description;
+                const formattedAddress = address === '' ? null : address;
+                const formattedSuburb = suburb === '' ? null : suburb;
+                const formattedState = state === '' ? null : state;
+                const formattedPostcode = postcode === '' ? null : postcode;
+                const formattedCountry = country === '' ? null : country;
+                const formattedContactPhone = contactPhone === '' ? null : contactPhone;
+
+                // Optional Latitude/Longitude (send as string or null - backend parses BigDecimal)
+                const latitude = latitudeString === '' ? null : latitudeString;
+                const longitude = longitudeString === '' ? null : longitudeString;
+
+                // Optional Latitude/Longitude format validation (basic numeric check if not null)
+                if (latitude !== null && isNaN(parseFloat(latitude))) {
+                    addVenueMessageDiv.style.display = 'block';
+                    addVenueMessageDiv.textContent = 'Invalid Latitude format. Must be a number.';
+                    submitCreateVenueButton.disabled = false; // Re-enable button
+                    return;
+                }
+                if (longitude !== null && isNaN(parseFloat(longitude))) {
+                    addVenueMessageDiv.style.display = 'block';
+                    addVenueMessageDiv.textContent = 'Invalid Longitude format. Must be a number.';
+                    submitCreateVenueButton.disabled = false; // Re-enable button
+                    return;
+                }
+
+
+                // --- 3. Construct the JSON request body ---
+                const requestBody = {
+                    title: title,
+                    description: formattedDescription,
+                    address: formattedAddress,
+                    suburb: formattedSuburb,
+                    state: formattedState,
+                    postcode: formattedPostcode,
+                    country: formattedCountry,
+                    latitude: latitude,       // Send string or null
+                    longitude: longitude,     // Send string or null
+                    contact_phone: formattedContactPhone,
+                };
+
+                console.log("Sending venue creation request:", requestBody);
+
+                // --- 4. Send the POST request to the backend ---
+                try {
+                    const response = await fetch('/api/venue/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+
+                    const responseData = await response.json(); // Assuming the response is JSON
+
+                    // Your CreateVenueResponse has 'venue_id', not 'class_id'
+                    if (response.ok && responseData.success) { // Check both HTTP status and custom success flag
+                        console.log("Venue created successfully:", responseData);
+                        addVenueMessageDiv.style.display = 'block';
+                        addVenueMessageDiv.textContent = `Venue created successfully! ID: ${responseData.venue_id}`; // *** Corrected ID field ***
+                        addVenueMessageDiv.className = 'message success'; // Add success class for styling
+
+                        // Optional: Close modal after a delay or user interaction
+                        setTimeout(() => {
+                            addVenueModal.style.display = 'none';
+                            // Refresh the venue list after creating a venue
+                            getVenues(); // *** Call fetchVenues ***
+                        }, 1500); // Hide after 1.5 seconds
+
+
+                    } else if (responseData && responseData.error_message) {
+                        // Server returned a specific error message in the JSON body
+                        addVenueMessageDiv.style.display = 'block';
+                        addVenueMessageDiv.textContent = `Creation failed: ${responseData.error_message}`;
+                        addVenueMessageDiv.className = 'message error'; // Add error class for styling
+                        console.error("Server error creating venue:", response.status, responseData.error_message);
+                    }
+                    else if (response.status === 400) {
+                        // Actix Web's Json extractor might return 400 for basic JSON structure errors
+                        // Or your handler might return 400 for validation errors
+                        const errorText = await response.text(); // Try to get any response text
+                        addVenueMessageDiv.style.display = 'block';
+                        // Prefer the error_message from your response if available
+                        addClassMessageDiv.textContent = `Invalid request data: ${responseData.error_message || errorText.substring(0, 100) + '...'}`; // *** Corrected message div ID ***
+                            addVenueMessageDiv.className = 'message error';
+                        console.error("Bad request creating venue:", response.status, errorText);
+
+                    }
+                    else if (response.status === 401 || response.status === 403) {
+                        // Authentication/Authorization error
+                        addVenueMessageDiv.style.display = 'block';
+                        addVenueMessageDiv.textContent = 'Error: You are not authorized to create venues.';
+                        addVenueMessageDiv.className = 'message error';
+                        console.error("Authorization error creating venue:", response.status);
+                    }
+                    else {
+                        // Other errors (e.g., 500 Internal Server Error from database issues)
+                        const errorText = await response.text();
+                        addVenueMessageDiv.style.display = 'block';
+                        // Prefer the error_message from your response if available
+                        addVenueMessageDiv.textContent = `Error creating venue: ${response.status} - ${responseData.error_message || errorText.substring(0, 100) + '...'}`;
+                        addVenueMessageDiv.className = 'message error';
+                        console.error("Error creating venue:", response.status, errorText);
+                    }
+
+                } catch (error) {
+                    // Network errors etc.
+                    addVenueMessageDiv.style.display = 'block';
+                    addVenueMessageDiv.textContent = 'Network error submitting venue creation.';
+                    addVenueMessageDiv.className = 'message error';
+                    console.error("Fetch error for venue creation:", error);
+                } finally {
+                    // Always re-enable the submit button
+                    submitCreateVenueButton.disabled = false;
+                }
+            }
+
+
+            // --- Styles Management JavaScript ---
+
+            // Get elements related to adding a style
+            const addStyleButton = document.getElementById('add-style-button');
+            const addStyleModal = document.getElementById('add-style-modal');
+            const addStyleForm = document.getElementById('add-style-form');
+            const addStyleMessageDiv = document.getElementById('create-style-message'); // Message area in modal
+
+            // Get all close/cancel buttons for the ADD STYLE modal specifically
+            const addStyleModalCloseButtons = addStyleModal.querySelectorAll('.close-button, .cancel-button');
+
+            const submitCreateStyleButton = document.getElementById('submit-create-style');
+
+            // Get the div where the style list will be displayed
+            const styleListDiv = document.getElementById('style-list');
+            
+            // --- Add Style Modal Open Logic ---
+            addStyleButton.onclick = function() {
+                addStyleModal.style.display = 'block';
+                addStyleMessageDiv.style.display = 'none'; // Hide any previous message
+                addStyleMessageDiv.textContent = '';
+                addStyleForm.reset(); // Clear the form fields
+            }
+
+            // Close the Add Style modal using close buttons (X and Cancel)
+            addStyleModalCloseButtons.forEach(button => {
+                button.onclick = function() {
+                    addStyleModal.style.display = 'none';
+                }
+            });
+
+            // --- Submit New Style Logic ---
+            submitCreateStyleButton.onclick = async function() {
+                addStyleMessageDiv.style.display = 'none'; // Hide previous messages
+                addStyleMessageDiv.textContent = '';
+                // Optional: Disable submit button to prevent double clicks
+                submitCreateStyleButton.disabled = true;
+
+                // --- 1. Gather data from the form ---
+                const title = document.getElementById('style-title').value.trim();
+                const description = document.getElementById('style-description').value.trim();
+
+                // --- 2. Validate and Format Fields ---
+
+                // Validate required fields
+                if (!title) {
+                    addStyleMessageDiv.style.display = 'block';
+                    addStyleMessageDiv.textContent = 'Style title cannot be empty.';
+                    submitCreateStyleButton.disabled = false; // Re-enable button
+                    return;
+                }
+
+                // Optional description field (send as null if empty string)
+                const formattedDescription = description === '' ? null : description;
+
+
+                // --- 3. Construct the JSON request body ---
+                const requestBody = {
+                    title: title,
+                    description: formattedDescription,
+                };
+
+                console.log("Sending style creation request:", requestBody);
+                // Add message to indicate submission is in progress
+                addStyleMessageDiv.style.display = 'block';
+                addStyleMessageDiv.textContent = 'Submitting style...';
+                addStyleMessageDiv.className = 'message'; // Clear previous success/error classes
+
+
+                // --- 4. Send the POST request to the backend ---
+                try {
+                    const response = await fetch('/api/style/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+
+                    const responseData = await response.json(); // Assuming the response is JSON (even on error)
+
+                    // Your CreateStyleResponse has 'style_id'
+                    if (response.ok && responseData.success) { // Check both HTTP status (2xx) and custom success flag
+                        console.log("Style created successfully:", responseData);
+                        addStyleMessageDiv.textContent = `Style created successfully!`; // *** Use style_id ***
+                        addStyleMessageDiv.className = 'message success'; // Add success class for styling
+
+                        // Optional: Close modal after a delay or user interaction
+                        setTimeout(() => {
+                            addStyleModal.style.display = 'none';
+                            addStyleMessageDiv.style.display = 'none'; // Hide message after closing modal
+                            // Refresh the style list after creating a style
+                            getStyles(); // *** Call fetchStyles ***
+                        }, 1500); // Hide after 1.5 seconds
+
+
+                    } else if (responseData && responseData.error_message) {
+                        // Server returned a specific error message in the JSON body
+                        addStyleMessageDiv.style.display = 'block';
+                        addStyleMessageDiv.textContent = `Creation failed: ${responseData.error_message}`;
+                        addStyleMessageDiv.className = 'message error'; // Add error class for styling
+                        console.error("Server error creating style:", response.status, responseData.error_message);
+                    }
+                    else if (response.status === 400) {
+                        // Actix Web's Json extractor or your handler might return 400 for validation errors
+                        const msg = responseData && responseData.error_message ? responseData.error_message : 'Invalid request data.';
+                        addStyleMessageDiv.style.display = 'block';
+                        addStyleMessageDiv.textContent = `Invalid request data: ${msg}`;
+                        addStyleMessageDiv.className = 'message error';
+                        console.error("Bad request creating style:", response.status, responseData); // Log full response
+
+                    }
+                    else if (response.status === 401 || response.status === 403) {
+                        // Authentication/Authorization error
+                        addStyleMessageDiv.style.display = 'block';
+                        addStyleMessageDiv.textContent = 'Error: You are not authorized to create styles.';
+                        addStyleMessageDiv.className = 'message error';
+                        console.error("Authorization error creating style:", response.status);
+                    }
+                    else {
+                        // Other errors (e.g., 500 Internal Server Error)
+                        const errorText = await response.text();
+                        const msg = responseData && responseData.error_message ? responseData.error_message : errorText.substring(0, 100) + '...';
+                        addStyleMessageDiv.style.display = 'block';
+                        addStyleMessageDiv.textContent = `Error creating style: ${response.status} - ${msg}`;
+                        addClassMessageDiv.className = 'message error'; // Typo here, should be addStyleMessageDiv
+                        console.error("Error creating style:", response.status, errorText);
+                    }
+
+                } catch (error) {
+                    // Network errors etc.
+                    addStyleMessageDiv.style.display = 'block';
+                    addStyleMessageDiv.textContent = 'Network error submitting style creation.';
+                    addStyleMessageDiv.className = 'message error';
+                    console.error("Fetch error for style creation:", error);
+                } finally {
+                    // Always re-enable the submit button
+                    submitCreateStyleButton.disabled = false;
+                }
+            }
+
+
+
         });
 
         // Function to handle the class section display logic
@@ -1346,6 +1826,8 @@
                 frequencyContainer.innerHTML = ''; // Clear previous frequency entries
                 // Add an initial frequency entry when opening the modal
                 addFrequencyEntry();
+                getVenues("class-venue-id"); // Fetch venues when opening the modal
+                getStyles("class-style-ids"); // Fetch styles when opening the modal
             }
 
             // Close the Add Class modal using close buttons (X and Cancel)
@@ -1650,11 +2132,11 @@
              classListDiv.innerHTML = '<p>Loading classes...</p>';
 
              try {
-                 const response = await fetch('/api/class/list', {
+                 const response = await fetch('/api/class/get_list', {
                      method: 'GET',
-                     headers: {
-                         'Authorization': `Bearer ${token}`
-                     }
+                    //  headers: {
+                    //      'Authorization': `Bearer ${token}`
+                    //  }
                  });
 
                  if (response.ok) {
@@ -1680,7 +2162,170 @@
                  classListDiv.innerHTML = `<p style="color: red;">Network error loading classes.</p>`;
                  console.error("Fetch error for class list:", error);
              }
+        }
+
+        async function getVenues(targetSelectId = 'venue-list') { // Optional argument to specify target
+         const targetElement = document.getElementById(targetSelectId);
+         if (!targetElement) {
+             console.error("Target element for venues not found:", targetSelectId);
+             return;
          }
+
+         // Check if the target is a select or a div for the list
+         const isSelect = targetElement.tagName === 'SELECT';
+
+         if (isSelect) {
+             targetElement.innerHTML = '<option value="">Loading venues...</option>'; // Loading state for select
+             targetElement.disabled = true; // Disable select while loading
+         } else {
+             targetElement.innerHTML = '<p>Loading venues...</p>'; // Loading state for div
+         }
+
+         try {
+             // *** You need a backend endpoint like GET /api/venue/get_list that returns Vec<VenueData> ***
+             const response = await fetch('/api/venue/get_list', {
+                 method: 'GET',
+             });
+
+             if (response.ok) {
+                 const venues = await response.json(); // Assuming the backend returns Vec<VenueData> as JSON array
+                 if (isSelect) {
+                     targetElement.innerHTML = '<option value="">-- Select Venue --</option>'; // Default option
+                     targetElement.disabled = false; // Re-enable select
+                     if (venues.length > 0) {
+                         venues.forEach(venue => {
+                             const option = document.createElement('option');
+                             // Ensure backend returns 'venue_id' and 'title' matching VenueData struct
+                             option.value = venue.venue_id; // Use venue_id from backend
+                             option.textContent = `${venue.title}`; // Display title
+                              // Optional: add venue_id to text for debugging: `${venue.title} (${venue.venue_id.substring(0, 8)}...)`
+                             targetElement.appendChild(option);
+                         });
+
+                     } else {
+                         targetElement.innerHTML = '<option value="">No venues found</option>';
+                         targetElement.disabled = true; // Disable if no options
+                     }
+                 } else { // Handle displaying as a list in the Venues tab
+                      if (venues.length > 0) {
+                          let html = '<ul>';
+                          venues.forEach(venue => {
+                              // Display logic for list view (similar to previous snippet)
+                               html += `<li>
+                                    <strong>${venue.title}</strong><br>
+                                    Description: ${venue.description || 'N/A'}<br>
+                                    Address: ${venue.address || 'N/A'}, ${venue.suburb || 'N/A'}, ${venue.state || 'N/A'} ${venue.postcode || 'N/A'}, ${venue.country || 'N/A'}<br>
+                                    Location: ${venue.latitude !== null ? venue.latitude : 'N/A'}, ${venue.longitude !== null ? venue.longitude : 'N/A'}<br>
+                                    Phone: ${venue.contact_phone || 'N/A'}
+                                </li>`;
+                          });
+                          html += '</ul>';
+                          targetElement.innerHTML = html;
+                      } else {
+                          targetElement.innerHTML = '<p>No venues found.</p>';
+                      }
+                 }
+
+
+             } else if (response.status === 401 || response.status === 403) {
+                  const errorMessage = '<option value="">Error: Not authorized</option>'; // For select
+                  const errorHtml = '<p style="color: red;">Error: You are not authorized to view venues.</p>'; // For div
+                 if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
+                 console.error("Authorization error fetching venues:", response.status);
+             }
+             else {
+                  const errorText = await response.text();
+                   const errorMessage = `<option value="">Error: ${response.status} - ${errorText.substring(0, 50)}...</option>`; // For select
+                   const errorHtml = `<p style="color: red;">Error loading venues: ${response.status} - ${errorText.substring(0, 100)}...</p>`; // For div
+                  if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
+                  console.error("Error fetching venues:", response.status, errorText);
+             }
+         } catch (error) {
+              const errorMessage = '<option value="">Network Error</option>'; // For select
+              const errorHtml = `<p style="color: red;">Network error loading venues.</p>`; // For div
+              if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
+              console.error("Fetch error for venue list:", error);
+         }
+    }
+
+    async function getStyles( targetSelectId = 'style-list') { // Optional argument to specify target
+         const targetElement = document.getElementById(targetSelectId);
+         if (!targetElement) {
+             console.error("Target element for styles not found:", targetSelectId);
+             return;
+         }
+
+         // Check if the target is a select or a div for the list
+         const isSelect = targetElement.tagName === 'SELECT';
+
+         if (isSelect) {
+             targetElement.innerHTML = '<option value="">Loading styles...</option>'; // Loading state for select
+             targetElement.disabled = true; // Disable select while loading
+         } else {
+             targetElement.innerHTML = '<p>Loading styles...</p>'; // Loading state for div
+         }
+
+         try {
+             // *** You need a backend endpoint like GET /api/style/get_list that returns Vec<StyleData> ***
+             const response = await fetch('/api/style/get_list', {
+                 method: 'GET',
+             });
+
+             if (response.ok) {
+                 const styles = await response.json(); // Assuming the backend returns Vec<StyleData> as JSON array
+                 if (isSelect) {
+                     targetElement.innerHTML = '<option value="">-- Select Style --</option>'; // Default option
+                     targetElement.disabled = false; // Re-enable select
+                     if (styles.length > 0) {
+                         styles.forEach(style => {
+                             const option = document.createElement('option');
+                             // Ensure backend returns 'style_id' and 'title' matching StyleData struct
+                             option.value = style.style_id; // Use style_id from backend
+                             option.textContent = `${style.title}`; // Display title
+                              // Optional: add style_id to text for debugging: `${style.title} (${style.style_id.substring(0, 8)}...)`
+                             targetElement.appendChild(option);
+                         });
+
+                     } else {
+                         targetElement.innerHTML = '<option value="">No styles found</option>';
+                         targetElement.disabled = true; // Disable if no options
+                     }
+                 } else { // Handle displaying as a list in the Styles tab
+                      if (styles.length > 0) {
+                          let html = '<ul>';
+                          styles.forEach(style => {
+                              // Display logic for list view (similar to previous snippet)
+                               html += `<li>
+                                    <strong>${style.title}</strong><br>
+                                    Description: ${style.description || 'N/A'}<br>
+                                </li>`;
+                          });
+                            html += '</ul>';
+                            targetElement.innerHTML = html;
+                        } else {
+                            targetElement.innerHTML = '<p>No styles found.</p>';
+                        }
+                    }
+                } else if (response.status === 401 || response.status === 403) {
+                        const errorMessage = '<option value="">Error: Not authorized</option>'; // For select
+                        const errorHtml = '<p style="color: red;">Error: You are not authorized to view styles.</p>'; // For div
+                        if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
+                        console.error("Authorization error fetching styles:", response.status);
+                    }
+                    else {
+                        const errorText = await response.text();
+                        const errorMessage = `<option value="">Error: ${response.status} - ${errorText.substring(0, 50)}...</option>`; // For select
+                        const errorHtml = `<p style="color: red;">Error loading styles: ${response.status} - ${errorText.substring(0, 100)}...</p>`; // For div
+                        if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
+                        console.error("Error fetching styles:", response.status, errorText);
+                    }
+            } catch (error) {
+                const errorMessage = '<option value="">Network Error</option>'; // For select
+                const errorHtml = `<p style="color: red;">Network error loading styles.</p>`; // For div
+                if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
+                console.error("Fetch error for style list:", error);
+            }
+        }
 
 
     </script>

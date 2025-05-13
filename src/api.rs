@@ -1,5 +1,6 @@
-// use bigdecimal::BigDecimal;
+use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveTime};
+use scylla::DeserializeRow;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -186,6 +187,7 @@ pub enum ClassFrequencyType {
     Yearly,
 }
 
+#[derive(Debug, Clone, Serialize)]
 pub struct ClassFrequency {
     pub frequency: i32,
     pub start_date: NaiveDate,
@@ -230,3 +232,87 @@ pub struct CreateClassResponse {
     #[serde(skip_serializing_if = "Option::is_none")] // Optional field
     pub error_message: Option<String>, // Return error message on failure
 }
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ClassData {
+    pub class_id: Uuid,
+    pub venue_id: Uuid,
+    pub waiver_id: Option<Uuid>, // Assuming waiver_id can be null
+    pub capacity: i32,
+    pub publish_mode: i32,
+    pub price: Option<BigDecimal>, // Assuming price can be null
+    pub notify_booking: bool,
+    pub title: String,
+    pub description: String,
+    pub frequency: Vec<ClassFrequency>,
+    pub styles: Vec<Uuid>,
+    pub grades: Vec<Uuid>,
+}
+
+
+#[derive(Debug, Clone, Serialize, DeserializeRow)]
+pub struct VenueData {
+    pub venue_id: Uuid,
+    pub title: String,
+    pub description: Option<String>,
+    pub address: Option<String>,
+    pub suburb: Option<String>,
+    pub state: Option<String>,
+    pub postcode: Option<String>,
+    pub country: Option<String>,
+    pub latitude: Option<BigDecimal>,
+    pub longitude: Option<BigDecimal>,
+    pub contact_phone: Option<String>,
+}
+
+//CreateVenueRequest
+#[derive(Deserialize)]
+pub struct CreateVenueRequest {
+    pub title: String,
+    pub description: Option<String>,
+    pub address: Option<String>,
+    pub suburb: Option<String>,
+    pub state: Option<String>,
+    pub postcode: Option<String>,
+    pub country: Option<String>,
+    pub latitude: Option<BigDecimal>,
+    pub longitude: Option<BigDecimal>,
+    pub contact_phone: Option<String>,
+}
+
+
+// Struct for the JSON response after trying to create a class
+#[derive(Debug, Serialize)] // Derive Serialize for sending JSON
+pub struct CreateVenueResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")] // Optional field
+    pub venue_id: Option<Uuid>, // Return the ID of the created class on success
+    #[serde(skip_serializing_if = "Option::is_none")] // Optional field
+    pub error_message: Option<String>, // Return error message on failure
+}
+
+
+//CreateVenueRequest
+#[derive(Deserialize)]
+pub struct CreateStyleRequest {
+    pub title: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, DeserializeRow)]
+pub struct StyleData {
+    pub style_id: Uuid,
+    pub title: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize)] // Derive Serialize for sending JSON
+pub struct CreateStyleResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")] // Optional field
+    pub style_id: Option<Uuid>, // Return the ID of the created class on success
+    #[serde(skip_serializing_if = "Option::is_none")] // Optional field
+    pub error_message: Option<String>, // Return error message on failure
+}
+
+

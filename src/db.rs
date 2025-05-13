@@ -10,8 +10,7 @@ use chrono::{NaiveDate, NaiveTime, Utc};
 use scylla::value::CqlTimestamp;
 use bigdecimal::BigDecimal;
 use crate::error::{AppError, Result, Result as AppResult};
-use crate::api::{UserProfileData, UpdateUserProfileRequest}; // <-- Import new API structs
-use crate::api::ClassFrequency;
+use crate::api::{UserProfileData, UpdateUserProfileRequest, ClassData, ClassFrequency, VenueData, StyleData}; 
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -40,6 +39,21 @@ struct UserRow {
     uniform_size: Option<String>, // 19: text (nullable)
     member_number: Option<String>, // 20: text (nullable)
     contracted_until: Option<NaiveDate>, // 21: date (nullable, maps to NaiveDate)
+}
+
+
+// Struct to represent a single class row fetched from the DB
+#[derive(DeserializeRow)] // Add DeserializeRow and Serialize/Deserialize for API
+pub struct ClassDataRow {
+    pub class_id: Uuid,
+    pub venue_id: Uuid,
+    pub waiver_id: Option<Uuid>, // Assuming waiver_id can be null
+    pub capacity: i32,
+    pub publish_mode: i32,
+    pub price: Option<BigDecimal>, // Assuming price can be null
+    pub notify_booking: bool,
+    pub title: String,
+    pub description: String,
 }
 
 
@@ -113,6 +127,16 @@ impl ScyllaConnector {
             )
             .await?;
         println!("school table created");
+
+        self.session
+            .query_unpaged(
+                "CREATE TABLE IF NOT EXISTS mma.venue \
+                (venue_id uuid, creator_user_id uuid, title text, description text, longitude decimal, latitude decimal, address text, postcode text, suburb text, street_no text, state text, country text, street_name text, google_maps_link text, contact_phone text, created_ts timestamp, PRIMARY KEY (venue_id))",
+                &[],
+            )
+            .await?;
+        println!("venue table created");
+
 
         self.session
             .query_unpaged(
@@ -257,7 +281,7 @@ impl ScyllaConnector {
         self.session
         .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.style \
-            (style_id uuid, title text, description text, \
+            (style_id uuid, title text, description text, created_ts timestamp, creator_user_id uuid, deleted boolean, \
                 PRIMARY KEY (style_id))",
             &[],
         )
@@ -804,51 +828,6 @@ impl ScyllaConnector {
         for frequency in class_frequency {
             let class_frequency_id = Uuid::new_v4();
 
-            // --- PARSING STRING DATES/TIMES HERE ---
-            // let start_date_naive = match NaiveDate::parse_from_str(&frequency.start_date, "%Y-%m-%d") {
-            //     Ok(date) => date,
-            //     Err(e) => {
-            //         tracing::error!("Failed to parse start_date '{}' for class {}: {:?}", frequency.start_date, class_id, e);
-            //         return Err(AppError::Internal(format!("Invalid start date format for frequency: {}", frequency.start_date)));
-            //     }
-            // };
-
-            // let end_date_naive = match NaiveDate::parse_from_str(&frequency.end_date, "%Y-%m-%d") {
-            //     Ok(date) => date,
-            //     Err(e) => {
-            //         tracing::error!("Failed to parse end_date '{}' for class {}: {:?}", frequency.end_date, class_id, e);
-            //         return Err(AppError::Internal(format!("Invalid end date format for frequency: {}", frequency.end_date)));
-            //     }
-            // };
-
-            // // Assuming time is "HH:MM:SS"
-            // let start_time_naive = match NaiveTime::parse_from_str(&frequency.start_time, "%H:%M:%S") {
-            //     Ok(time) => time,
-            //     Err(e) => {
-            //         tracing::error!("Failed to parse start_time '{}' for class {}: {:?}", frequency.start_time, class_id, e);
-            //         return Err(AppError::Internal(format!("Invalid start time format for frequency: {}", frequency.start_time)));
-            //     }
-            // };
-
-            // let end_time_naive = match NaiveTime::parse_from_str(&frequency.end_time, "%H:%M:%S") {
-            //     Ok(time) => time,
-            //     Err(e) => {
-            //         tracing::error!("Failed to parse end_time '{}' for class {}: {:?}", frequency.end_time, class_id, e);
-            //         return Err(AppError::Internal(format!("Invalid end time format for frequency: {}", frequency.end_time)));
-            //     }
-            // };
-
-            // // Check that end date / time is after start date / time
-            // if end_date_naive < start_date_naive {
-            //     tracing::error!("End date {} is before start date {} for class {}", end_date_naive, start_date_naive, class_id);
-            //     return Err(AppError::Internal(format!("End date {} is before start date {}", end_date_naive, start_date_naive)));
-            // }
-            // if end_time_naive < start_time_naive && end_date_naive == start_date_naive {
-            //     tracing::error!("End time {} is before start time {} for class {}", end_time_naive, start_time_naive, class_id);
-            //     return Err(AppError::Internal(format!("End time {} is before start time {}", end_time_naive, start_time_naive)));
-            // }
-            // --- END PARSING ---
-
 
             self.session
                 .query_unpaged(
@@ -863,4 +842,195 @@ impl ScyllaConnector {
 
 
 
+    // Function to get all classes with optional filtering
+    // Returns Ok(Vec<ClassData>) - an empty vector if no classes match filters or no classes exist
+    pub async fn get_classes(
+        &self,
+        _only_future: bool,
+        publish_mode_filter: Option<i32>,
+    ) -> AppResult<Vec<ClassData>> {
+
+        let result = self.session
+            .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description FROM mma.class", ()) // Pass the query string and bound values
+            .await?
+            .into_rows_result()?;
+
+        let mut classes: Vec<ClassData> = Vec::new();
+        for row in result.rows::<ClassDataRow>()?
+        {
+            let row = row?;
+            // Successfully retrieved a row. Now extract the columns.
+            if publish_mode_filter.is_none() || publish_mode_filter == Some(row.publish_mode) {
+
+                let class_data = ClassData {
+                    class_id: row.class_id,
+                    venue_id: row.venue_id,
+                    waiver_id: row.waiver_id,
+                    capacity: row.capacity,
+                    publish_mode: row.publish_mode,
+                    price: row.price,
+                    notify_booking: row.notify_booking,
+                    title: row.title,
+                    description: row.description,
+                    frequency: Vec::new(), // Initialize with an empty vector
+                    styles: Vec::new(), // Initialize with an empty vector
+                    grades: Vec::new(), // Initialize with an empty vector
+                };
+                classes.push(class_data);
+            } 
+        }
+
+        for class in &mut classes {
+            let class_id = class.class_id;
+            let result = self.session
+                .query_unpaged(
+                    "SELECT style_id FROM mma.class_styles WHERE class_id = ?",
+                    (class_id,),
+                )
+                .await?
+                .into_rows_result()?;
+
+            for row in result.rows()?
+            {
+                let (style_id, ): (Uuid,) = row?;
+                class.styles.push(style_id);
+            }
+
+            let result = self.session
+                .query_unpaged(
+                    "SELECT grade_id FROM mma.class_grades WHERE class_id = ?",
+                    (class_id,),
+                )
+                .await?
+                .into_rows_result()?;
+
+            for row in result.rows()?
+            {
+                let (grade_id, ): (Uuid,) = row?;
+                class.styles.push(grade_id);
+            }
+
+            let result = self.session
+                .query_unpaged(
+                    "SELECT frequency, start_date, end_date, start_time, end_time FROM mma.class_frequency WHERE class_id = ?",
+                    (class_id,),
+                )
+                .await?
+                .into_rows_result()?;
+
+            for row in result.rows()?
+            {
+                let ( frequency, start_date, end_date, start_time, end_time) : ( i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row?;
+                let class_frequency = ClassFrequency {
+                    frequency: frequency,
+                    start_date: start_date,
+                    end_date: end_date,
+                    start_time: start_time,
+                    end_time: end_time,
+                };
+                class.frequency.push(class_frequency);
+            }
+        }
+
+        return Ok(classes);
+    }
+
+    pub async fn get_venue(&self, venue_id: Uuid) -> AppResult<Option<VenueData>> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT title, description FROM mma.venue WHERE venue_id = ?",
+                (venue_id,),
+            )
+            .await?
+            .into_rows_result()?;
+
+        for row in result.rows::<VenueData, >()?
+        {
+            // let (title, description): (String, String) = row?;
+            let row = row?;
+            // Successfully retrieved a row. Now extract the columns.
+
+            return Ok(Some(row));
+        }
+        return Ok(None); // Venue_id not found
+    }
+
+    pub async fn create_new_venue(&self, creator_user_id: Uuid, venue_id: Uuid, title: String, description: Option<String>, address: Option<String>, suburb: Option<String>, postcode: Option<String>) -> AppResult<()> {
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let now = scylla::value::CqlTimestamp(now);
+
+        self.session
+            .query_unpaged(
+                "INSERT INTO mma.venue (venue_id, creator_user_id, title, description, created_ts, address, suburb, postcode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (venue_id, creator_user_id, title, description, now, address, suburb, postcode), // Include other fields as per your schema
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    // get_venues
+    pub async fn get_venues(&self) -> AppResult<Vec<VenueData>> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT venue_id, title, description, address, suburb, postcode, state, country, latitude, longitude, contact_phone FROM mma.venue",
+                ()
+            )
+            .await?            
+            .into_rows_result()?;
+
+        let mut venues: Vec<VenueData> = Vec::new();
+        for row in result.rows::<VenueData>()?
+        {
+            let row = row?;
+            // Successfully retrieved a row. Now extract the columns.
+            venues.push(row);
+        }
+        return Ok(venues);
+    }
+
+    // create style
+    pub async fn create_style(&self, creator_user_id: Uuid, style_id: Uuid, title: String, description: Option<String>) -> AppResult<()> {
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let now = scylla::value::CqlTimestamp(now);
+
+        self.session
+            .query_unpaged(
+                "INSERT INTO mma.style (style_id, title, description, created_ts, creator_user_id) VALUES (?, ?, ?, ?, ?)",
+                (style_id, title, description, now, creator_user_id), // Include other fields as per your schema
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    // list styles
+    pub async fn get_styles(&self) -> AppResult<Vec<StyleData>> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT style_id, title, description FROM mma.style",
+                ()
+            )
+            .await?            
+            .into_rows_result()?;
+
+        let mut styles: Vec<StyleData> = Vec::new();
+        for row in result.rows::<StyleData>()?
+        {
+            let row = row?;
+            // Successfully retrieved a row. Now extract the columns.
+            styles.push(row);
+        }
+        return Ok(styles);
+    }
+
+    
 }
