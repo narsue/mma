@@ -11,8 +11,12 @@ pub enum AppError {
     #[error("Database row error: {0}")]
     DatabaseRows(#[from] scylla::errors::RowsError),
 
-    #[error("Database row error: {0}")]
+    #[error("Database Deserialization error: {0}")]
     DatabaseDeserialization(#[from] scylla::errors::DeserializationError),
+
+    #[error("Database prepare error: {0}")]
+    DatabasePrepare(#[from] scylla::errors::PrepareError),
+
 
     #[error("JSON serialization error: {0}")]
     Serialization(#[from] serde_json::Error),

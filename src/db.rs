@@ -1,6 +1,9 @@
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::DeserializeRow;
+use scylla::statement::Statement;
+use scylla::statement::prepared::PreparedStatement;
+use scylla::statement::Consistency;
 
 use std::sync::Arc;
 use uuid::Uuid;
@@ -90,6 +93,13 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
 #[derive(Debug, Clone)]
 pub struct ScyllaConnector {
     session: Arc<Session>,
+    select_user_by_email_stmt: Arc<PreparedStatement>,
+}
+
+pub async fn create_prepared_statement(session: &Session, query: &str) -> Result<Arc<PreparedStatement>> {
+    let mut prepared_statement = session.prepare(query).await?;
+    prepared_statement.set_consistency(Consistency::LocalQuorum);
+    Ok(Arc::new(prepared_statement))
 }
 
 impl ScyllaConnector {
@@ -97,16 +107,21 @@ impl ScyllaConnector {
         let session = SessionBuilder::new()
             .known_nodes(nodes)
             .user("cassandra", "cassandra")
-
             .build()
             .await
             .map_err(|e| AppError::Internal(format!("Failed to connect to Scylla: {}", e)))?;
-        println!("Connected");
+        println!("DB Connected");
+        let select_user_by_email_stmt = create_prepared_statement(&session, "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?").await?;
+
         Ok(Self {
             session: Arc::new(session),
+            select_user_by_email_stmt,
         })
     }
     
+
+
+
     pub async fn init_schema(&self) -> Result<()> {
         // Create keyspace
         self.session
@@ -350,12 +365,21 @@ impl ScyllaConnector {
     pub async fn get_user_by_email(&self, email: &str) -> Result<Option<(Uuid, String)>> {
         // First, get the user_id from the email lookup table
         let email_result = self.session
-            .query_unpaged(
-                "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?",
+            .execute_unpaged(
+                // "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?",
+                &self.select_user_by_email_stmt.clone(),
                 (email,),
             )
             .await?
             .into_rows_result()?;
+
+        // let email_result = self.session
+        //     .query_unpaged(
+        //         "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?",
+        //         (email,),
+        //     )
+        //     .await?
+        //     .into_rows_result()?;
 
         for row in email_result.rows()?
         {
@@ -391,7 +415,7 @@ impl ScyllaConnector {
         let expires =scylla::value::CqlTimestamp(expires);
 
 
-        println!("Session token: {}", session_token);
+        // println!("Session token: {}", session_token);
         // Store the session in the database
         self.session
             .query_unpaged(
@@ -556,12 +580,6 @@ impl ScyllaConnector {
         
         Ok(user_id)
     }
-
-
-
-    
-
-
 
     // Get User Profile Data by ID ---
     pub async fn get_user_profile(&self, user_id: Uuid) -> Result<Option<UserProfileData>> {
@@ -955,7 +973,7 @@ impl ScyllaConnector {
         return Ok(None); // Venue_id not found
     }
 
-    pub async fn create_new_venue(&self, creator_user_id: Uuid, venue_id: Uuid, title: String, description: Option<String>, address: Option<String>, suburb: Option<String>, postcode: Option<String>) -> AppResult<()> {
+    pub async fn create_new_venue(&self, creator_user_id: &Uuid, venue_id: &Uuid, title: &String, description: &Option<String>, address: &Option<String>, suburb: &Option<String>, postcode: &Option<String>) -> AppResult<()> {
         // Get current timestamp
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -994,7 +1012,7 @@ impl ScyllaConnector {
     }
 
     // create style
-    pub async fn create_style(&self, creator_user_id: Uuid, style_id: Uuid, title: String, description: Option<String>) -> AppResult<()> {
+    pub async fn create_style(&self, creator_user_id: &Uuid, style_id: &Uuid, title: &String, description: &Option<String>) -> AppResult<()> {
         // Get current timestamp
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -1014,9 +1032,14 @@ impl ScyllaConnector {
 
     // list styles
     pub async fn get_styles(&self) -> AppResult<Vec<StyleData>> {
+        let mut statement = Statement::new( 
+            "SELECT style_id, title, description FROM mma.style",
+        );
+        statement.set_consistency(Consistency::LocalQuorum);
+
         let result = self.session
             .query_unpaged(
-                "SELECT style_id, title, description FROM mma.style",
+                statement,
                 ()
             )
             .await?            

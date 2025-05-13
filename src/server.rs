@@ -832,7 +832,7 @@ pub mod handlers {
         match classes_result {
             Ok(classes) => {
                 // Database function succeeded, returns a Vec<ClassData> (could be empty)
-                tracing::info!("Successfully fetched {} classes.", classes.len());
+                // tracing::info!("Successfully fetched {} classes.", classes.len());
                 // Return the vector of ClassData as a JSON array with 200 OK status
                 Ok(HttpResponse::Ok().json(classes))
             },
@@ -909,13 +909,13 @@ pub mod handlers {
 
         // 2. Call the database function to create the venue
         let create_result: AppResult<()> = state_manager.db.create_new_venue(
-            creator_user_id,
-            venue_id, // Pass the generated venue_id
-            req_data.title,
-            req_data.description,
-            req_data.address,
-            req_data.suburb,
-            req_data.postcode ).await;
+            &creator_user_id,
+            &venue_id, // Pass the generated venue_id
+            &req_data.title,
+            &req_data.description,
+            &req_data.address,
+            &req_data.suburb,
+            &req_data.postcode ).await;
         // Handle the result of the database operation
         match create_result {
             Ok(_) => {
@@ -955,7 +955,7 @@ pub mod handlers {
         match venues_result {
             Ok(venues) => {
                 // Database function succeeded, returns a Vec<ClassData> (could be empty)
-                tracing::info!("Successfully fetched {} venues.", venues.len());
+                // tracing::info!("Successfully fetched {} venues.", venues.len());
                 // Return the vector of ClassData as a JSON array with 200 OK status
                 Ok(HttpResponse::Ok().json(venues))
             },
@@ -1005,10 +1005,10 @@ pub mod handlers {
 
         // 2. Call the database function to create the style
         let create_result: AppResult<()> = state_manager.db.create_style(
-            creator_user_id,
-            style_id, // Pass the generated style_id
-            req_data.title,
-            req_data.description ).await;
+            &creator_user_id,
+            &style_id, // Pass the generated style_id
+            &req_data.title,
+            &req_data.description ).await;
         // Handle the result of the database operation
         match create_result {
             Ok(_) => {
@@ -1048,7 +1048,7 @@ pub mod handlers {
         match styles_result {
             Ok(styles) => {
                 // Database function succeeded, returns a Vec<ClassData> (could be empty)
-                tracing::info!("Successfully fetched {} styles.", styles.len());
+                // tracing::info!("Successfully fetched {} styles.", styles.len());
                 // Return the vector of ClassData as a JSON array with 200 OK status
                 Ok(HttpResponse::Ok().json(styles))
             },
