@@ -88,6 +88,7 @@
             <li><a href="#" data-section="styles">Styles</a></li>
             <li><a href="#" data-section="waivers">Waivers</a></li>
             <li><a href="#" data-section="locations">Locations</a></li>
+            <li id="users-nav" style="display: none;"><a href="#" data-section="users">Users</a></li>
             <li><a href="#" data-section="account">Account</a></li>
             <!-- Logout is a different action -->
             <li><a href="#" id="logoutLink">Log out</a></li>
@@ -132,13 +133,14 @@
             </div>
 
 
-            <button id="create-waiver-button">Create New Waiver</button>
+            <button id="create-waiver-button" style="display: none;">Create New Waiver</button>
 
             <!-- Waiver Creation Modal -->
             <div id="create-waiver-modal" class="modal">
                 <div class="modal-content">
                     <span class="close-button">&times;</span>
                     <h3>Create New Waiver Version</h3>
+                    <textarea id="new-waiver-title" rows="1" placeholder="Enter the new waiver title here..."></textarea>
                     <textarea id="new-waiver-content" rows="15" placeholder="Enter the new waiver content here..."></textarea>
                     <button id="submit-new-waiver">Submit Waiver</button>
                     <div id="create-waiver-error"></div>
@@ -161,6 +163,13 @@
                 </iframe>
                  <p><small>Note: Replace YOUR_API_KEY with your Google Maps Embed API key.</small></p>
             </div>
+            <!-- Map or list of locations goes here -->
+        </div>
+
+        <!-- Section: Users -->
+        <div id="usersSection" class="portal-section" style="display: none;">
+            <h2>Users</h2>
+            <p>Allocate user permissions.</p>
             <!-- Map or list of locations goes here -->
         </div>
 
@@ -291,6 +300,95 @@
     </footer>
 
     <script>
+
+        const Permissions = {
+            HyperAdmin: 0,
+            SuperAdmin: 1,
+            CreateSuperAdmin: 2,
+            RemoveSuperAdmin: 3,
+            CreateClass: 4,
+            ModifyClass: 5,
+            RemoveClass: 6,
+            InstructClass: 7,
+            ViewClass: 8,
+            CreateClub: 9,
+            ViewClub: 10,
+            ModifyClub: 11,
+            RemoveClub: 12,
+            CreateWaiver: 13,
+            AddStudent: 14,
+            RemoveStudent: 15,
+            ViewStudent: 16,
+            ModifyStudent: 17,
+            SendEmail: 18,
+            CreateInstructor: 19,
+            ModifyInstructor: 20,
+            RemoveInstructor: 21,
+            ViewInstructor: 22,
+            CreateGrading: 23,
+            ModifyGrading: 24,
+            RemoveGrading: 25,
+            ViewGrading: 26,
+            RefundPayment: 27,
+            DiscountStudent: 28,
+            CreateDiscount: 29,
+            ModifyDiscount: 30,
+            RemoveDiscount: 31,
+            Banned: 32,
+            // Add any new permissions here, continuing the sequence
+        };
+
+        /**
+         * Checks if a user has a specific permission.
+         * @param {number[]} userPermissionIntegers - An array of integers representing the user's permissions received from the backend.
+         * @param {number} requiredPermission - The integer value of the permission you want to check for (e.g., Permissions.CreateWaiver).
+         * @returns {boolean} - True if the user has the required permission, false otherwise.
+         */
+        function hasPermission(userPermissionIntegers, requiredPermissions) {
+            if (!Array.isArray(requiredPermissions)) {
+                console.error("requiredPermissions is not an array.");
+                return false;
+            }
+            for (const requiredPermission of requiredPermissions) {
+
+                // Ensure userPermissionIntegers is a valid array
+                if (!Array.isArray(userPermissionIntegers)) {
+                    console.error("userPermissionIntegers is not an array.");
+                    return false;
+                }
+                if (requiredPermission === undefined) {
+                    console.error("requiredPermission is undefined.");
+                    return false;
+                }
+                if (typeof requiredPermission !== 'number') {
+                    console.error("requiredPermission is not a number.");
+                    return false;
+                }
+                if (userPermissionIntegers.length === 0) {
+                    console.warn("userPermissionIntegers is empty.");
+                    return false;
+                }
+                if (userPermissionIntegers.includes(Permissions.Banned)) {
+                    console.warn("User is banned.");
+                    return false;
+                }
+                if (userPermissionIntegers.includes(Permissions.HyperAdmin)) {
+                    return true; // HyperAdmin has all permissions
+                }
+                if (userPermissionIntegers.includes(Permissions.SuperAdmin) && requiredPermission !== Permissions.CreateSuperAdmin && requiredPermission !== Permissions.RemoveSuperAdmin) {
+                    return true; // SuperAdmin has all permissions
+                }
+                // Check if the required permission integer exists in the user's permissions array
+                if (userPermissionIntegers.includes(requiredPermission)) {
+                    return true; // User has the required permission
+                }
+            }
+            return false; // Default to false if no permissions matched
+        }
+
+
+
+
         // Helper function to display messages
         function displayMessage(element, message, isSuccess) {
             element.textContent = message;
@@ -472,23 +570,37 @@
         });
 
 
-
-
+    
+        let userPermissions = [0]; // This should be set when the user logs in or is fetched from the server
 
         // Get modal elements
         const createWaiverModal = document.getElementById('create-waiver-modal');
         const createWaiverButton = document.getElementById('create-waiver-button');
         const closeButton = createWaiverModal.querySelector('.close-button');
         const submitWaiverButton = document.getElementById('submit-new-waiver');
+        const newWaiverContentTitle = document.getElementById('new-waiver-title');
         const newWaiverContentArea = document.getElementById('new-waiver-content');
         const createWaiverErrorDiv = document.getElementById('create-waiver-error');
 
+        if (hasPermission(userPermissions, [Permissions.CreateWaiver])) {
+            createWaiverButton.style.display = 'block'; // Show button if user has permission
+        } else {
+            createWaiverButton.style.display = 'none'; // Hide button if no permission
+        }
+
+        const usersNav = document.getElementById('users-nav');
+        if (hasPermission(userPermissions, [Permissions.CreateSuperAdmin, Permissions.RemoveSuperAdmin, Permissions.ViewInstructor, Permissions.CreateInstructor, Permissions.ModifyInstructor, Permissions.RemoveInstructor, Permissions.ViewStudent, Permissions.AddStudent, Permissions.RemoveStudent, Permissions.ModifyStudent])) {
+            usersNav.style.display = 'block'; // Show button if user has permission
+        } else {
+            usersNav.style.display = 'none'; // Hide button if no permission
+        }
 
         // Open the modal
         createWaiverButton.onclick = function() {
             createWaiverModal.style.display = 'block';
              createWaiverErrorDiv.textContent = ''; // Clear previous errors
              newWaiverContentArea.value = ''; // Clear previous content
+             newWaiverContentTitle.value = ''; // Clear previous title
         }
 
         // Close the modal using the close button
@@ -505,12 +617,18 @@
 
         // Submit the new waiver
         submitWaiverButton.onclick = async function() {
-             const waiverContent = newWaiverContentArea.value.trim(); // Trim whitespace
+            const waiverContent = newWaiverContentArea.value.trim(); // Trim whitespace
+            const waiverTitle = newWaiverContentTitle.value.trim(); // Trim whitespace
 
-             if (!waiverContent) {
-                 createWaiverErrorDiv.textContent = 'Waiver content cannot be empty.';
-                 return;
-             }
+            if (!waiverContent) {
+                createWaiverErrorDiv.textContent = 'Waiver content cannot be empty.';
+                return;
+            }
+
+            if (!waiverTitle) {
+                createWaiverErrorDiv.textContent = 'Waiver title cannot be empty.';
+                return;
+            }
 
             // const token = getAuthToken();
             // if (!token) {
@@ -528,7 +646,7 @@
                          'Content-Type': 'application/json',
                         //  'Authorization': `Bearer ${token}`
                      },
-                     body: JSON.stringify({ content: waiverContent })
+                     body: JSON.stringify({ content: waiverContent, title: waiverTitle }) 
                  });
 
                  const responseData = await response.json(); // Assuming the response is JSON

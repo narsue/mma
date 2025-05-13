@@ -1,5 +1,5 @@
 use actix_web::{
-    dev::Payload, error::ErrorUnauthorized, FromRequest, HttpRequest,
+    dev::Payload, error::ErrorUnauthorized, error::ErrorInternalServerError, FromRequest, HttpRequest,
 };
 use futures_util::future::{ready, Ready};
 use std::sync::Arc;
@@ -24,20 +24,35 @@ impl FromRequest for LoggedUser {
         // let state = req.app_data::<Arc<StoreStateManager>>().cloned();
         
         // Get the session cookie
-        let cookie = req.cookie("session");
+        let session_cookie = req.cookie("session");
+        let user_id_cookie = req.cookie("user_id");
         
         // Validate everything
-        match (cookie) {
-            ( Some(cookie)) => {
-                // We can't use async in FromRequest with Ready, so we'll
-                // validate the session in the handler instead
-                ready(Ok(LoggedUser {
-                    user_id: Uuid::nil(), // Placeholder, will be validated in handler
-                    session_token: cookie.value().to_owned(),
-                    // state,
-                }))
+        match (session_cookie, user_id_cookie) {
+            ( Some(session_cookie), Some(user_id_cookie) ) => {
+                // Both cookies found, now try to parse the user_id
+                match user_id_cookie.value().parse::<Uuid>() {
+                    Ok(user_id) => {
+                        // Both cookies are present and user_id is a valid Uuid
+                        // We successfully extracted the necessary info synchronously.
+                        // Actual session validity is checked in the handler via validate().
+                        ready(Ok(LoggedUser {
+                            user_id, // Store the parsed Uuid
+                            session_token: session_cookie.value().to_owned(),
+                        }))
+                    },
+                    Err(e) => {
+                        // user_id cookie exists, but its value is not a valid Uuid format
+                        tracing::warn!("Invalid user_id cookie format received: {:?}", e);
+                        ready(Err(ErrorUnauthorized("Invalid authentication token format"))) // Indicate format issue
+                    }
+                }
             }
-            _ => ready(Err(ErrorUnauthorized("Authentication required"))),
+            // If either cookie is missing, return an Unauthorized error immediately
+            _ => {
+                tracing::debug!("Session or user_id cookie missing.");
+                ready(Err(ErrorUnauthorized("Authentication credentials missing"))) // Indicate missing credentials
+            }
         }
     }
 }
@@ -45,12 +60,25 @@ impl FromRequest for LoggedUser {
 // Helper method to validate the session in the handler
 impl LoggedUser {
     pub async fn validate(&mut self, state: &Arc<StoreStateManager>  ) -> Result<Uuid, actix_web::Error> {
-        match state.db.verify_session(&self.session_token).await {
-            Ok(Some(user_id)) => {
-                self.user_id = user_id;
-                Ok(user_id)
+        let verification_result = state.db.verify_session(self.user_id, &self.session_token).await;
+        
+        match verification_result {
+            Ok(true) => {
+                // Session is valid and matches the user_id
+                tracing::debug!("Session valid for user_id: {}", self.user_id);
+                Ok(self.user_id) // Return the successfully validated user_id
             }
-            _ => Err(ErrorUnauthorized("Invalid or expired session")),
+            Ok(false) => {
+                // Session is invalid (token doesn't exist, expired, or doesn't match user_id)
+                tracing::debug!("Session verification failed for user_id: {}", self.user_id);
+                Err(ErrorUnauthorized("Invalid or expired session"))
+            }
+            Err(app_err) => {
+                // A database error occurred during verification
+                tracing::error!("Database error during session verification for user_id {}: {:?}", self.user_id, app_err);
+                // Manually convert AppError to ActixError using ErrorInternalServerError
+                Err(ErrorInternalServerError(app_err))
+            }
         }
     }
 }

@@ -73,7 +73,6 @@ pub struct UserProfileData {
     pub phone: Option<String>,
     pub dob: Option<String>, // Consider using a proper Date type later
     pub stripe_payment_method_id: Option<String>, // Could be null
-    pub created_ts: i64, // Unix timestamp
     pub email_verified: bool,
     // pub waiver_id: Option<Uuid>, // Could be null
     pub photo_id: Option<String>, // Could be null
@@ -86,7 +85,7 @@ pub struct UserProfileData {
     pub belt_size: Option<String>,
     pub uniform_size: Option<String>,
     pub member_number: Option<String>, // Could be null
-    pub contracted_until: Option<i64>, // Date stored as timestamp or similar in DB
+    pub contracted_until: Option<String>, // Date stored as timestamp or similar in DB
 }
 
 #[derive(Debug, Serialize)]
@@ -161,6 +160,7 @@ pub struct AcceptWaiverResponse {
 // Assuming you have a struct for the waiver creation request
 #[derive(Deserialize)]
 pub struct CreateWaiverRequest {
+    pub title: String, // The content of the new waiver
     pub content: String, // The content of the new waiver
 }
 
@@ -172,4 +172,38 @@ pub struct CreateWaiverResponse {
     pub id: Option<Uuid>, // Return the ID of the newly created waiver
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+
+pub enum ClassFrequencyType {
+    OneOff,
+    Weekly,
+    Fortnightly,
+    Monthly,
+    Yearly,
+}
+
+#[derive(Deserialize)]
+pub struct ClassFrequency {
+    pub frequency: ClassFrequencyType,
+    pub start_date: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_date: Option<String>,
+    pub start_time: String,
+    pub end_time: String,
+}
+
+// Assuming you have a struct for the class creation request
+#[derive(Deserialize)]
+pub struct CreateClassRequest {
+    pub title: String, 
+    pub description: String, 
+    pub frequency: Vec<ClassFrequency>,
+    pub venue_id: String,
+    pub notify_booking: bool,
+    pub capacity: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price: Option<String>,
+    pub grading_required: Vec<String>,
 }

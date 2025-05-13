@@ -2,9 +2,18 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum AppError {
-    #[error("Database error: {0}")]
-    Database(#[from] scylla::transport::errors::QueryError),
+    #[error("Database execution error: {0}")]
+    DatabaseExecution(#[from] scylla::errors::ExecutionError),
+
+    #[error("Database result error: {0}")]
+    DatabaseIntoRows(#[from] scylla::errors::IntoRowsResultError),
     
+    #[error("Database row error: {0}")]
+    DatabaseRows(#[from] scylla::errors::RowsError),
+
+    #[error("Database row error: {0}")]
+    DatabaseDeserialization(#[from] scylla::errors::DeserializationError),
+
     #[error("JSON serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
     

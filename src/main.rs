@@ -16,7 +16,7 @@ use db::ScyllaConnector;
 use state::StoreStateManager;
 use server::handlers;
 use actix_web::middleware::Logger; // Correct import for Logger
-use templates::{load_templates, watch_templates, TemplateCache};
+use templates::{load_templates, watch_templates};
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {

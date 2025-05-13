@@ -1,13 +1,23 @@
-use actix_web::http::header::q;
-use scylla::transport::query_result::FirstRowError;
-use scylla::transport::errors::QueryError; // Make sure QueryError is also imported
-use scylla::{Session, SessionBuilder};
+use bigdecimal::num_bigint::BigInt;
+// use actix_web::http::header::q;
+// use argon2::password_hash::Decimal;
+// use scylla::transport::query_result::FirstRowError;
+// use scylla::transport::errors::QueryError; // Make sure QueryError is also imported
+use scylla::client::session::Session;
+use scylla::client::session_builder::SessionBuilder;
+use scylla::DeserializeRow;
+use scylla::deserialize::row::DeserializeRow;
+
 use std::sync::Arc;
 use uuid::Uuid;
 use std::time::SystemTime;
 use rand::{distributions::Alphanumeric, Rng};
-use std::net::IpAddr;
+// use std::net::IpAddr;
 use chrono::{NaiveDate, NaiveTime, DateTime, Duration, Utc};
+use bigdecimal::BigDecimal;
+use scylla::value::{CqlDate, CqlDecimal, CqlTimestamp};
+use scylla::errors::RowsError; // Import FirstRowError here if not globally used
+use crate::api::ClassFrequency;
 
 use crate::error::{AppError, Result, Result as AppResult};
 use crate::api::{UserProfileData, UpdateUserProfileRequest}; // <-- Import new API structs
@@ -16,6 +26,32 @@ use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
+
+#[derive(DeserializeRow)]
+struct UserRow {
+    user_id: Uuid,           // 0: uuid (PK, assumed non-null by deserializer)
+    email: String,           // 1: text (assumed non-null)
+    first_name: String,      // 3: text (assumed non-null)
+    surname: String,         // 4: text (assumed non-null)
+    gender: Option<String>,  // 5: text (nullable)
+    phone: Option<String>,   // 6: text (nullable)
+    dob: Option<String>,     // 7: text (nullable - consider Date type if stored as such)
+    stripe_payment_method_id: Option<String>, // 8: text (nullable)
+    email_verified: bool,    // 10: boolean (assumed non-null)
+    photo_id: Option<String>,// 11: text (nullable)
+    address: Option<String>, // 12: text (nullable)
+    suburb: Option<String>,  // 13: text (nullable)
+    emergency_name: Option<String>, // 14: text (nullable)
+    emergency_relationship: Option<String>, // 15: text (nullable)
+    emergency_phone: Option<String>, // 16: text (nullable)
+    emergency_medical: Option<String>, // 17: text (nullable)
+    belt_size: Option<String>, // 18: text (nullable)
+    uniform_size: Option<String>, // 19: text (nullable)
+    member_number: Option<String>, // 20: text (nullable)
+    contracted_until: Option<NaiveDate>, // 21: date (nullable, maps to NaiveDate)
+}
+
+
 
 pub fn hash_password(password: &str) -> Result<String> {
     // Generate a random salt
@@ -69,7 +105,7 @@ impl ScyllaConnector {
     pub async fn init_schema(&self) -> Result<()> {
         // Create keyspace
         self.session
-            .query(
+            .query_unpaged(
                 "CREATE KEYSPACE IF NOT EXISTS mma WITH REPLICATION = \
                 {'class': 'SimpleStrategy', 'replication_factor': 3}",
                 &[],
@@ -77,8 +113,18 @@ impl ScyllaConnector {
             .await?;
         println!("Keyspace created");
             
+
         self.session
-            .query(
+            .query_unpaged(
+                "CREATE TABLE IF NOT EXISTS mma.school \
+                (super_user_id uuid, school_id uuid, stripe_id text, title text, description text, created_ts timestamp, PRIMARY KEY (school_id))",
+                &[],
+            )
+            .await?;
+        println!("school table created");
+
+        self.session
+            .query_unpaged(
                 "CREATE TABLE IF NOT EXISTS mma.user \
                 (user_id uuid, email text, password_hash text, first_name text, surname text, gender text, phone text, dob text, stripe_payment_method_id text, created_ts timestamp, email_verified boolean, photo_id text, address text, suburb text, emergency_name text, emergency_relationship text, emergency_phone text, emergency_medical text, belt_size text, uniform_size text, member_number text, contracted_until date, PRIMARY KEY (user_id))",
                 &[],
@@ -88,9 +134,9 @@ impl ScyllaConnector {
             
 
         self.session
-        .query(
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.club \
-            (club_id uuid, title text, description text, PRIMARY KEY (club_id))",
+            (club_id uuid, school_id uuid, title text, description text, PRIMARY KEY (club_id))",
             &[],
         )
         .await?;
@@ -98,7 +144,7 @@ impl ScyllaConnector {
         
 
         self.session
-        .query(
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.club_user \
             (club_id uuid, user_id uuid, PRIMARY KEY (club_id, user_id))",
             &[],
@@ -107,7 +153,7 @@ impl ScyllaConnector {
         println!("Club user table created");
 
         self.session
-        .query(
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.club_class \
             (club_id uuid, class_id uuid, PRIMARY KEY (club_id, class_id))",
             &[],
@@ -116,7 +162,7 @@ impl ScyllaConnector {
         println!("Club class table created");
 
         self.session
-            .query(
+            .query_unpaged(
                 "CREATE TABLE IF NOT EXISTS mma.user_permission \
                 (user_id uuid, club_id uuid, class_id uuid, permission int, created_ts timestamp, \
                  PRIMARY KEY (user_id, club_id, class_id, permission))",
@@ -126,9 +172,9 @@ impl ScyllaConnector {
         println!("User permission table created");
 
         self.session
-            .query(
+            .query_unpaged(
                 "CREATE TABLE IF NOT EXISTS mma.waiver \
-                (waiver_id uuid, waiver text, created_ts timestamp, creator_user_id uuid, \
+                (waiver_id uuid, title text, waiver text, created_ts timestamp, creator_user_id uuid, \
                  PRIMARY KEY (waiver_id))",
                 &[],
             )
@@ -136,7 +182,7 @@ impl ScyllaConnector {
         println!("Waiver table created");
 
         self.session
-            .query(
+            .query_unpaged(
                 "CREATE TABLE IF NOT EXISTS mma.latest_waiver \
                 (waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, created_ts timestamp, \
                  PRIMARY KEY (style_id, class_id, club_id))",
@@ -146,7 +192,7 @@ impl ScyllaConnector {
         println!("Latest waiver table created");
 
         self.session
-            .query(
+            .query_unpaged(
                 "CREATE TABLE IF NOT EXISTS mma.signed_waiver \
                 (waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, user_id uuid, accepted_ts timestamp, \
                  PRIMARY KEY (user_id, waiver_id, style_id, class_id, club_id))",
@@ -157,9 +203,9 @@ impl ScyllaConnector {
 
 
         self.session
-        .query(
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.class \
-            (class_id uuid, title text, style_id uuid, description text, frequency int, start_date date, created_ts timestamp, end_ts timestamp, \
+            (class_id uuid, venue_id uuid, waiver_id uuid, capacity int, publish_mode int, price decimal, notify_booking boolean, title text, description text, created_ts timestamp, end_ts timestamp, creator_user_id uuid, \
                 PRIMARY KEY (class_id))",
             &[],
         )
@@ -168,7 +214,37 @@ impl ScyllaConnector {
         
 
         self.session
-        .query(
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.class_styles \
+            (class_id uuid, style_id uuid, \
+                PRIMARY KEY (class_id, style_id))",
+            &[],
+        )
+        .await?;
+        println!("class_styles created");
+
+        self.session
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.class_grades \
+            (class_id uuid, grade_id uuid, \
+                PRIMARY KEY (class_id, grade_id))",
+            &[],
+        )
+        .await?;
+        println!("class_grades created");
+
+        self.session
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.class_frequency \
+            (class_id uuid, class_frequency_id uuid, frequency int, start_date date, end_date date, start_time time, end_time time, \
+                PRIMARY KEY (class_id, class_frequency_id))",
+            &[],
+        )
+        .await?;
+        println!("class_frequency created");
+
+        self.session
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.instructor \
             (user_id uuid, class_id uuid, permission int, created_ts timestamp, \
                 PRIMARY KEY (user_id, class_id))",
@@ -178,9 +254,9 @@ impl ScyllaConnector {
         println!("Instructor table created");
 
         self.session
-        .query(
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.attendance \
-            (user_id uuid, class_id uuid, is_instructor boolean, \
+            (user_id uuid, class_id uuid, is_instructor boolean, checkin_ts timestamp, \
                 PRIMARY KEY (user_id, class_id))",
             &[],
         )
@@ -188,7 +264,7 @@ impl ScyllaConnector {
         println!("Attendance table created");
 
         self.session
-        .query(
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.style \
             (style_id uuid, title text, description text, \
                 PRIMARY KEY (style_id))",
@@ -198,7 +274,7 @@ impl ScyllaConnector {
         println!("Style table created");
 
         self.session
-        .query(
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.grade \
             (grading_id uuid, title text, description text, attendance_req int, rank int, \
                 PRIMARY KEY (grading_id))",
@@ -209,7 +285,7 @@ impl ScyllaConnector {
 
 
         self.session
-        .query(
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.grading_requirement \
             (grading_requirement_id uuid, title text, description text, requirement int, \
                 PRIMARY KEY (grading_requirement_id))",
@@ -219,7 +295,7 @@ impl ScyllaConnector {
         println!("Grading requirement table created");
 
         self.session
-        .query(
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.user_style_grade \
             (style_id uuid, user_id uuid, grading_id uuid, note text, created_ts timestamp, \
                 PRIMARY KEY (style_id, user_id, grading_id))",
@@ -230,20 +306,20 @@ impl ScyllaConnector {
 
 
         self.session
-        .query(
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.session \
             (session_token text, user_id uuid, created_ts timestamp, expires_ts timestamp, \
              ip_address text, user_agent text, is_active boolean, \
-             PRIMARY KEY (session_token))",
+             PRIMARY KEY (session_token, user_id))",
             &[],
         )
         .await?;
         println!("Session table created");
 
         self.session
-        .query(
+        .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.user_by_email \
-            (email text PRIMARY KEY, user_id uuid)",
+            (email text PRIMARY KEY, user_id uuid, password_hash text,)",
             &[],
         )
         .await?;
@@ -259,44 +335,20 @@ impl ScyllaConnector {
     pub async fn get_user_by_email(&self, email: &str) -> Result<Option<(Uuid, String)>> {
         // First, get the user_id from the email lookup table
         let email_result = self.session
-            .query(
-                "SELECT user_id FROM mma.user_by_email WHERE email = ?",
+            .query_unpaged(
+                "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?",
                 (email,),
             )
-            .await?;
-        
-        // If we don't find the email, return None
-        let user_id = match email_result.first_row() {
-            Ok(row) => {
-                row.columns[0].as_ref()
-                    .and_then(|val| val.as_uuid())
-                    .ok_or_else(|| AppError::Internal(format!("Invalid user_id format")))?
-            },
-            Err(_) => return Ok(None), // Email not found
-        };
-        
-        // Now get the password hash from the user table using the user_id
-        let user_result = self.session
-            .query(
-                "SELECT password_hash FROM mma.user WHERE user_id = ?",
-                (user_id,),
-            )
-            .await?;
-        
-        // Extract the password hash
-        match user_result.first_row() {
-            Ok(row) => {
-                let password_hash = row.columns[0].as_ref()
-                    .and_then(|val| val.as_text())
-                    .ok_or_else(|| AppError::Internal(format!("Invalid password_hash format")))?;
-                
-                Ok(Some((user_id, password_hash.to_string())))
-            },
-            Err(_) => {
-                // This should rarely happen (inconsistent data state)
-                Err(AppError::Internal(format!("User found in email table but not in user table")))
-            }
+            .await?
+            .into_rows_result()?;
+
+        for row in email_result.rows()?
+        {
+            let (user_id, password_hash): (Uuid, String) = row?;
+            return Ok(Some((user_id, password_hash)));
         }
+
+        return Ok(None);
     }
 
     pub async fn create_session(
@@ -312,25 +364,29 @@ impl ScyllaConnector {
             .take(64)  // 64 character token
             .map(char::from)
             .collect();
-        
-        // Calculate timestamps
-        let now = Utc::now();
-        let expires = now + Duration::hours(duration_hours);
-        
-        // Convert to seconds since epoch
-        let now_secs = now.timestamp();
-        let expires_secs = expires.timestamp();
-        
+                
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let expires = now + (duration_hours * 60*60 * 1000);
+
+        let now = scylla::value::CqlTimestamp(now);
+        let expires =scylla::value::CqlTimestamp(expires);
+
+
+        println!("Session token: {}", session_token);
         // Store the session in the database
         self.session
-            .query(
+            .query_unpaged(
                 "INSERT INTO mma.session (session_token, user_id, created_ts, expires_ts, ip_address, user_agent, is_active) \
                  VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     &session_token,
                     user_id,
-                    now_secs,
-                    expires_secs,
+                    now,
+                    expires,
                     ip_address.unwrap_or_default(),
                     user_agent.unwrap_or_default(),
                     true,
@@ -342,55 +398,42 @@ impl ScyllaConnector {
     }
 
     // Verify a session token and return the user ID if valid
-    pub async fn verify_session(&self, session_token: &str) -> Result<Option<Uuid>> {
+    pub async fn verify_session(&self, user_id: Uuid, session_token: &str) -> Result<bool> {
         // println!("Verifying session: {}", session_token);
         let result = self.session
-            .query(
-                "SELECT user_id, expires_ts, is_active FROM mma.session WHERE session_token = ?",
-                (session_token,),
+            .query_unpaged(
+                "SELECT expires_ts, is_active FROM mma.session WHERE session_token = ? and user_id = ?",
+                (session_token, user_id),
             )
-            .await?;
-        
-        match result.first_row() {
-            Ok(row) => {
-                // Extract user_id (first column)
-                let user_id: Uuid = row.columns[0].as_ref()
-                    .and_then(|val| val.as_uuid())
-                    .ok_or_else(|| AppError::Internal("Invalid user_id format in session".to_string()))?;
-                
-                // Extract expires_ts (second column)
-                let expires_ts: i64 = row.columns[1].as_ref()
-                    .and_then(|val| val.as_bigint())
-                    .ok_or_else(|| AppError::Internal("Invalid expires_ts format in session".to_string()))?;
-                
-                // Extract is_active (third column)
-                let is_active: bool = row.columns[2].as_ref()
-                    .and_then(|val| val.as_boolean())
-                    .ok_or_else(|| AppError::Internal("Invalid is_active format in session".to_string()))?;
-                
-                let now = Utc::now().timestamp();
-                
-                // Check if session is valid (not expired and is active)
-                if now <= expires_ts && is_active {
-                    Ok(Some(user_id))
-                } else {
-                    // Optionally invalidate expired sessions
-                    if now > expires_ts {
-                        self.invalidate_session(session_token).await?;
-                    }
-                    Ok(None)
+            .await?
+            .into_rows_result()?;
+
+        for row in result.rows()?
+        {
+            let (expires_ts, is_active): (CqlTimestamp, bool, ) = row?;
+            let now = Utc::now().timestamp();
+            // Check if session is valid (not expired and is active)
+            if now <= expires_ts.0 && is_active {
+                return Ok(true);
+            } else {
+                // Optionally invalidate expired sessions
+                if now > expires_ts.0 {
+                    self.invalidate_session(user_id, session_token).await?;
                 }
-            },
-            Err(_) => Ok(None), // Session not found
+                return Ok(false);
+            }
         }
+
+        return Ok(false);
+
     }
     
     // Invalidate a session (logout)
-    pub async fn invalidate_session(&self, session_token: &str) -> Result<()> {
+    pub async fn invalidate_session(&self, user_id: Uuid, session_token: &str) -> Result<()> {
         self.session
-            .query(
-                "UPDATE mma.session SET is_active = false WHERE session_token = ?",
-                (session_token,),
+            .query_unpaged(
+                "UPDATE mma.session SET is_active = false WHERE session_token = ? and user_id = ?",
+                (session_token, user_id),
             )
             .await?;
         
@@ -400,7 +443,7 @@ impl ScyllaConnector {
     // Invalidate all sessions for a user (force logout everywhere)
     pub async fn invalidate_all_user_sessions(&self, user_id: Uuid) -> Result<()> {
         self.session
-            .query(
+            .query_unpaged(
                 "UPDATE mma.session SET is_active = false WHERE user_id = ?",
                 (user_id,),
             )
@@ -427,16 +470,25 @@ impl ScyllaConnector {
         emergency_medical: Option<&str>,
     ) -> Result<Uuid> {
         // Check if email already exists using the email lookup table
-        let email_check = self.session
-            .query(
+        let result = self.session
+            .query_unpaged(
                 "SELECT user_id FROM mma.user_by_email WHERE email = ?",
                 (email,),
             )
-            .await?;
+            .await?
+            .into_rows_result()?;
+
         
-        if let Ok(_) = email_check.first_row() {
+        for row in result.rows()?
+        {
+            let (user_id,): (Uuid,) = row?;
+            println!("User already exists ID: {}", user_id);
             return Err(AppError::Internal(format!("Email {} is already registered", email)));
         }
+
+        // if let Ok(_) = email_check.first_row() {
+        //     return Err(AppError::Internal(format!("Email {} is already registered", email)));
+        // }
         
         // Hash the password
         let password_hash = hash_password(password)?;
@@ -449,10 +501,11 @@ impl ScyllaConnector {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as i64;
+        let now = scylla::value::CqlTimestamp(now);
         
         // Insert main user record
         self.session
-            .query(
+            .query_unpaged(
                 "INSERT INTO mma.user (user_id, email, password_hash, first_name, surname, gender, phone, dob, \
                  address, suburb, emergency_name, emergency_relationship, emergency_phone, emergency_medical, \
                  created_ts, email_verified) \
@@ -480,9 +533,9 @@ impl ScyllaConnector {
         
         // Insert into email lookup table
         self.session
-            .query(
-                "INSERT INTO mma.user_by_email (email, user_id) VALUES (?, ?)",
-                (email, user_id),
+            .query_unpaged(
+                "INSERT INTO mma.user_by_email (email, user_id, password_hash) VALUES (?, ?, ?)",
+                (email, user_id, &password_hash),
             )
             .await?;
         
@@ -490,66 +543,65 @@ impl ScyllaConnector {
     }
 
 
+
+    
+
+
+
     // Get User Profile Data by ID ---
     pub async fn get_user_profile(&self, user_id: Uuid) -> Result<Option<UserProfileData>> {
         let result = self.session
-            .query(
+            .query_unpaged(
                 "SELECT user_id, email, first_name, surname, gender, phone, dob, \
-                stripe_payment_method_id, created_ts, email_verified, \
+                stripe_payment_method_id, email_verified, \
                 photo_id, address, suburb, emergency_name, emergency_relationship, \
                 emergency_phone, emergency_medical, belt_size, uniform_size, \
                 member_number, contracted_until \
                 FROM mma.user WHERE user_id = ?",
                 (user_id,),
             )
-            .await?;
+            .await?
+            .into_rows_result()?;
+        
+        for row in result.rows::<UserRow>()?
+        {
+            let row = row?;
 
-        match result.first_row() {
-            Ok(row) => {
-                // Extract each column by index
-                // Be careful with types and Optionals
-                let user_profile = UserProfileData {
-                    user_id: row.columns[0].as_ref().and_then(|v| v.as_uuid()).ok_or_else(|| AppError::Internal("Invalid user_id in DB".to_string()))?,
-                    email: row.columns[1].as_ref().and_then(|v| v.as_text()).ok_or_else(|| AppError::Internal("Invalid email in DB".to_string()))?.to_string(),
-                    first_name: row.columns[2].as_ref().and_then(|v| v.as_text()).ok_or_else(|| AppError::Internal("Invalid first_name in DB".to_string()))?.to_string(),
-                    surname: row.columns[3].as_ref().and_then(|v| v.as_text()).ok_or_else(|| AppError::Internal("Invalid surname in DB".to_string()))?.to_string(),
-                    gender: row.columns[4].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    phone: row.columns[5].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    dob: row.columns[6].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    stripe_payment_method_id: row.columns[7].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    // Timestamps are often i64 (microseconds since epoch) in Scylla/Cassandra
-                    created_ts: row.columns[8].as_ref().and_then(|v| v.as_bigint()).ok_or_else(|| AppError::Internal("Invalid created_ts in DB".to_string()))?,
-                    email_verified: row.columns[9].as_ref().and_then(|v| v.as_boolean()).ok_or_else(|| AppError::Internal("Invalid email_verified in DB".to_string()))?,
-                    // waiver_id: row.columns[10].as_ref().and_then(|v| v.as_uuid()),
-                    photo_id: row.columns[10].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    address: row.columns[11].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    suburb: row.columns[12].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    emergency_name: row.columns[13].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    emergency_relationship: row.columns[14].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    emergency_phone: row.columns[15].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    emergency_medical: row.columns[16].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    belt_size: row.columns[17].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    uniform_size: row.columns[18].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    member_number: row.columns[19].as_ref().and_then(|v| v.as_text()).map(|s| s.to_string()),
-                    // Dates are often stored as Unix timestamp in Scylla/Cassandra dates
-                    contracted_until: row.columns[20].as_ref().and_then(|v| v.as_date()).map(|date| {
-                            // Combine the NaiveDate with midnight time (00:00:00)
-                            let datetime_at_midnight = date.and_time(NaiveTime::default());
-                            // Get the Unix timestamp (seconds since epoch), treating the NaiveDateTime as UTC
-                            datetime_at_midnight.timestamp()
-                        }),
-                };
-                Ok(Some(user_profile))
-            },
-            // Err(FirstRowError::NotFound) => Ok(None), // User not found
-            Err(_) => Err(AppError::Internal(format!("Database error"))), // Other database errors
+            // Successfully retrieved a row. Now extract the columns.
+            let user_profile = UserProfileData {
+                user_id: row.user_id, // UserID is primary key
+                email: row.email,
+                first_name: row.first_name,
+                surname: row.surname,
+                gender: row.gender,
+                phone: row.phone,
+                dob: row.dob,
+                stripe_payment_method_id: row.stripe_payment_method_id,
+                email_verified: row.email_verified, 
+                photo_id: row.photo_id,
+                address: row.address,
+                suburb: row.suburb,
+                emergency_name: row.emergency_name,
+                emergency_relationship: row.emergency_relationship,
+                emergency_phone: row.emergency_phone,
+                emergency_medical: row.emergency_medical,
+                belt_size: row.belt_size,
+                uniform_size: row.uniform_size,
+                member_number: row.member_number,
+                contracted_until: row.contracted_until.map(|naive_date: NaiveDate| {
+                    naive_date.format("%Y-%m-%d").to_string() // "YYYY-MM-DD"
+                }),
+            };
+            return Ok(Some(user_profile));
         }
+                    
+        return Ok(None); // User ID not found
     }
 
     // Update User Profile ---
     pub async fn update_user_profile(&self, user_id: Uuid, update_data: &UpdateUserProfileRequest) -> Result<()> {
         self.session
-            .query(
+            .query_unpaged(
                 "UPDATE mma.user \
                 SET first_name = ?, surname = ?, gender = ?, phone = ?, dob = ?, \
                 address = ?, suburb = ?, emergency_name = ?, emergency_relationship = ?, \
@@ -579,127 +631,106 @@ impl ScyllaConnector {
     // This is separate from get_user_profile for security
     pub async fn get_password_hash(&self, user_id: Uuid) -> Result<Option<String>> {
         let result = self.session
-        .query(
-            "SELECT password_hash FROM mma.user WHERE user_id = ?",
-            (user_id,),
-        )
-        .await?; // This ? works because QueryError has From<FirstRowError> or is mapped to AppError
-    
-        match result.first_row() {
-            Ok(row) => {
-                let password_hash = row.columns[0].as_ref()
-                    .and_then(|val| val.as_text())
-                    .ok_or_else(|| AppError::Internal(format!("Invalid password_hash format in DB for user {}", user_id)))?;
-    
-                Ok(Some(password_hash.to_string()))
-            },
-            Err(e) => {
-                use scylla::transport::query_result::FirstRowError; // Import FirstRowError here if not globally used
-    
-                match e {
-                     FirstRowError::RowsEmpty => Ok(None), // Correctly mapped NotFound to Ok(None)
-                     _ => {
-                          tracing::error!("Unexpected FirstRowError fetching password hash for user {}: {:?}", user_id, e);
-                          // Map other FirstRowError types to AppError::Internal as per previous fix
-                          Err(AppError::Internal(format!("Data retrieval error: {:?}", e)))
-                     }
-                 }
-            }
+            .query_unpaged(
+                "SELECT password_hash FROM mma.user WHERE user_id = ?",
+                (user_id,),
+            )
+            .await?            
+            .into_rows_result()?;
+
+        for row in result.rows()?
+        {
+            let (password_hash,): (String,) = row?;
+            return Ok(Some(password_hash));
         }
+        return Ok(None);
     }
 
     // Update Password Hash by ID ---
     pub async fn update_password_hash(&self, user_id: Uuid, new_password_hash: String) -> Result<()> {
         self.session
-            .query(
+            .query_unpaged(
                 "UPDATE mma.user SET password_hash = ? WHERE user_id = ?",
                 (&new_password_hash, user_id),
             )
             .await?;
+
+        let result = self.session.query_unpaged("SELECT email from mma.user where user_id = ?", (user_id, ))
+            .await?
+            .into_rows_result()?;
+
+        for row in result.rows()?
+        {
+            let (email,): (String,) = row?;
+            self.session
+                .query_unpaged(
+                    "UPDATE mma.user_by_email SET password_hash = ? WHERE email = ?",
+                    (&new_password_hash, email),
+                )
+                .await?;
+        }
+
         Ok(())
     }
 
-    pub async fn get_latest_waiver(&self, club_id: Option<Uuid>, class_id: Option<Uuid>, style_id: Option<Uuid>) -> AppResult<Option<(Uuid, String)>> {
-        // Example query: Assumes a 'version' column and ordering by it
-        // SELECT id, content FROM mma.waivers ORDER BY version DESC LIMIT 1
-        // Or if you use an 'is_current' flag:
-        // SELECT id, content FROM mma.waivers WHERE is_current = true LIMIT 1
-    
-        // Using a simple query assuming `is_current` for demonstration
+    pub async fn get_latest_waiver(&self, club_id: Option<Uuid>, class_id: Option<Uuid>, style_id: Option<Uuid>) -> AppResult<Option<(Uuid, String, String)>> {
         let zero_guuid = Uuid::nil();
         let club_id = club_id.unwrap_or(zero_guuid);
         let class_id = class_id.unwrap_or(zero_guuid);
         let style_id = style_id.unwrap_or(zero_guuid);
         let result = self.session
-            .query(
-                // "SELECT waiver_id FROM mma.latest_waiver where club_id = ? and class_id = ? and style_id = ?",
-                // (&club_id, &class_id, &style_id),
+            .query_unpaged(
                 "SELECT waiver_id FROM mma.latest_waiver",
                 ()
             )
-            .await?; // QueryError is mapped by AppError #[from]
-    
-        match result.first_row() {
-            Ok(row) => {
-                let waiver_id: Uuid = row.columns[0].as_ref()
-                    .and_then(|val| val.as_uuid())
-                    .ok_or_else(|| AppError::Internal("Invalid waiver_id format in DB".to_string()))?;
-    
-                let waiver_tuple = self.get_waiver(waiver_id).await?
-                    .ok_or_else(|| AppError::Internal("Waiver content not found".to_string()))?;
-                // println!("Latest waiver: {:?}", waiver_tuple);
-                Ok(Some(waiver_tuple))
-            },
-            Err(e) => {
-                match e {
-                    FirstRowError::RowsEmpty => Ok(None), // No current waiver found
-                    _ => {
-                        tracing::error!("Unexpected FirstRowError fetching latest waiver: {:?}", e);
-                        // Map other FirstRowError types to AppError::Internal
-                        Err(AppError::Internal(format!("Waiver data retrieval error: {:?}", e)))
-                    }
-                }
+            .await?            
+            .into_rows_result()?;
+
+        for row in result.rows()?
+        {
+            let (waiver_id,): (Uuid,) = row?;
+            let waiver_tuple = self.get_waiver(waiver_id).await?;
+            if waiver_tuple.is_none() {
+                println!("No waiver found with ID: {}", waiver_id);
+                return Ok(None);
             }
+
+            let waiver_tuple = waiver_tuple.unwrap();
+            return Ok(Some((waiver_id, waiver_tuple.0, waiver_tuple.1)));
         }
+        return Ok(None);
     }
 
 
-    pub async fn get_waiver(&self, waiver_id: Uuid) -> AppResult<Option<(Uuid, String)>> {
+    pub async fn get_waiver(&self, waiver_id: Uuid) -> AppResult<Option<(String, String)>> {
         println!("Getting waiver with ID: {}", waiver_id);
         let result = self.session
-            .query(
-                "SELECT waiver FROM mma.waiver WHERE waiver_id = ?",
+            .query_unpaged(
+                "SELECT title, waiver FROM mma.waiver WHERE waiver_id = ?",
                 (waiver_id,),
             )
-            .await?; // QueryError is mapped by AppError #[from]
-    
-        match result.first_row() {
-            Ok(row) => {
-                let content: String = row.columns[0].as_ref()
-                    .and_then(|val| val.as_text())
-                    .map(|s| s.to_string())
-                    .ok_or_else(|| AppError::Internal("Invalid waiver_content format in DB".to_string()))?;
-    
-                Ok(Some((waiver_id, content)))
-            },
-            Err(e) => {
-                match e {
-                    FirstRowError::RowsEmpty => Ok(None), // No current waiver found
-                    _ => {
-                        tracing::error!("Unexpected FirstRowError fetching latest waiver: {:?}", e);
-                        // Map other FirstRowError types to AppError::Internal
-                        Err(AppError::Internal(format!("Waiver data retrieval error: {:?}", e)))
-                    }
-                }
-            }
+            .await?
+            .into_rows_result()?;          
+            
+        if (result.rows_num() == 0) {
+            println!("No waiver found with ID: {}", waiver_id);
+            return Ok(None);
         }
+        
+        for row in result.rows()?
+        {
+            let (title, waiver,): (String, String) = row?;
+            return Ok(Some((title, waiver)));
+        }
+        return Ok(None);
     }
-
+    
+    
     pub async fn insert_user_accept_waiver_id(&self, user_id: Uuid, waiver_id: Uuid) -> AppResult<()> {
 
         let guuid_nil = Uuid::nil();
         self.session
-            .query(
+            .query_unpaged(
                 "INSERT INTO mma.signed_waiver (waiver_id, user_id, accepted_ts, style_id, class_id, club_id) \
                  VALUES (?, ?, ?, ?, ?, ?)",
                 (
@@ -718,38 +749,53 @@ impl ScyllaConnector {
 
 
     // Function to create a new waiver and make it current
-    pub async fn create_new_waiver(&self, creator_user_id: Uuid, id: Uuid, content: String) -> AppResult<()> {
+    pub async fn create_new_waiver(&self, creator_user_id: Uuid, id: Uuid, title: String, content: String) -> AppResult<()> {
         // Get current timestamp
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as i64;
+        let now = scylla::value::CqlTimestamp(now);
 
         self.session
-            .query(
-                "INSERT INTO mma.waiver (waiver_id, waiver, creator_user_id, created_ts) VALUES (?, ?, ?, ?)",
-                (id, content, creator_user_id, now), // Include other fields as per your schema
+            .query_unpaged(
+                "INSERT INTO mma.waiver (waiver_id, title, waiver, creator_user_id, created_ts) VALUES (?, ?, ?, ?, ?)",
+                (id, title, content, creator_user_id, now), // Include other fields as per your schema
             )
             .await?;
 
-            // "CREATE TABLE IF NOT EXISTS mma.latest_waiver \
-            // (waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, created_ts timestamp, \
-            //  PRIMARY KEY (style_id, class_id, club_id))",
         let zero_guuid = Uuid::nil();
-        self.session.query("Insert into mma.latest_waiver (waiver_id, created_ts, club_id, class_id, style_id) VALUES (?, ?, ?, ?, ?)", 
+        self.session.query_unpaged("Insert into mma.latest_waiver (waiver_id, created_ts, club_id, class_id, style_id) VALUES (?, ?, ?, ?, ?)", 
             (id, now, zero_guuid, zero_guuid, zero_guuid)
         ).await?;
 
 
-        // self.session.query("Update mma.latest_waiver set waiver_id = ?, created_ts = ?",  //  where club_id = ? and class_id = ? and style_id = ?
-        //     (id, now) // , None, None, None
-        // ).await?;
-
         Ok(())
     }
 
+/* 
+    // Function to create a new waiver and make it current
+    pub async fn create_new_class(&self, creator_user_id: Uuid, class_id: Uuid, title: String, description: String, venue_id: Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: BigDecimal, publish_mode: i32, capacity: i32, frequency: &Vec<ClassFrequency>, notify_booking: bool) -> AppResult<()> {
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        // let price: Option<CqlDecimal> = price
+        //     .map(|p| CqlDecimal::from(p));
 
+        let a = self.session
+            .query_unpaged(
+                "INSERT INTO mma.class (creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price), 
+            )
+            .await;
 
+        let zero_guuid = Uuid::nil();
+ 
+
+        Ok(())
+    }*/
 
 
 

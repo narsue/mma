@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.28", features = ["full"] }
-scylla = "0.9"
+scylla = { version = "1.1.0", features = ["bigdecimal-04", "chrono-04"] }
 uuid = { version = "1.3", features = ["v4", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -25,3 +25,4 @@ futures-util = "0.3"
 dashmap = "5.5" # For concurrent HashMap
 notify = "6.1" # For file watching
 notify-debouncer-full = "0.3" # Debouncer for notify
+bigdecimal = "0.4" 

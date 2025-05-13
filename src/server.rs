@@ -7,7 +7,7 @@ pub mod handlers {
     use crate::api::{
         LoginRequest, LoginResponse, CreateUserRequest, CreateUserResponse, ContactForm,
         GetUserProfileResponse, UpdateUserProfileRequest, UpdateUserProfileResponse,
-        ChangePasswordRequest, ChangePasswordResponse, SetGenericResponse, GetWaiverResponse,
+        ChangePasswordRequest, ChangePasswordResponse, GetWaiverResponse,
         AcceptWaiverRequest, AcceptWaiverResponse, CreateWaiverResponse, CreateWaiverRequest,  // Re-using or adjusting generic response
     };
     use crate::auth::LoggedUser;
@@ -54,6 +54,7 @@ pub mod handlers {
             }
         }
     }
+
 
     // Update User Profile Handler ---
     #[post("/api/user/update_profile")]
@@ -253,7 +254,7 @@ pub mod handlers {
         cache: web::Data<TemplateCache> // Needed to serve the template
     ) -> Result<HttpResponse, actix_web::Error> {
         // Validate the user's session. If invalid, it returns Unauthorized.
-        let user_id = user.validate(&state_manager).await?;
+        let _user_id = user.validate(&state_manager).await?;
 
         // If validation succeeds, serve the portal HTML
         match get_template_content(&cache, "portal.html") {
@@ -387,8 +388,19 @@ pub mod handlers {
                     .max_age(time::Duration::hours(24))
                     .finish();
                 
+                // Build the user_id cookie
+                let user_id_cookie = Cookie::build("user_id", user_id.to_string()) // Store user_id as a string
+                    .path("/") // Accessible from the root path
+                    .secure(true)  // Only send over HTTPS
+                    .http_only(false)  // *** Set this FALSE if frontend JS needs to read it ***
+                                    // (Required by the LoggedUser extractor reading it from the cookie)
+                    .same_site(SameSite::Strict)  // Prevent CSRF
+                    .max_age(time::Duration::hours(24)) // Match session expiry
+                    .finish();
+
                 HttpResponse::Ok()
                     .cookie(cookie)
+                    .cookie(user_id_cookie)
                     .json(LoginResponse {
                         success: true,
                         error_message: None,
@@ -423,7 +435,7 @@ pub mod handlers {
             let session_token = cookie.value();
             
             // Invalidate the session
-            if let Err(e) = state_manager.db.invalidate_session(session_token).await {
+            if let Err(e) = state_manager.db.invalidate_session(user_id, session_token).await {
                 tracing::error!("Failed to invalidate session: {:?}", e);
                 return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                     "success": false,
@@ -465,7 +477,7 @@ pub mod handlers {
             "user_id": user_id
         })))
     }
-
+    
     #[get("/api/waiver/get_latest_waiver")]
     pub async fn get_latest_waiver(
         state_manager: web::Data<Arc<StoreStateManager>>,
@@ -505,7 +517,7 @@ pub mod handlers {
     }
 
 
-
+    
     // Handler for the user to accept a waiver
     #[post("/api/user/accept_waiver")]
     pub async fn accept_waiver_handler(
@@ -522,10 +534,10 @@ pub mod handlers {
 
         // Optional: Verify the accepted_waiver_id against the current latest waiver ID
         // This prevents a user from accepting an outdated waiver if a new one has been published
-        let latest_waiver_check: AppResult<Option<(Uuid, String)>> = state_manager.db.get_latest_waiver(None, None, None).await;
+        let latest_waiver_check: AppResult<Option<(Uuid, String, String)>> = state_manager.db.get_latest_waiver(None, None, None).await;
 
         let latest_waiver_id = match latest_waiver_check {
-            Ok(Some((id, _))) => id,
+            Ok(Some((id, _, _))) => id,
             Ok(None) => {
                 // No current waiver exists, but user tried to accept one.
                 // This is a client issue or timing issue.
@@ -589,12 +601,21 @@ pub mod handlers {
 
         let req_data = waiver_data.into_inner();
         let waiver_content = req_data.content.trim();
+        let waiver_title = req_data.title.trim();
 
         if waiver_content.is_empty() {
             return Ok(HttpResponse::BadRequest().json(CreateWaiverResponse {
                 success: false,
                 id: None,
                 error_message: Some("Waiver content cannot be empty.".to_string()),
+            }));
+        }
+
+        if waiver_title.is_empty() {
+            return Ok(HttpResponse::BadRequest().json(CreateWaiverResponse {
+                success: false,
+                id: None,
+                error_message: Some("Waiver title cannot be empty.".to_string()),
             }));
         }
 
@@ -605,7 +626,7 @@ pub mod handlers {
 
         // Example DB interaction (you'll need to implement this in your db.rs)
         // pub async fn create_new_waiver(&self, id: Uuid, content: &str) -> AppResult<()> { ... }
-        let create_result: AppResult<()> = state_manager.db.create_new_waiver(user_id, new_waiver_id, waiver_content.to_string()).await;
+        let create_result: AppResult<()> = state_manager.db.create_new_waiver(user_id, new_waiver_id, waiver_title.to_string(), waiver_content.to_string()).await;
 
 
         match create_result {
