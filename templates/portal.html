@@ -39,6 +39,19 @@
             position: relative;
         }
 
+        .modal-header {
+             display: flex;
+             justify-content: space-between;
+             align-items: center;
+             border-bottom: 1px solid #eee;
+             padding-bottom: 10px;
+             margin-bottom: 15px;
+        }
+
+        .modal-header h3 {
+             margin: 0;
+         }
+
         .close-button {
             color: #aaa;
             float: right;
@@ -76,6 +89,117 @@
              background-color: #ebffeb;
          }
 
+         .form-group {
+             margin-bottom: 15px;
+         }
+
+         .form-group label {
+             display: block;
+             margin-bottom: 5px;
+             font-weight: bold;
+         }
+
+         .form-group input[type="text"],
+         .form-group input[type="number"],
+         .form-group input[type="checkbox"],
+         .form-group textarea,
+         .form-group select {
+             width: calc(100% - 12px); /* Account for padding/border */
+             padding: 6px;
+             border: 1px solid #ccc;
+             border-radius: 4px;
+         }
+
+         .form-group textarea {
+             resize: vertical; /* Allow vertical resizing */
+         }
+
+         .checkbox-group {
+             display: flex;
+             align-items: center;
+         }
+         .checkbox-group input {
+             margin-right: 5px;
+             width: auto; /* Don't use 100% width */
+         }
+          .checkbox-group label {
+             margin-bottom: 0; /* Reset margin */
+         }
+
+         #frequency-container .frequency-entry {
+             border: 1px dashed #ccc;
+             padding: 10px;
+             margin-bottom: 10px;
+             border-radius: 4px;
+             position: relative; /* Needed for absolute positioning of remove button */
+         }
+
+         .remove-frequency-button {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: red;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 2px 5px;
+            cursor: pointer;
+            font-size: 0.8em;
+         }
+
+         .modal-footer {
+             border-top: 1px solid #eee;
+             padding-top: 15px;
+             margin-top: 15px;
+             text-align: right; /* Buttons to the right */
+         }
+
+         .modal-footer button {
+             padding: 8px 15px;
+             margin-left: 10px;
+             border: none;
+             border-radius: 4px;
+             cursor: pointer;
+         }
+
+         .modal-footer .submit-button {
+             background-color: #5cb85c; /* Green */
+             color: white;
+         }
+
+         .modal-footer .cancel-button {
+             background-color: #f0ad4e; /* Orange */
+             color: white;
+         }
+
+         #create-class-message {
+             margin-top: 10px;
+             padding: 8px;
+             border-radius: 4px;
+             color: red;
+             border: 1px solid red;
+             background-color: #ffebeb;
+             display: none; /* Hidden by default */
+         }
+
+        /* Style for waiver/accept messages (from previous snippet) */
+         #create-waiver-error, #accept-waiver-message {
+             margin-top: 10px;
+             padding: 5px;
+             border-radius: 4px;
+         }
+         #create-waiver-error, #accept-waiver-message.error {
+             color: red;
+             border: 1px solid red;
+             background-color: #ffebeb;
+         }
+          #accept-waiver-message.success {
+             color: green;
+             border: 1px solid green;
+             background-color: #ebffeb;
+         }
+
+
     </style>
 
 </head>
@@ -104,10 +228,95 @@
         </div>
 
         <!-- Section: Classes -->
-        <div id="classesSection" class="portal-section" style="display: none;">
-            <h2>Classes</h2>
+        <!-- Add Classes Tab Content -->
+        <div id="classesSection" class="portal-section">
+            <h2>Classes Management</h2>
             <p>View and manage upcoming classes.</p>
+             <button id="add-class-button">Add New Class</button>
+
             <!-- Class listing or management interface goes here -->
+            <div id="class-list">
+                 <!-- Class list will be loaded here -->
+                 <p>Loading classes...</p>
+            </div>
+
+             <!-- Add Class Modal -->
+            <div id="add-class-modal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Add New Class</h3>
+                        <span class="close-button">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <form id="add-class-form">
+                            <div class="form-group">
+                                <label for="class-title">Title:</label>
+                                <input type="text" id="class-title" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="class-description">Description:</label>
+                                <textarea id="class-description" rows="4" required></textarea>
+                            </div>
+                             <div class="form-group">
+                                <label for="class-venue-id">Venue ID:</label>
+                                 <!-- Consider replacing with a select/dropdown fetched from server -->
+                                <input type="text" id="class-venue-id" placeholder="e.g., a1b2c3d4-e5f6-7890-1234-567890abcdef" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="class-style-ids">Style IDs (comma-separated):</label>
+                                <!-- Consider replacing with multiple select/checkboxes fetched from server -->
+                                <input type="text" id="class-style-ids" placeholder="e.g., uuid1,uuid2,uuid3">
+                            </div>
+                            <div class="form-group">
+                                <label for="class-grading-ids">Grading IDs (comma-separated):</label>
+                                <!-- Consider replacing with multiple select/checkboxes fetched from server -->
+                                <input type="text" id="class-grading-ids" placeholder="e.g., uuidA,uuidB">
+                            </div>
+                            <div class="form-group">
+                                <label for="class-price">Price (optional):</label>
+                                 <!-- Use text input as BigDecimal might have decimals -->
+                                <input type="text" id="class-price" placeholder="e.g., 10.50">
+                            </div>
+                             <div class="form-group">
+                                <label for="class-publish-mode">Publish Mode (int):</label>
+                                 <!-- Consider replacing with a select/dropdown -->
+                                <input type="number" id="class-publish-mode" value="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="class-capacity">Capacity:</label>
+                                <input type="number" id="class-capacity" value="10" required>
+                            </div>
+
+                             <!-- Frequency Section -->
+                            <div class="form-group">
+                                <label>Frequency:</label>
+                                <div id="frequency-container">
+                                    <!-- Frequency entries will be added here -->
+                                </div>
+                                <button type="button" id="add-frequency-button">Add Frequency Slot</button>
+                            </div>
+
+                            <div class="form-group checkbox-group">
+                                <input type="checkbox" id="class-notify-booking">
+                                <label for="class-notify-booking">Notify on Booking</label>
+                            </div>
+                             <div class="form-group">
+                                <label for="class-waiver-id">Waiver ID (optional):</label>
+                                <input type="text" id="class-waiver-id" placeholder="e.g., optional-waiver-uuid">
+                            </div>
+                            <!-- end_ts is not included in this basic form for simplicity -->
+
+                            <div id="create-class-message" class="message"></div>
+
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-button">Cancel</button>
+                        <button type="button" class="submit-button" id="submit-create-class">Create Class</button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- Section: Styles -->
@@ -425,13 +634,6 @@
             acceptWaiverMessageDiv.textContent = ''; // Clear previous messages
             acceptWaiverMessageDiv.className = '';
 
-            // const token = getAuthToken();
-            // if (!token) {
-            //      waiverDisplay.innerHTML = '<p style="color: red;">Error: Authentication token not found.</p>';
-            //      console.error("Authentication token missing for waiver fetch.");
-            //      return;
-            // }
-
 
             try {
                 const response = await fetch('/api/waiver/get_latest_waiver', {
@@ -494,14 +696,6 @@
                  console.error("Waiver ID data attribute missing.");
                  return;
              }
-
-            // const token = getAuthToken();
-            // if (!token) {
-            //      acceptWaiverMessageDiv.textContent = 'Authentication token missing.';
-            //      acceptWaiverMessageDiv.className = 'error';
-            //      console.error("Authentication token missing for waiver acceptance.");
-            //      return;
-            // }
 
              // Optional: Disable button and show loading state
              acceptWaiverButton.disabled = true;
@@ -629,13 +823,6 @@
                 createWaiverErrorDiv.textContent = 'Waiver title cannot be empty.';
                 return;
             }
-
-            // const token = getAuthToken();
-            // if (!token) {
-            //      createWaiverErrorDiv.textContent = 'Authentication token missing.';
-            //      console.error("Authentication token missing for waiver creation.");
-            //      return;
-            // }
 
              createWaiverErrorDiv.textContent = 'Submitting...'; // Show submitting state
 
@@ -1098,7 +1285,404 @@
                      window.location.href = '/login'; // Redirect even on fetch error
                 }
             });
+
+
+
+
+            handleClassSection();
         });
+
+        // Function to handle the class section display logic
+        function handleClassSection() {
+            const addClassButton = document.getElementById('add-class-button');
+            const addClassModal = document.getElementById('add-class-modal');
+            const addClassForm = document.getElementById('add-class-form');
+            const addClassMessageDiv = document.getElementById('create-class-message'); // Message area in modal
+
+            const modalCloseButtons = addClassModal.querySelectorAll('.close-button, .cancel-button');
+            const submitCreateClassButton = document.getElementById('submit-create-class');
+
+            const frequencyContainer = document.getElementById('frequency-container');
+            const addFrequencyButton = document.getElementById('add-frequency-button');
+
+
+            // Template for a single frequency entry (using a function to generate HTML)
+            function createFrequencyEntryHTML() {
+                const id = Date.now() + Math.random().toString(36).substr(2, 9); // Simple unique ID for inputs
+                return `
+                    <div class="frequency-entry" data-id="${id}">
+                        <button type="button" class="remove-frequency-button">Remove</button>
+                        <div class="form-group">
+                            <label for="freq-${id}-frequency">Frequency (int):</label>
+                            <input type="number" id="freq-${id}-frequency" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="freq-${id}-start-date">Start Date:</label>
+                            <input type="date" id="freq-${id}-start-date">
+                        </div>
+                        <div class="form-group">
+                            <label for="freq-${id}-end-date">End Date:</label>
+                            <input type="date" id="freq-${id}-end-date">
+                        </div>
+                        <div class="form-group">
+                            <label for="freq-${id}-start-time">Start Time:</label>
+                            <input type="time" id="freq-${id}-start-time">
+                        </div>
+                        <div class="form-group">
+                            <label for="freq-${id}-end-time">End Time:</label>
+                            <input type="time" id="freq-${id}-end-time">
+                        </div>
+                    </div>
+                `;
+            }
+
+
+            // Open the Add Class modal
+            addClassButton.onclick = function() {
+                addClassModal.style.display = 'block';
+                addClassMessageDiv.style.display = 'none'; // Hide any previous message
+                addClassMessageDiv.textContent = '';
+                addClassForm.reset(); // Clear the form fields
+                frequencyContainer.innerHTML = ''; // Clear previous frequency entries
+                // Add an initial frequency entry when opening the modal
+                addFrequencyEntry();
+            }
+
+            // Close the Add Class modal using close buttons (X and Cancel)
+            modalCloseButtons.forEach(button => {
+                button.onclick = function() {
+                    addClassModal.style.display = 'none';
+                }
+            });
+
+
+            // Close the modal when clicking outside of it
+            window.onclick = function(event) {
+                // Check if the click target is the modal overlay AND not within the modal content
+                if (event.target === addClassModal) {
+                    addClassModal.style.display = 'none';
+                }
+                // Also handle the waiver modal if it exists
+                if (document.getElementById('create-waiver-modal') && event.target === document.getElementById('create-waiver-modal')) {
+                    document.getElementById('create-waiver-modal').style.display = 'none';
+                }
+            }
+
+
+            // Add a frequency entry to the form
+            function addFrequencyEntry() {
+                const entryHtml = createFrequencyEntryHTML();
+                frequencyContainer.insertAdjacentHTML('beforeend', entryHtml);
+
+                // Add event listener to the new remove button
+                const newEntry = frequencyContainer.lastElementChild;
+                const removeButton = newEntry.querySelector('.remove-frequency-button');
+                removeButton.onclick = function() {
+                    newEntry.remove(); // Remove the frequency entry div
+                }
+            }
+
+            // Event listener for the "Add Frequency Slot" button
+            addFrequencyButton.onclick = addFrequencyEntry;
+
+            // --- Submit New Class Logic ---
+            submitCreateClassButton.onclick = async function() {
+                addClassMessageDiv.style.display = 'none'; // Hide previous messages
+                addClassMessageDiv.textContent = '';
+                // Optional: Disable submit button to prevent double clicks
+                submitCreateClassButton.disabled = true;
+
+                // --- 1. Gather data from the form ---
+                const title = document.getElementById('class-title').value.trim();
+                const description = document.getElementById('class-description').value.trim();
+                const venueIdString = document.getElementById('class-venue-id').value.trim(); // Get as string
+                const styleIdsString = document.getElementById('class-style-ids').value.trim();
+                const gradingIdsString = document.getElementById('class-grading-ids').value.trim();
+                const priceString = document.getElementById('class-price').value.trim();
+                const publishMode = parseInt(document.getElementById('class-publish-mode').value, 10); // Parse as integer
+                const capacity = parseInt(document.getElementById('class-capacity').value, 10); // Parse as integer
+                const notifyBooking = document.getElementById('class-notify-booking').checked; // Get checkbox state
+                const waiverIdString = document.getElementById('class-waiver-id').value.trim(); // Get as string
+                // end_ts is not included in this form
+
+
+                // --- 2. Validate and Format Complex Fields ---
+
+                // Validate required fields (simple check)
+                if (!title || !description || !venueIdString || isNaN(publishMode) || isNaN(capacity)) {
+                    addClassMessageDiv.style.display = 'block';
+                    addClassMessageDiv.textContent = 'Please fill in all required fields (Title, Description, Venue ID, Publish Mode, Capacity).';
+                    submitCreateClassButton.disabled = false; // Re-enable button
+                    return;
+                }
+                // Simple check for publishMode and capacity being valid numbers (redundant if using type="number" and required, but safer)
+                if (isNaN(publishMode) || isNaN(capacity)) {
+                    addClassMessageDiv.style.display = 'block';
+                    addClassMessageDiv.textContent = 'Publish Mode and Capacity must be valid numbers.';
+                    submitCreateClassButton.disabled = false; // Re-enable button
+                    return;
+                }
+
+
+                // Validate Venue ID format (basic UUID format check - backend does the full parse)
+                if (venueIdString && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(venueIdString)) {
+                    addClassMessageDiv.style.display = 'block';
+                    addClassMessageDiv.textContent = 'Invalid Venue ID format. Expected UUID.';
+                    submitCreateClassButton.disabled = false; // Re-enable button
+                    return;
+                }
+
+
+                // Parse Style IDs string into an array of UUID strings (and basic format check if non-empty)
+                const style_ids = styleIdsString
+                    .split(',')
+                    .map(id => id.trim())
+                    .filter(id => id.length > 0);
+                // Validate each entry looks like a UUID format if the list is not empty
+                if (style_ids.length > 0 && style_ids.some(id => !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id))) {
+                    addClassMessageDiv.style.display = 'block';
+                    addClassMessageDiv.textContent = 'One or more Style IDs have an invalid UUID format.';
+                    submitCreateClassButton.disabled = false; // Re-enable button
+                    return;
+                }
+
+
+                // Parse Grading IDs string into an array of UUID strings (and basic format check if non-empty)
+                const grading_ids = gradingIdsString
+                    .split(',')
+                    .map(id => id.trim())
+                    .filter(id => id.length > 0);
+                // Validate each entry looks like a UUID format if the list is not empty
+                if (grading_ids.length > 0 && grading_ids.some(id => !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id))) {
+                    addClassMessageDiv.style.display = 'block';
+                    addClassMessageDiv.textContent = 'One or more Grading IDs have an invalid UUID format.';
+                    submitCreateClassButton.disabled = false; // Re-enable button
+                    return;
+                }
+
+
+                // Optional Price string (send as is - backend parses BigDecimal)
+                const price = priceString === '' ? null : priceString; // Send null if empty string
+                // Optional Price format validation (basic numeric check if not null)
+                if (price !== null && isNaN(parseFloat(price))) {
+                    addClassMessageDiv.style.display = 'block';
+                    addClassMessageDiv.textContent = 'Invalid Price format. Must be a number.';
+                    submitCreateClassButton.disabled = false; // Re-enable button
+                    return;
+                }
+
+
+                // Optional Waiver ID string (send as is - backend parses Uuid)
+                const waiver_id = waiverIdString === '' ? null : waiverIdString; // Send null if empty string
+                // Optional Waiver ID format validation (basic UUID format check if not null)
+                if (waiver_id !== null && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(waiverIdString)) {
+                    addClassMessageDiv.style.display = 'block';
+                    addClassMessageDiv.textContent = 'Invalid Waiver ID format. Expected UUID.';
+                    submitCreateClassButton.disabled = false; // Re-enable button
+                    return;
+                }
+
+
+                // Gather and validate frequency entries
+                const frequencyEntries = frequencyContainer.querySelectorAll('.frequency-entry');
+                const frequency = [];
+                for (const entry of frequencyEntries) {
+                    const id = entry.dataset.id; // Use this for error messages
+
+                    // Get values (date and time inputs give "YYYY-MM-DD" and "HH:MM" or "HH:MM:SS")
+                    const freqNum = parseInt(entry.querySelector('[id$="-frequency"]').value, 10);
+                    const startDate = entry.querySelector('[id$="-start-date"]').value; // YYYY-MM-DD string
+                    const endDate = entry.querySelector('[id$="-end-date"]').value;     // YYYY-MM-DD string
+                    const startTime = entry.querySelector('[id$="-start-time"]').value; // HH:MM or HH:MM:SS string
+                    const endTime = entry.querySelector('[id$="-end-time"]').value;     // HH:MM or HH:MM:SS string
+
+                    // Basic frequency validation
+                    if (isNaN(freqNum) || freqNum <= 0) {
+                        addClassMessageDiv.style.display = 'block';
+                        addClassMessageDiv.textContent = `Invalid frequency number for entry ID ${id}. Must be a positive integer.`;
+                        submitCreateClassButton.disabled = false; // Re-enable button
+                        return; // Stop processing
+                    }
+                    // Basic date format validation (input type="date" helps, but could still be empty/invalid)
+                    if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+                        addClassMessageDiv.style.display = 'block';
+                        addClassMessageDiv.textContent = `Invalid start date for frequency entry ID ${id}. Expected YYYY-MM-DD.`;
+                        submitCreateClassButton.disabled = false; // Re-enable button
+                        return;
+                    }
+                    if (!endDate || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+                        addClassMessageDiv.style.display = 'block';
+                        addClassMessageDiv.textContent = `Invalid end date for frequency entry ID ${id}. Expected YYYY-MM-DD.`;
+                            submitCreateClassButton.disabled = false; // Re-enable button
+                        return;
+                    }
+
+                    // Time format validation (input type="time" gives HH:MM. Backend expects HH:MM:SS)
+                    const startTimeFormatted = startTime.includes(':') && startTime.split(':').length <= 2 ? startTime + ':00' : startTime; // Append :00 if needed
+                    const endTimeFormatted = endTime.includes(':') && endTime.split(':').length <= 2 ? endTime + ':00' : endTime;       // Append :00 if needed
+
+                    if (!startTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(startTimeFormatted)) {
+                        addClassMessageDiv.style.display = 'block';
+                        addClassMessageDiv.textContent = `Invalid start time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`;
+                            submitCreateClassButton.disabled = false; // Re-enable button
+                        return;
+                    }
+                    if (!endTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(endTimeFormatted)) {
+                        addClassMessageDiv.style.display = 'block';
+                        addClassMessageDiv.textContent = `Invalid end time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`;
+                            submitCreateClassButton.disabled = false; // Re-enable button
+                        return;
+                    }
+
+                    // Push the valid frequency data into the array
+                    frequency.push({
+                        frequency: freqNum,
+                        start_date: startDate, // Send as YYYY-MM-DD string
+                        end_date: endDate,     // Send as YYYY-MM-DD string
+                        start_time: startTimeFormatted, // Send as HH:MM:SS string
+                        end_time: endTimeFormatted      // Send as HH:MM:SS string
+                    });
+                }
+
+                // Basic check: ensure at least one frequency entry exists if required by backend
+                if (frequency.length === 0) {
+                    addClassMessageDiv.style.display = 'block';
+                    addClassMessageDiv.textContent = 'At least one frequency slot is required.';
+                    submitCreateClassButton.disabled = false; // Re-enable button
+                    return;
+                }
+
+
+                // --- 3. Construct the JSON request body ---
+                const requestBody = {
+                    title: title,
+                    description: description,
+                    venue_id: venueIdString, // Send as string
+                    style_ids: style_ids,    // Send array of strings
+                    grading_ids: grading_ids, // Send array of strings
+                    price: price,            // Send string or null
+                    publish_mode: publishMode,
+                    capacity: capacity,
+                    frequency: frequency,      // Send array of objects
+                    notify_booking: notifyBooking,
+                    waiver_id: waiver_id,    // Send string or null
+                };
+
+                console.log("Sending class creation request:", requestBody);
+
+                // --- 4. Send the POST request to the backend ---
+                try {
+                    const response = await fetch('/api/class/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+
+                    const responseData = await response.json(); // Assuming the response is JSON
+
+                    if (response.ok && responseData.success) { // Check both HTTP status and custom success flag
+                        console.log("Class created successfully:", responseData);
+                        addClassMessageDiv.style.display = 'block';
+                        addClassMessageDiv.textContent = `Class created successfully! ID: ${responseData.class_id}`;
+                        addClassMessageDiv.className = 'message success'; // Add success class for styling
+
+                        // Optional: Close modal after a delay or user interaction
+                        setTimeout(() => {
+                            addClassModal.style.display = 'none';
+                            // Refresh the class list after creating a class
+                            fetchClasses();
+                        }, 1500); // Hide after 1.5 seconds
+
+
+                    } else if (responseData && responseData.error_message) {
+                        // Server returned a specific error message in the JSON body
+                        addClassMessageDiv.style.display = 'block';
+                        addClassMessageDiv.textContent = `Creation failed: ${responseData.error_message}`;
+                        addClassMessageDiv.className = 'message error'; // Add error class for styling
+                        console.error("Server error creating class:", response.status, responseData.error_message);
+                    }
+                    else if (response.status === 400) {
+                        // Actix Web's Json extractor might return 400 for basic JSON structure errors
+                        // Or your handler might return 400 for validation errors like invalid date/time format
+                        const errorText = await response.text(); // Try to get any response text
+                        addClassMessageDiv.style.display = 'block';
+                        addClassMessageDiv.textContent = `Invalid request data: ${responseData.error_message || errorText.substring(0, 100) + '...'}`;
+                            addClassMessageDiv.className = 'message error';
+                        console.error("Bad request creating class:", response.status, errorText);
+
+                    }
+                    else if (response.status === 401 || response.status === 403) {
+                        // Authentication/Authorization error
+                        addClassMessageDiv.style.display = 'block';
+                        addClassMessageDiv.textContent = 'Error: You are not authorized to create classes.';
+                        addClassMessageDiv.className = 'message error';
+                        console.error("Authorization error creating class:", response.status);
+                    }
+                    else {
+                        // Other errors (e.g., 500 Internal Server Error from database issues)
+                        // The backend handler converts AppError to 500 ActixError
+                        const errorText = await response.text(); // Try to get any response text
+                        addClassMessageDiv.style.display = 'block';
+                        addClassMessageDiv.textContent = `Error creating class: ${response.status} - ${responseData.error_message || errorText.substring(0, 100) + '...'}`;
+                        addClassMessageDiv.className = 'message error';
+                        console.error("Error creating class:", response.status, errorText);
+                    }
+
+                } catch (error) {
+                    // Network errors etc.
+                    addClassMessageDiv.style.display = 'block';
+                    addClassMessageDiv.textContent = 'Network error submitting class creation.';
+                    addClassMessageDiv.className = 'message error';
+                    console.error("Fetch error for class creation:", error);
+                } finally {
+                    // Always re-enable the submit button
+                    submitCreateClassButton.disabled = false;
+                }
+            }
+
+
+        }
+
+        async function fetchClasses() {
+             const classListDiv = document.getElementById('class-list');
+             classListDiv.innerHTML = '<p>Loading classes...</p>';
+
+             try {
+                 const response = await fetch('/api/class/list', {
+                     method: 'GET',
+                     headers: {
+                         'Authorization': `Bearer ${token}`
+                     }
+                 });
+
+                 if (response.ok) {
+                     const classes = await response.json();
+                     if (classes.length > 0) {
+                         let html = '<ul>';
+                         // Assuming each class object has properties like id, title, etc.
+                         classes.forEach(cls => {
+                             html += `<li><strong>${cls.title}</strong> (${cls.id}) - ${cls.description}</li>`;
+                              // Add more details here
+                         });
+                         html += '</ul>';
+                         classListDiv.innerHTML = html;
+                     } else {
+                         classListDiv.innerHTML = '<p>No classes found.</p>';
+                     }
+                 } else {
+                     const errorText = await response.text();
+                     classListDiv.innerHTML = `<p style="color: red;">Error loading classes: ${response.status} - ${errorText.substring(0, 100)}...</p>`;
+                     console.error("Error fetching classes:", response.status, errorText);
+                 }
+             } catch (error) {
+                 classListDiv.innerHTML = `<p style="color: red;">Network error loading classes.</p>`;
+                 console.error("Fetch error for class list:", error);
+             }
+         }
+
+
     </script>
 </body>
 </html>
