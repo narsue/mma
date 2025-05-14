@@ -26,3 +26,7 @@ dashmap = "5.5" # For concurrent HashMap
 notify = "6.1" # For file watching
 notify-debouncer-full = "0.3" # Debouncer for notify
 bigdecimal = { version = "0.4", features = ["serde"]}
+lettre = { version = "0.10", features = ["tokio1", "tokio1-native-tls", "builder"] }
+native-tls = "0.2"
+mail-builder = "0.2.5"
+urlencoding = "2.1.3"

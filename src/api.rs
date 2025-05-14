@@ -316,3 +316,61 @@ pub struct CreateStyleResponse {
 }
 
 
+// Request struct for forgotten password
+#[derive(Deserialize)]
+pub struct ForgottenPasswordRequest {
+    pub email: String,
+}
+
+// Response struct for forgotten password
+#[derive(Serialize)]
+pub struct ForgottenPasswordResponse {
+    pub success: bool,
+    pub message: Option<String>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ResetPasswordQuery {
+    pub email: String,
+    pub code: String,
+}
+
+#[derive(Deserialize)]
+pub struct ResetPasswordRequest {
+    pub email: String,
+    pub code: String,
+    pub new_password: String,
+}
+
+#[derive(Serialize)]
+pub struct ResetPasswordResponse {
+    pub success: bool,
+    pub message: Option<String>,
+    pub error_message: Option<String>,
+}
+
+
+// Request structure for user signup
+#[derive(Deserialize)]
+pub struct SignupRequest {
+    pub first_name: String,
+    pub surname: String,
+    pub email: String,
+    pub password: String,
+}
+
+// Response structure for signup
+#[derive(Serialize)]
+pub struct SignupResponse {
+    pub success: bool,
+    pub message: Option<String>,
+    pub error_message: Option<String>,
+}
+
+// Query parameters for account verification
+#[derive(Deserialize)]
+pub struct VerifyAccountQuery {
+    pub email: String,
+    pub code: String,
+}

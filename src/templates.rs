@@ -20,7 +20,9 @@ const TEMPLATE_FILES: &[&str] = &[
     "gym_signup.html",
     "contact.html",
     "contact_confirmation.html",
-    "style.css"
+    "style.css",
+    "forgotten_password.html",
+    "signup-success.html",
 ];
 
 /// Loads all templates from the TEMPLATE_DIR into the cache.

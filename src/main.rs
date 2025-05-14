@@ -7,6 +7,9 @@ mod state;
 mod server;
 mod auth;
 mod templates;
+mod email_sender;
+
+use email_sender::send_custom_email;
 
 use std::sync::Arc;
 use actix_web::{
@@ -24,9 +27,24 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     tracing::info!("Starting MMA Node");
     
+
+    // let result = send_custom_email(
+    //     "narsue@narsue.com",
+    //     "narsue@narsue.com",
+    //     "<html><body><h1>Hello World</h1><p>This is a test email.</p></body></html>",
+    //     "Test Email"
+    // ).await;
+    
+    // match result {
+    //     Ok(true) => println!("Email sent successfully!"),
+    //     Ok(false) => println!("Failed to send email but no error was thrown"),
+    //     Err(e) => println!("Error sending email: {}", e),
+    // }
+
+
     // Initialize database connection
     let db = Arc::new(ScyllaConnector::new(&["127.0.0.1:9042"]).await?);
-    db.init_schema().await?;
+    // db.init_schema().await?;
     
     // --- Load Templates ---
     let template_cache = load_templates()?; // Load initially, panics on error here
@@ -46,7 +64,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let processor_data = web::Data::new(state_manager.clone());
     let template_data = web::Data::new(template_cache);
     
-    tracing::info!("Starting HTTP server on 127.0.0.1:8080");
+    tracing::info!("Starting HTTP server on 127.0.0.1:1227");
     let server = HttpServer::new(move || {
         App::new()
             .app_data(processor_data.clone())
@@ -71,6 +89,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::user_logout)
             .service(handlers::user_profile)
             .service(handlers::create_user)
+            .service(handlers::serve_reset_password_page)
+            .service(handlers::handle_forgotten_password)
+            .service(handlers::handle_reset_password)
+            .service(handlers::signup_success)
+            .service(handlers::verify_account)
+            .service(handlers::handle_signup)
 
             .service(handlers::get_user_profile_data)
             .service(handlers::update_user_profile)
@@ -92,7 +116,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::get_style_list_handler)
             
     })
-    .bind("127.0.0.1:8080")?
+    .bind("127.0.0.1:1227")?
     .run();
     
     // Wait for server to finish

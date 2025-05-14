@@ -1,3 +1,4 @@
+use argon2::password_hash;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::DeserializeRow;
@@ -98,9 +99,272 @@ pub struct ScyllaConnector {
 
 pub async fn create_prepared_statement(session: &Session, query: &str) -> Result<Arc<PreparedStatement>> {
     let mut prepared_statement = session.prepare(query).await?;
-    prepared_statement.set_consistency(Consistency::LocalQuorum);
+    // prepared_statement.set_consistency(Consistency::LocalQuorum);
     Ok(Arc::new(prepared_statement))
 }
+
+
+
+pub async fn init_schema(session: &Session) -> Result<()> {
+    // Create keyspace
+    session
+        .query_unpaged(
+            "CREATE KEYSPACE IF NOT EXISTS mma WITH REPLICATION = \
+            {'class': 'SimpleStrategy', 'replication_factor': 1}",
+            &[],
+        )
+        .await?;
+    println!("Keyspace created");
+        
+
+    session
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.school \
+            (super_user_id uuid, school_id uuid, stripe_id text, title text, description text, created_ts timestamp, PRIMARY KEY (school_id))",
+            &[],
+        )
+        .await?;
+    println!("school table created");
+
+    session
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.venue \
+            (venue_id uuid, creator_user_id uuid, title text, description text, longitude decimal, latitude decimal, address text, postcode text, suburb text, street_no text, state text, country text, street_name text, google_maps_link text, contact_phone text, created_ts timestamp, PRIMARY KEY (venue_id))",
+            &[],
+        )
+        .await?;
+    println!("venue table created");
+
+
+    session
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.user \
+            (user_id uuid, email text, password_hash text, first_name text, surname text, gender text, phone text, dob text, stripe_payment_method_id text, created_ts timestamp, email_verified boolean, photo_id text, address text, suburb text, emergency_name text, emergency_relationship text, emergency_phone text, emergency_medical text, belt_size text, uniform_size text, member_number text, contracted_until date, PRIMARY KEY (user_id))",
+            &[],
+        )
+        .await?;
+    println!("User table created");
+        
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.club \
+        (club_id uuid, school_id uuid, title text, description text, PRIMARY KEY (club_id))",
+        &[],
+    )
+    .await?;
+    println!("Club table created");
+    
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.club_user \
+        (club_id uuid, user_id uuid, PRIMARY KEY (club_id, user_id))",
+        &[],
+    )
+    .await?;
+    println!("Club user table created");
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.club_class \
+        (club_id uuid, class_id uuid, PRIMARY KEY (club_id, class_id))",
+        &[],
+    )
+    .await?;
+    println!("Club class table created");
+
+    session
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.user_permission \
+            (user_id uuid, club_id uuid, class_id uuid, permission int, created_ts timestamp, \
+             PRIMARY KEY (user_id, club_id, class_id, permission))",
+            &[],
+        )
+        .await?;
+    println!("User permission table created");
+
+    session
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.waiver \
+            (waiver_id uuid, title text, waiver text, created_ts timestamp, creator_user_id uuid, \
+             PRIMARY KEY (waiver_id))",
+            &[],
+        )
+        .await?;
+    println!("Waiver table created");
+
+    session
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.latest_waiver \
+            (waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, created_ts timestamp, \
+             PRIMARY KEY (style_id, class_id, club_id))",
+            &[],
+        )
+        .await?;
+    println!("Latest waiver table created");
+
+    session
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.signed_waiver \
+            (waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, user_id uuid, accepted_ts timestamp, \
+             PRIMARY KEY (user_id, waiver_id, style_id, class_id, club_id))",
+            &[],
+        )
+        .await?;
+    println!("signed_waiver table created");
+
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.class \
+        (class_id uuid, venue_id uuid, waiver_id uuid, capacity int, publish_mode int, price decimal, notify_booking boolean, title text, description text, created_ts timestamp, end_ts timestamp, creator_user_id uuid, \
+            PRIMARY KEY (class_id))",
+        &[],
+    )
+    .await?;
+    println!("Class table created");
+    
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.class_styles \
+        (class_id uuid, style_id uuid, \
+            PRIMARY KEY (class_id, style_id))",
+        &[],
+    )
+    .await?;
+    println!("class_styles created");
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.class_grades \
+        (class_id uuid, grade_id uuid, \
+            PRIMARY KEY (class_id, grade_id))",
+        &[],
+    )
+    .await?;
+    println!("class_grades created");
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.class_frequency \
+        (class_id uuid, class_frequency_id uuid, frequency int, start_date date, end_date date, start_time time, end_time time, \
+            PRIMARY KEY (class_id, class_frequency_id))",
+        &[],
+    )
+    .await?;
+    println!("class_frequency created");
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.instructor \
+        (user_id uuid, class_id uuid, permission int, created_ts timestamp, \
+            PRIMARY KEY (user_id, class_id))",
+        &[],
+    )
+    .await?;
+    println!("Instructor table created");
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.attendance \
+        (user_id uuid, class_id uuid, is_instructor boolean, checkin_ts timestamp, \
+            PRIMARY KEY (user_id, class_id))",
+        &[],
+    )
+    .await?;
+    println!("Attendance table created");
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.style \
+        (style_id uuid, title text, description text, created_ts timestamp, creator_user_id uuid, deleted boolean, \
+            PRIMARY KEY (style_id))",
+        &[],
+    )
+    .await?;
+    println!("Style table created");
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.grade \
+        (grading_id uuid, title text, description text, attendance_req int, rank int, \
+            PRIMARY KEY (grading_id))",
+        &[],
+    )
+    .await?;
+    println!("Grade table created");
+
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.grading_requirement \
+        (grading_requirement_id uuid, title text, description text, requirement int, \
+            PRIMARY KEY (grading_requirement_id))",
+        &[],
+    )
+    .await?;
+    println!("Grading requirement table created");
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.user_style_grade \
+        (style_id uuid, user_id uuid, grading_id uuid, note text, created_ts timestamp, \
+            PRIMARY KEY (style_id, user_id, grading_id))",
+        &[],
+    )
+    .await?;
+    println!("User style grade table created");
+
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.session \
+        (session_token text, user_id uuid, created_ts timestamp, expires_ts timestamp, \
+         ip_address text, user_agent text, is_active boolean, \
+         PRIMARY KEY (session_token, user_id))",
+        &[],
+    )
+    .await?;
+    println!("Session table created");
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.user_by_email \
+        (email text PRIMARY KEY, user_id uuid, password_hash text,)",
+        &[],
+    )
+    .await?;
+    println!("Email to user table created");
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.forgotten_password_codes \
+        (email text, user_id uuid, code text, expires_ts timestamp, \
+         created_ts timestamp, is_used boolean, \
+         PRIMARY KEY (email, code))",
+        &[],
+    )
+    .await?;
+    println!("forgotten_password_codes table created");
+
+
+    session
+    .query_unpaged(
+        "CREATE TABLE IF NOT EXISTS mma.sign_up_invite \
+        (email text, code text, expires_ts timestamp, first_name text, surname text, password_hash text, \
+         created_ts timestamp, is_used boolean, \
+         PRIMARY KEY (email, code))",
+        &[],
+    )
+    .await?;
+    println!("sign_up_invite table created");
+
+    println!("Schema initialized");
+    Ok(())
+}
+
 
 impl ScyllaConnector {
     pub async fn new(nodes: &[&str]) -> Result<Self> {
@@ -111,6 +375,7 @@ impl ScyllaConnector {
             .await
             .map_err(|e| AppError::Internal(format!("Failed to connect to Scylla: {}", e)))?;
         println!("DB Connected");
+        init_schema(&session).await?;
         let select_user_by_email_stmt = create_prepared_statement(&session, "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?").await?;
 
         Ok(Self {
@@ -118,268 +383,25 @@ impl ScyllaConnector {
             select_user_by_email_stmt,
         })
     }
-    
-
-
-
-    pub async fn init_schema(&self) -> Result<()> {
-        // Create keyspace
-        self.session
-            .query_unpaged(
-                "CREATE KEYSPACE IF NOT EXISTS mma WITH REPLICATION = \
-                {'class': 'SimpleStrategy', 'replication_factor': 3}",
-                &[],
-            )
-            .await?;
-        println!("Keyspace created");
-            
-
-        self.session
-            .query_unpaged(
-                "CREATE TABLE IF NOT EXISTS mma.school \
-                (super_user_id uuid, school_id uuid, stripe_id text, title text, description text, created_ts timestamp, PRIMARY KEY (school_id))",
-                &[],
-            )
-            .await?;
-        println!("school table created");
-
-        self.session
-            .query_unpaged(
-                "CREATE TABLE IF NOT EXISTS mma.venue \
-                (venue_id uuid, creator_user_id uuid, title text, description text, longitude decimal, latitude decimal, address text, postcode text, suburb text, street_no text, state text, country text, street_name text, google_maps_link text, contact_phone text, created_ts timestamp, PRIMARY KEY (venue_id))",
-                &[],
-            )
-            .await?;
-        println!("venue table created");
-
-
-        self.session
-            .query_unpaged(
-                "CREATE TABLE IF NOT EXISTS mma.user \
-                (user_id uuid, email text, password_hash text, first_name text, surname text, gender text, phone text, dob text, stripe_payment_method_id text, created_ts timestamp, email_verified boolean, photo_id text, address text, suburb text, emergency_name text, emergency_relationship text, emergency_phone text, emergency_medical text, belt_size text, uniform_size text, member_number text, contracted_until date, PRIMARY KEY (user_id))",
-                &[],
-            )
-            .await?;
-        println!("User table created");
-            
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.club \
-            (club_id uuid, school_id uuid, title text, description text, PRIMARY KEY (club_id))",
-            &[],
-        )
-        .await?;
-        println!("Club table created");
-        
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.club_user \
-            (club_id uuid, user_id uuid, PRIMARY KEY (club_id, user_id))",
-            &[],
-        )
-        .await?;
-        println!("Club user table created");
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.club_class \
-            (club_id uuid, class_id uuid, PRIMARY KEY (club_id, class_id))",
-            &[],
-        )
-        .await?;
-        println!("Club class table created");
-
-        self.session
-            .query_unpaged(
-                "CREATE TABLE IF NOT EXISTS mma.user_permission \
-                (user_id uuid, club_id uuid, class_id uuid, permission int, created_ts timestamp, \
-                 PRIMARY KEY (user_id, club_id, class_id, permission))",
-                &[],
-            )
-            .await?;
-        println!("User permission table created");
-
-        self.session
-            .query_unpaged(
-                "CREATE TABLE IF NOT EXISTS mma.waiver \
-                (waiver_id uuid, title text, waiver text, created_ts timestamp, creator_user_id uuid, \
-                 PRIMARY KEY (waiver_id))",
-                &[],
-            )
-            .await?;
-        println!("Waiver table created");
-
-        self.session
-            .query_unpaged(
-                "CREATE TABLE IF NOT EXISTS mma.latest_waiver \
-                (waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, created_ts timestamp, \
-                 PRIMARY KEY (style_id, class_id, club_id))",
-                &[],
-            )
-            .await?;
-        println!("Latest waiver table created");
-
-        self.session
-            .query_unpaged(
-                "CREATE TABLE IF NOT EXISTS mma.signed_waiver \
-                (waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, user_id uuid, accepted_ts timestamp, \
-                 PRIMARY KEY (user_id, waiver_id, style_id, class_id, club_id))",
-                &[],
-            )
-            .await?;
-        println!("signed_waiver table created");
-
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.class \
-            (class_id uuid, venue_id uuid, waiver_id uuid, capacity int, publish_mode int, price decimal, notify_booking boolean, title text, description text, created_ts timestamp, end_ts timestamp, creator_user_id uuid, \
-                PRIMARY KEY (class_id))",
-            &[],
-        )
-        .await?;
-        println!("Class table created");
-        
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.class_styles \
-            (class_id uuid, style_id uuid, \
-                PRIMARY KEY (class_id, style_id))",
-            &[],
-        )
-        .await?;
-        println!("class_styles created");
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.class_grades \
-            (class_id uuid, grade_id uuid, \
-                PRIMARY KEY (class_id, grade_id))",
-            &[],
-        )
-        .await?;
-        println!("class_grades created");
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.class_frequency \
-            (class_id uuid, class_frequency_id uuid, frequency int, start_date date, end_date date, start_time time, end_time time, \
-                PRIMARY KEY (class_id, class_frequency_id))",
-            &[],
-        )
-        .await?;
-        println!("class_frequency created");
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.instructor \
-            (user_id uuid, class_id uuid, permission int, created_ts timestamp, \
-                PRIMARY KEY (user_id, class_id))",
-            &[],
-        )
-        .await?;
-        println!("Instructor table created");
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.attendance \
-            (user_id uuid, class_id uuid, is_instructor boolean, checkin_ts timestamp, \
-                PRIMARY KEY (user_id, class_id))",
-            &[],
-        )
-        .await?;
-        println!("Attendance table created");
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.style \
-            (style_id uuid, title text, description text, created_ts timestamp, creator_user_id uuid, deleted boolean, \
-                PRIMARY KEY (style_id))",
-            &[],
-        )
-        .await?;
-        println!("Style table created");
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.grade \
-            (grading_id uuid, title text, description text, attendance_req int, rank int, \
-                PRIMARY KEY (grading_id))",
-            &[],
-        )
-        .await?;
-        println!("Grade table created");
-
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.grading_requirement \
-            (grading_requirement_id uuid, title text, description text, requirement int, \
-                PRIMARY KEY (grading_requirement_id))",
-            &[],
-        )
-        .await?;
-        println!("Grading requirement table created");
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.user_style_grade \
-            (style_id uuid, user_id uuid, grading_id uuid, note text, created_ts timestamp, \
-                PRIMARY KEY (style_id, user_id, grading_id))",
-            &[],
-        )
-        .await?;
-        println!("User style grade table created");
-
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.session \
-            (session_token text, user_id uuid, created_ts timestamp, expires_ts timestamp, \
-             ip_address text, user_agent text, is_active boolean, \
-             PRIMARY KEY (session_token, user_id))",
-            &[],
-        )
-        .await?;
-        println!("Session table created");
-
-        self.session
-        .query_unpaged(
-            "CREATE TABLE IF NOT EXISTS mma.user_by_email \
-            (email text PRIMARY KEY, user_id uuid, password_hash text,)",
-            &[],
-        )
-        .await?;
-        println!("Email to user table created");
-
-
-        println!("Schema initialized");
-        Ok(())
-    }
-    
-
 
     pub async fn get_user_by_email(&self, email: &str) -> Result<Option<(Uuid, String)>> {
         // First, get the user_id from the email lookup table
-        let email_result = self.session
-            .execute_unpaged(
-                // "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?",
-                &self.select_user_by_email_stmt.clone(),
-                (email,),
-            )
-            .await?
-            .into_rows_result()?;
-
         // let email_result = self.session
-        //     .query_unpaged(
-        //         "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?",
+        //     .execute_unpaged(
+        //         // "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?",
+        //         &self.select_user_by_email_stmt.clone(),
         //         (email,),
         //     )
         //     .await?
         //     .into_rows_result()?;
+
+        let email_result = self.session
+            .query_unpaged(
+                "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?",
+                (email,),
+            )
+            .await?
+            .into_rows_result()?;
 
         for row in email_result.rows()?
         {
@@ -392,7 +414,7 @@ impl ScyllaConnector {
 
     pub async fn create_session(
         &self,
-        user_id: Uuid,
+        user_id: &Uuid,
         ip_address: Option<String>,
         user_agent: Option<String>,
         duration_hours: i64,
@@ -495,7 +517,8 @@ impl ScyllaConnector {
     pub async fn create_user(
         &self, 
         email: &str,
-        password: &str,
+        password: Option<&str>,
+        password_hash: Option<&str>,
         first_name: &str,
         surname: &str,
         gender: Option<&str>,
@@ -507,6 +530,7 @@ impl ScyllaConnector {
         emergency_relationship: Option<&str>,
         emergency_phone: Option<&str>,
         emergency_medical: Option<&str>,
+        email_verified: bool,
     ) -> Result<Uuid> {
         // Check if email already exists using the email lookup table
         let result = self.session
@@ -530,7 +554,14 @@ impl ScyllaConnector {
         // }
         
         // Hash the password
-        let password_hash = hash_password(password)?;
+        let password_hash = if let Some(p) = password {
+            hash_password(p)? // Handle the potential error from hashing
+        } else if let Some(ph) = password_hash {
+            ph.to_string() // Convert &str to String to match the hash_password return type
+        } else {
+            return Err(AppError::Internal("Password or password hash is required".to_string()));
+        };
+        // let password_hash = hash_password(password)?;
         
         // Generate a new user ID
         let user_id = Uuid::new_v4();
@@ -565,7 +596,7 @@ impl ScyllaConnector {
                     emergency_phone.unwrap_or(""),
                     emergency_medical.unwrap_or(""),
                     now,
-                    false,
+                    email_verified,
                 ),
             )
             .await?;
@@ -1056,4 +1087,173 @@ impl ScyllaConnector {
     }
 
     
+
+    // Add a forgotten password code for a user
+    pub async fn add_forgotten_password_code(&self, email: &str, user_id: Uuid, code: &str, expiry_hours: i64) -> Result<()> {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let created_ts = scylla::value::CqlTimestamp(now);
+
+        let expires_ts = now + (expiry_hours * 60*60 * 1000);
+        let expires_ts = scylla::value::CqlTimestamp(expires_ts);
+
+
+        self.session
+            .query_unpaged(
+                "INSERT INTO mma.forgotten_password_codes (email, user_id, code, expires_ts, created_ts, is_used) 
+                VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    email, 
+                    user_id, 
+                    code, 
+                    expires_ts, 
+                    created_ts, 
+                    false
+                ),
+            )
+            .await?;
+        
+        Ok(())
+    }
+
+
+    // Check if a code is valid for an email and mark it as used if it is
+    pub async fn check_and_use_forgotten_password_code(&self, email: &str, code: &str) -> Result<Option<Uuid>> {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let now_i64 = now as i64;
+        let now = scylla::value::CqlTimestamp(now);
+
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT user_id, expires_ts, is_used FROM mma.forgotten_password_codes 
+                 WHERE email = ? AND code = ?",
+                (email, code),
+            )
+            .await?
+            .into_rows_result()?;
+        
+        // Extract row data
+        let mut user_id: Option<Uuid> = None;
+        let mut is_valid = false;
+        
+        for row in result.rows()? {
+            let (id, expires_ts, is_used): (Uuid, CqlTimestamp, bool) = row?;
+            
+            // Check if code is not expired and not used
+            if !is_used && expires_ts.0 > now_i64 {
+                user_id = Some(id);
+                is_valid = true;
+            }
+        }
+        
+        // If valid, mark the code as used
+        if is_valid {
+            if let Some(id) = user_id {
+                self.session
+                    .query_unpaged(
+                        "UPDATE mma.forgotten_password_codes SET is_used = true WHERE email = ? and code = ?",
+                        (email, code),
+                    )
+                    .await?;
+                
+                return Ok(Some(id));
+            }
+        }
+        
+        // Return None if no valid code was found
+        Ok(None)
+    }
+
+
+
+    // Add a sign-up invite code for an email
+    pub async fn add_sign_up_invite_code(&self, email: &str, code: &str, expiry_hours: i64, first_name: &str, surname: &str, password_hash: &String) -> Result<()> {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let created_ts = scylla::value::CqlTimestamp(now);
+
+        let expires_ts = now + (expiry_hours * 60 * 60 * 1000);
+        let expires_ts = scylla::value::CqlTimestamp(expires_ts);
+
+        self.session
+            .query_unpaged(
+                "INSERT INTO mma.sign_up_invite (email, code, expires_ts, created_ts, is_used, first_name, surname, password_hash) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    email, 
+                    code, 
+                    expires_ts, 
+                    created_ts, 
+                    false,
+                    first_name,
+                    surname,
+                    password_hash,
+                ),
+            )
+            .await?;
+        
+        Ok(())
+    }
+
+    // Check if an invite code is valid for an email and mark it as used if it is
+    pub async fn check_and_use_sign_up_invite_code(&self, email: &str, code: &str) -> Result<(bool, Option<String>, Option<String>, Option<String>)> {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let now_i64 = now as i64;
+        let now = scylla::value::CqlTimestamp(now);
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT expires_ts, is_used, first_name, surname, password_hash FROM mma.sign_up_invite 
+                WHERE email = ? AND code = ?",
+                (email, code),
+            )
+            .await?
+            .into_rows_result()?;
+        
+        // Check if code exists, is not expired, and is not used
+        let mut is_valid = false;
+        let mut first_name: Option<String> = None;
+        let mut surname: Option<String> = None;
+        let mut password_hash: Option<String> = None;
+        for row in result.rows()? {
+            let (expires_ts, is_used, _first_name, _surname, _password_hash): (CqlTimestamp, bool, String, String, String) = row?;
+            first_name = Some(_first_name);
+            surname = Some(_surname);
+            password_hash = Some(_password_hash);
+            // Check if code is not expired and not used
+            if !is_used && expires_ts.0 > now_i64 {
+                is_valid = true;
+                break;
+            }
+        }
+        
+        // If valid, mark the code as used
+        if is_valid {
+            self.session
+                .query_unpaged(
+                    "UPDATE mma.sign_up_invite SET is_used = true WHERE email = ? AND code = ?",
+                    (email, code),
+                )
+                .await?;
+            
+            return Ok((true, first_name, surname, password_hash));
+        }
+        
+        // Return false if no valid code was found
+        Ok((false, None, None, None))
+    }
+
+
+
 }

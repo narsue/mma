@@ -1,5 +1,6 @@
 pub mod handlers {
-    use actix_web::{post, get, web, http::header::CONTENT_TYPE, HttpRequest, HttpResponse, cookie::{Cookie, SameSite}};
+    use actix_web::{post, get, web, http::header::{LOCATION, CONTENT_TYPE}, HttpRequest, HttpResponse, cookie::{Cookie, SameSite}};
+    use argon2::password_hash;
     use std::sync::Arc;
     use uuid::Uuid;
     use crate::state::StoreStateManager;
@@ -10,7 +11,9 @@ pub mod handlers {
         ChangePasswordRequest, ChangePasswordResponse, GetWaiverResponse,
         AcceptWaiverRequest, AcceptWaiverResponse, CreateWaiverResponse, CreateWaiverRequest,  // Re-using or adjusting generic response
         CreateClassRequest, CreateClassResponse, ClassFrequency, ClassFrequencyRequest, 
-        ClassData, CreateVenueRequest, CreateVenueResponse, VenueData, CreateStyleRequest, CreateStyleResponse, StyleData
+        ClassData, CreateVenueRequest, CreateVenueResponse, VenueData, CreateStyleRequest, CreateStyleResponse, StyleData,
+        ForgottenPasswordRequest, ForgottenPasswordResponse, ResetPasswordQuery, ResetPasswordResponse, ResetPasswordRequest,
+        SignupResponse, SignupRequest, VerifyAccountQuery,
     };
     use chrono::{NaiveDate, NaiveTime, Utc};
     use bigdecimal::BigDecimal;
@@ -20,6 +23,8 @@ pub mod handlers {
     use actix_web::error::Error as ActixError;
     use crate::error::{AppError, Result as AppResult};
     use actix_web::error::ErrorInternalServerError;
+    use crate::email_sender::send_custom_email;
+    use urlencoding;
 
     // Get User Profile Handler ---
     #[get("/api/user/profile_data")]
@@ -316,7 +321,8 @@ pub mod handlers {
         // Create the user using our database connector
         let result = state_manager.db.create_user(
             &req.email,
-            &req.password,
+            Some(&req.password),
+            None,
             &req.first_name,
             &req.surname,
             req.gender.as_deref(),
@@ -328,6 +334,7 @@ pub mod handlers {
             req.emergency_relationship.as_deref(),
             req.emergency_phone.as_deref(),
             req.emergency_medical.as_deref(),
+            false
         ).await;
         
         match result {
@@ -377,8 +384,8 @@ pub mod handlers {
         
         // Authenticate user
         match state_manager.authenticate_user(
-            login_req.email,
-            login_req.password,
+            &login_req.email,
+            &login_req.password,
             ip,
             user_agent
         ).await {
@@ -1058,6 +1065,551 @@ pub mod handlers {
                 // Convert the AppError into an ActixError representing a 500 Internal Server Error
                 Err(ErrorInternalServerError(app_err))
             }
+        }
+    }
+
+
+    #[post("/api/user/forgotten_password")]
+    pub async fn handle_forgotten_password(
+        req: web::Json<ForgottenPasswordRequest>,
+        state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+    ) -> Result<HttpResponse, ActixError> {
+        let email = req.email.clone();
+        
+        // Check if the email exists in the database
+        // We need to get the full user object to get the user_id
+        let user_opt = match state_manager.db.get_user_by_email(&email).await {
+            Ok(user) => user,
+            Err(e) => {
+                tracing::error!("Database error when looking up user by email: {}", e);
+                // Still continue with the process to avoid leaking info
+                None
+            }
+        };
+        
+        // If the user exists, send them a password reset email
+        if let Some((user_id, _)) = user_opt {
+            // Generate a reset code
+            let reset_code = uuid::Uuid::new_v4().to_string();
+            
+            // Store the code in the database with a 4-hour expiry
+            match state_manager.db.add_forgotten_password_code(&email, user_id, &reset_code, 4).await {
+                Ok(_) => {
+                    tracing::info!("Added password reset code for user: {}", user_id);
+                    
+                    // Generate the reset URL with email and code
+                    let reset_url = format!(
+                        "https://narsue.com/reset-password?email={}&code={}", 
+                        urlencoding::encode(&email), 
+                        reset_code
+                    );
+                    
+                    // Create personalized email if we have the user's name
+                    // let greeting = if !user.first_name.is_empty() {
+                    //     format!("Hello {},", user.first_name)
+                    // } else {
+                    let greeting = "Hello,".to_string();
+                    // };
+                    
+                    let html_body = format!(
+                        r#"<html>
+                        <body>
+                            <h1>Password Reset Request</h1>
+                            <p>{}</p>
+                            <p>We received a request to reset your password. If you didn't make this request, you can ignore this email.</p>
+                            <p>To reset your password, please click the link below:</p>
+                            <p><a href="{}">Reset Password</a></p>
+                            <p>This link will expire in 4 hours.</p>
+                            <p>Regards,<br>MMA Gym Management</p>
+                        </body>
+                        </html>"#,
+                        greeting,
+                        reset_url
+                    );
+                    
+                    // Send the email
+                    match send_custom_email(
+                        "narsue@narsue.com", // Use your system email address
+                        &email,
+                        &html_body,
+                        "Password Reset Instructions"
+                    ).await {
+                        Ok(true) => {
+                            tracing::info!("Password reset email sent successfully to {}", email);
+                        },
+                        Ok(false) => {
+                            tracing::error!("Failed to send password reset email to {}", email);
+                            // Continue anyway to avoid leaking information
+                        },
+                        Err(e) => {
+                            tracing::error!("Error sending password reset email: {}", e);
+                            // Continue anyway to avoid leaking information
+                        }
+                    }
+                },
+                Err(e) => {
+                    tracing::error!("Failed to store password reset code: {}", e);
+                    // Continue anyway to avoid leaking information
+                }
+            }
+        } else {
+            // Log that no user was found, but don't expose this in the response
+            tracing::info!("Password reset requested for non-existent email: {}", email);
+        }
+        
+        // Always return success regardless of whether the email exists
+        // This prevents user enumeration attacks
+        Ok(HttpResponse::Ok().json(ForgottenPasswordResponse {
+            success: true,
+            message: Some(String::from("If your email address exists in our system, you will receive a password reset link shortly.")),
+            error_message: None,
+        }))
+    }
+
+
+    #[get("/reset_password")]
+    pub async fn serve_reset_password_page(
+        cache: web::Data<TemplateCache>,
+        query: web::Query<ResetPasswordQuery>,
+    ) -> Result<HttpResponse, ActixError> {
+        // Here we don't validate the code yet - that happens on form submission
+        // We just serve the HTML page with the email and code embedded
+        match get_template_content(&cache, "forgotten_password.html") {
+            Ok(content) => {
+                let html = content
+                    .replace("{{EMAIL}}", &query.email)
+                    .replace("{{CODE}}", &query.code);
+
+                Ok(HttpResponse::Ok()
+                    .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
+                    .body(html))
+            },
+            Err(resp) => Ok(resp), // Return the 404 response from the helper
+        }
+    }
+
+    
+    #[post("/api/user/reset_password")]
+    pub async fn handle_reset_password(
+        req: web::Json<ResetPasswordRequest>,
+        state_manager: web::Data<Arc<StoreStateManager>>,
+    ) -> Result<HttpResponse, ActixError> {
+        let email = &req.email;
+        let code = &req.code;
+        let new_password = &req.new_password;
+        
+        // Validate password requirements on server side too
+        if new_password.len() < 8 {
+            return Ok(HttpResponse::BadRequest().json(ResetPasswordResponse {
+                success: false,
+                message: None,
+                error_message: Some("Password must be at least 8 characters long.".to_string()),
+            }));
+        }
+        
+        // Check if the code is valid and mark it as used
+        match state_manager.db.check_and_use_forgotten_password_code(email, code).await {
+            Ok(Some(user_id)) => {
+                // Hash the new password
+                let new_password_hash = match hash_password(new_password) {
+                    Ok(hash) => hash,
+                    Err(e) => {
+                        tracing::error!("Error hashing new password: {:?}", e);
+                        return Ok(HttpResponse::InternalServerError().json(ResetPasswordResponse {
+                            success: false,
+                            message: None,
+                            error_message: Some("Server error processing your request.".to_string()),
+                        }));
+                    }
+                };
+                
+                // Update the password in the database
+                match state_manager.db.update_password_hash(user_id, new_password_hash).await {
+                    Ok(_) => {
+                        tracing::info!("Password successfully reset for user ID: {}", user_id);
+                        
+    
+                        // Create a session for the user (auto-login)
+                        // Get the request info for session tracking
+                        // let ip = "0.0.0.0".to_string(); // In a real app, get this from the request
+                        // let user_agent = "Reset Password Flow".to_string(); // In a real app, get this from the request
+                        let ip = None; // In a real app, get this from the request
+                        let user_agent = None; // In a real app, get this from the request
+                        match state_manager.db.create_session(
+                            &user_id,
+                            ip,
+                            user_agent,
+                            24
+                        ).await  {
+
+
+                        // match state_manager.create_session(user_id, ip, user_agent).await {
+                            Ok(session_token) => {
+                                // Set session cookies
+                                let cookie = Cookie::build("session", session_token.clone())
+                                    .path("/")
+                                    .secure(true)
+                                    .http_only(true)
+                                    .same_site(SameSite::Strict)
+                                    .max_age(time::Duration::hours(24))
+                                    .finish();
+                                
+                                let user_id_cookie = Cookie::build("user_id", user_id.to_string())
+                                    .path("/")
+                                    .secure(true)
+                                    .http_only(false)
+                                    .same_site(SameSite::Strict)
+                                    .max_age(time::Duration::hours(24))
+                                    .finish();
+                                    
+                                // Return success with cookies set
+                                Ok(HttpResponse::Ok()
+                                    .cookie(cookie)
+                                    .cookie(user_id_cookie)
+                                    .json(ResetPasswordResponse {
+                                        success: true,
+                                        message: Some("Your password has been reset successfully.".to_string()),
+                                        error_message: None,
+                                    }))
+                            },
+                            Err(e) => {
+                                tracing::error!("Failed to create session after password reset: {:?}", e);
+                                // Still return success for the password reset, even if session creation failed
+                                Ok(HttpResponse::Ok().json(ResetPasswordResponse {
+                                    success: true,
+                                    message: Some("Your password has been reset successfully. Please log in with your new password.".to_string()),
+                                    error_message: None,
+                                }))
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        tracing::error!("Failed to update password: {:?}", e);
+                        Ok(HttpResponse::InternalServerError().json(ResetPasswordResponse {
+                            success: false,
+                            message: None,
+                            error_message: Some("Failed to update password. Please try again.".to_string()),
+                        }))
+                    }
+                }
+            },
+            Ok(None) => {
+                tracing::warn!("Invalid or expired reset code for email: {}", email);
+                Ok(HttpResponse::BadRequest().json(ResetPasswordResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Invalid or expired password reset link. Please request a new password reset.".to_string()),
+                }))
+            },
+            Err(e) => {
+                tracing::error!("Database error checking reset code: {:?}", e);
+                Ok(HttpResponse::InternalServerError().json(ResetPasswordResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Server error processing your request.".to_string()),
+                }))
+            }
+        }
+    }
+
+
+    #[post("/api/user/signup")]
+    pub async fn handle_signup(
+        req: web::Json<SignupRequest>,
+        state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+    ) -> Result<HttpResponse, ActixError> {
+        let email = req.email.clone();
+        let first_name = req.first_name.clone();
+        let surname = req.surname.clone();
+        
+        // Check if the email exists in the database
+        let user_exists = match state_manager.db.get_user_by_email(&email).await {
+            Ok(Some(_)) => true,
+            Ok(None) => false,
+            Err(e) => {
+                tracing::error!("Database error when looking up user by email: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some(String::from("An error occurred while processing your request.")),
+                }));
+            }
+        };
+        
+        if user_exists {
+            // User already exists, send them an email about it
+            let html_body = format!(
+                r#"<html>
+                <body>
+                    <h1>Account Already Exists</h1>
+                    <p>Hello,</p>
+                    <p>We received a request to create an account with this email address, but there's already an account registered with {}.</p>
+                    <p>If you've forgotten your password, you can use the password reset feature at <a href="https://narsue.com/login">our login page</a>.</p>
+                    <p>If you didn't request this registration, you can safely ignore this email.</p>
+                    <p>Regards,<br>MMA Gym Management</p>
+                </body>
+                </html>"#,
+                email
+            );
+            
+            // Send the email
+            match send_custom_email(
+                "narsue@narsue.com", // Use your system email address
+                &email,
+                &html_body,
+                "Account Already Exists"
+            ).await {
+                Ok(true) => {
+                    tracing::info!("Account already exists email sent to {}", email);
+                },
+                Ok(false) => {
+                    tracing::error!("Failed to send account exists email to {}", email);
+                },
+                Err(e) => {
+                    tracing::error!("Error sending account exists email: {}", e);
+                }
+            }
+            
+            // Return success message to avoid user enumeration
+            return Ok(HttpResponse::Ok().json(SignupResponse {
+                success: true,
+                message: Some(String::from("If your email is not already registered, you will receive a verification link shortly.")),
+                error_message: None,
+            }));
+        }
+        
+        // Generate a verification code
+        let verification_code = uuid::Uuid::new_v4().to_string();
+        
+        let password_hash = match hash_password(&req.password) {
+            Ok(hash) => hash,
+            Err(e) => {
+                tracing::error!("Error hashing password: {:?}", e);
+                return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some(String::from("An error occurred while processing your request.")),
+                }));
+            }
+        };
+
+        // Store the verification code in the database with a 24-hour expiry
+        match state_manager.db.add_sign_up_invite_code(&email, &verification_code, 24, &first_name, &surname, &password_hash).await {
+            Ok(_) => {
+                tracing::info!("Added verification code for new user: {}", email);
+                
+                // Generate the verification URL
+                let verification_url = format!(
+                    "https://narsue.com/verify-account?email={}&code={}", 
+                    urlencoding::encode(&email), 
+                    verification_code
+                );
+                
+                // Create personalized email with the user's name
+                let greeting = format!("Hello {},", first_name);
+                
+                let html_body = format!(
+                    r#"<html>
+                    <body>
+                        <h1>Verify Your Email Address</h1>
+                        <p>{}</p>
+                        <p>Thank you for registering with MMA Gym Management. To complete your registration, please verify your email address by clicking the link below:</p>
+                        <p><a href="{}">Verify Email Address</a></p>
+                        <p>This link will expire in 24 hours.</p>
+                        <p>If you didn't create this account, you can safely ignore this email.</p>
+                        <p>Regards,<br>MMA Gym Management</p>
+                    </body>
+                    </html>"#,
+                    greeting,
+                    verification_url
+                );
+                
+                // Send the verification email
+                match send_custom_email(
+                    "narsue@narsue.com", // Use your system email address
+                    &email,
+                    &html_body,
+                    "Verify Your Email Address"
+                ).await {
+                    Ok(true) => {
+                        tracing::info!("Verification email sent successfully to {}", email);
+                        
+                        // Store user info temporarily or hash the password now
+                        // Note: You would typically want to store this information somewhere temporary
+                        // or securely until the user verifies their email
+                        
+                        // For now, we'll just return success
+                        return Ok(HttpResponse::Ok().json(SignupResponse {
+                            success: true,
+                            message: Some(String::from("Please check your email to verify your account.")),
+                            error_message: None,
+                        }));
+                    },
+                    Ok(false) => {
+                        tracing::error!("Failed to send verification email to {}", email);
+                        return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                            success: false,
+                            message: None,
+                            error_message: Some(String::from("Failed to send verification email. Please try again later.")),
+                        }));
+                    },
+                    Err(e) => {
+                        tracing::error!("Error sending verification email: {}", e);
+                        return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                            success: false,
+                            message: None,
+                            error_message: Some(String::from("An error occurred while sending verification email. Please try again later.")),
+                        }));
+                    }
+                }
+            },
+            Err(e) => {
+                tracing::error!("Failed to store verification code: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some(String::from("An error occurred while processing your request. Please try again later.")),
+                }));
+            }
+        }
+    }
+
+
+    // Handler to verify account and create user
+    #[get("/verify-account")]
+    pub async fn verify_account(
+        query: web::Query<VerifyAccountQuery>,
+        state_manager: web::Data<Arc<StoreStateManager>>,
+    ) -> Result<HttpResponse, ActixError> { // Changed return type to ActixResult
+        let email = query.email.clone();
+        let code = query.code.clone();
+    
+        // Validate the verification code and retrieve user info
+        match state_manager.db.check_and_use_sign_up_invite_code(&email, &code).await {
+            Ok((valid,first_name, surname, password_hash)) => {
+                if !valid {
+                    // Invalid or expired code
+                    tracing::warn!("Invalid or expired verification code for email: {}", email);
+                    return Ok(HttpResponse::BadRequest().body("Your verification link is invalid, expired, or has already been used. Please request a new one."));
+                }
+                let password_hash = match password_hash {
+                    Some(hash) => hash,
+                    None => {
+                        tracing::error!("No password hash found for email: {}", email);
+                        return Ok(HttpResponse::InternalServerError().body("An error occurred while processing your request. Please try again later."));
+                    }
+                };
+                let first_name = match first_name {
+                    Some(name) => name,
+                    None => {
+                        tracing::error!("No first name found for email: {}", email);
+                        return Ok(HttpResponse::InternalServerError().body("An error occurred while processing your request. Please try again later."));
+                    }
+                };
+                let surname = match surname {
+                    Some(name) => name,
+                    None => {
+                        tracing::error!("No surname found for email: {}", email);
+                        return Ok(HttpResponse::InternalServerError().body("An error occurred while processing your request. Please try again later."));
+                    }
+                };
+
+                // Code is valid, and we have the user's info
+                tracing::info!("Verification code is valid for email: {}", email);
+    
+                // Create the user
+                let result = state_manager.db.create_user(
+                    &email,
+                    None, // No raw password needed as we have the hash
+                    Some(&password_hash), // Use the stored password hash
+                    &first_name,
+                    &surname,
+                    None, // gender
+                    None, // phone
+                    None, // dob
+                    None, // address
+                    None, // suburb
+                    None, // emergency_name
+                    None, // emergency_relationship
+                    None, // emergency_phone
+                    None, // emergency_medical
+                    true
+                ).await;
+    
+                match result {
+                    Ok(user_id) => {
+                        tracing::info!("User created successfully with ID: {}", user_id);
+    
+                        // Create a session for the new user
+                        let ip = None; // In a real app, get this from the request
+                        let user_agent = None; // In a real app, get this from the request
+    
+                        match state_manager.db.create_session(
+                            &user_id,
+                            ip,
+                            user_agent,
+                            24 // Session expiry in hours
+                        ).await {
+                            Ok(session_token) => {
+                                // Set session cookies
+                                let cookie = Cookie::build("session", session_token.clone())
+                                    .path("/")
+                                    .secure(true)
+                                    .http_only(true)
+                                    .same_site(SameSite::Strict)
+                                    .max_age(time::Duration::hours(24))
+                                    .finish();
+    
+                                // Note: Storing user_id in a non-http_only cookie might be risky
+                                // Consider alternative ways to identify the logged-in user client-side
+                                let user_id_cookie = Cookie::build("user_id", user_id.to_string())
+                                    .path("/")
+                                    .secure(true)
+                                    .http_only(false)
+                                    .same_site(SameSite::Strict)
+                                    .max_age(time::Duration::hours(24))
+                                    .finish();
+    
+                                // Redirect to the success page
+                                Ok(HttpResponse::Found()
+                                    .append_header((LOCATION, "/signup-success"))
+                                    .cookie(cookie)
+                                    .cookie(user_id_cookie)
+                                    .finish())
+                            },
+                            Err(e) => {
+                                tracing::error!("Failed to create session after verification: {:?}", e);
+                                Ok(HttpResponse::InternalServerError().body("Failed to create session after verification. Please try again later."))
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        tracing::error!("Failed to create user after verification: {:?}", e);
+                        // More specific error handling based on AppError variant could be added
+                        Ok(HttpResponse::InternalServerError().body("Failed to create your account. Please try again later."))
+                    }
+                }
+            },
+            // Ok(None) => {
+            //     // Invalid or expired code or user info not found
+            //     tracing::warn!("Invalid, expired, or used verification code for email: {}", email);
+            //     Ok(HttpResponse::BadRequest().body("Your verification link is invalid, expired, or has already been used. Please request a new one."))
+            // },
+            Err(e) => {
+                tracing::error!("Error checking verification code: {:?}", e);
+                Ok(HttpResponse::InternalServerError().body("An error occurred while verifying your account. Please try again later."))
+            }
+        }
+    }
+
+
+    #[get("/signup-success")]
+    pub async fn signup_success(cache: web::Data<TemplateCache>) -> HttpResponse {
+         match get_template_content(&cache, "signup-success.html") {
+            Ok(content) => HttpResponse::Ok()
+                .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
+                .body(content),
+            Err(resp) => resp,
         }
     }
 
