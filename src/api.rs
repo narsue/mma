@@ -196,8 +196,28 @@ pub struct ClassFrequency {
     pub end_time: NaiveTime,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ClassFrequencyId {
+    pub class_frequency_id: Uuid,
+    pub frequency: i32,
+    pub start_date: NaiveDate,
+    pub end_date: NaiveDate,
+    pub start_time: NaiveTime,
+    pub end_time: NaiveTime,
+}
+
 #[derive(Deserialize)]
 pub struct ClassFrequencyRequest {
+    pub frequency: i32,
+    pub start_date: String,
+    pub end_date: String,
+    pub start_time: String,
+    pub end_time: String,
+}
+
+#[derive(Deserialize)]
+pub struct ClassFrequencyIdRequest {
+    pub class_frequency_id: Option<Uuid>,
     pub frequency: i32,
     pub start_date: String,
     pub end_date: String,
@@ -211,6 +231,27 @@ pub struct CreateClassRequest {
     pub title: String, 
     pub description: String, 
     pub frequency: Vec<ClassFrequencyRequest>,
+    pub venue_id: Uuid,
+    pub notify_booking: bool,
+    pub capacity: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price: Option<String>,
+    pub grading_ids: Vec<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub waiver_id: Option<Uuid>,
+    pub publish_mode: i32,
+    pub style_ids: Vec<Uuid>,
+}
+
+
+// Assuming you have a struct for the class creation request
+#[derive(Deserialize)]
+pub struct UpdateClassRequest {
+    pub class_id: Uuid,
+
+    pub title: String, 
+    pub description: String, 
+    pub frequency: Vec<ClassFrequencyIdRequest>,
     pub venue_id: Uuid,
     pub notify_booking: bool,
     pub capacity: i32,
@@ -244,7 +285,7 @@ pub struct ClassData {
     pub notify_booking: bool,
     pub title: String,
     pub description: String,
-    pub frequency: Vec<ClassFrequency>,
+    pub frequency: Vec<ClassFrequencyId>,
     pub styles: Vec<Uuid>,
     pub grades: Vec<Uuid>,
 }

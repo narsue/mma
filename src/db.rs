@@ -1,7 +1,7 @@
 use argon2::password_hash;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
-use scylla::DeserializeRow;
+use scylla::{frame, DeserializeRow};
 use scylla::statement::Statement;
 use scylla::statement::prepared::PreparedStatement;
 use scylla::statement::Consistency;
@@ -14,7 +14,7 @@ use chrono::{NaiveDate, NaiveTime, Utc};
 use scylla::value::CqlTimestamp;
 use bigdecimal::BigDecimal;
 use crate::error::{AppError, Result, Result as AppResult};
-use crate::api::{UserProfileData, UpdateUserProfileRequest, ClassData, ClassFrequency, VenueData, StyleData}; 
+use crate::api::{UserProfileData, UpdateUserProfileRequest, ClassData, ClassFrequency, VenueData, StyleData, ClassFrequencyId}; 
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -890,6 +890,86 @@ impl ScyllaConnector {
     }
 
 
+    // Function to create a new waiver and make it current
+    pub async fn update_class(&self, _creator_user_id: &Uuid, class_id: &Uuid, title: &String, description: &String, venue_id: &Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequencyId>, notify_booking: bool, waiver_id: Option<Uuid>) -> AppResult<()> {
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let now = scylla::value::CqlTimestamp(now);
+        // let price: Option<CqlDecimal> = price
+        //     .map(|p| CqlDecimal::from(p));
+
+        self.session
+            .query_unpaged(
+                "INSERT INTO mma.class (class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id), 
+            )
+            .await?;
+
+        for style_id in style_ids {
+            self.session
+                .query_unpaged(
+                    "INSERT INTO mma.class_styles (class_id, style_id) VALUES (?, ?)",
+                    (class_id, *style_id), 
+                )
+                .await?;
+        }
+
+        for grade_id in grading_ids {
+            self.session
+                .query_unpaged(
+                    "INSERT INTO mma.class_grades (class_id, grade_id) VALUES (?, ?)",
+                    (class_id, *grade_id), 
+                )
+                .await?;
+        }
+
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT class_frequency_id FROM mma.class_frequency WHERE class_id = ?",
+                (class_id,),
+            )
+            .await?
+            .into_rows_result()?;
+
+        let mut delete_class_frequency_ids: Vec<Uuid> = Vec::new();
+        for row in result.rows()?
+        {
+            let ( class_frequency_id, ) : ( Uuid, ) = row?;
+            delete_class_frequency_ids.push(class_frequency_id);
+        }
+
+        for frequency in class_frequency {
+            let class_frequency_id = frequency.class_frequency_id;
+            delete_class_frequency_ids.retain(|&x| x != class_frequency_id);
+        }
+
+        if delete_class_frequency_ids.len() > 0 {
+            self.session
+                .query_unpaged(
+                    "DELETE FROM mma.class_frequency WHERE class_id = ? and class_frequency_id in ?",
+                    (class_id, delete_class_frequency_ids), 
+                )
+                .await?;
+        }
+        
+        for frequency in class_frequency {
+            let class_frequency_id = frequency.class_frequency_id;
+
+            self.session
+                .query_unpaged(
+                    "INSERT INTO mma.class_frequency (class_id, class_frequency_id, frequency, start_date, end_date, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (class_id, class_frequency_id, frequency.frequency, &frequency.start_date, &frequency.end_date, &frequency.start_time, &frequency.end_time), 
+                )
+                .await?;
+        }
+
+        Ok(())
+    }
+
 
     // Function to get all classes with optional filtering
     // Returns Ok(Vec<ClassData>) - an empty vector if no classes match filters or no classes exist
@@ -960,17 +1040,18 @@ impl ScyllaConnector {
             }
 
             let result = self.session
-                .query_unpaged(
-                    "SELECT frequency, start_date, end_date, start_time, end_time FROM mma.class_frequency WHERE class_id = ?",
-                    (class_id,),
-                )
-                .await?
-                .into_rows_result()?;
+            .query_unpaged(
+                "SELECT class_frequency_id, frequency, start_date, end_date, start_time, end_time FROM mma.class_frequency WHERE class_id = ?",
+                (class_id,),
+            )
+            .await?
+            .into_rows_result()?;
 
             for row in result.rows()?
             {
-                let ( frequency, start_date, end_date, start_time, end_time) : ( i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row?;
-                let class_frequency = ClassFrequency {
+                let ( class_frequency_id, frequency, start_date, end_date, start_time, end_time) : ( Uuid, i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row?;
+                let class_frequency = ClassFrequencyId {
+                    class_frequency_id: class_frequency_id,
                     frequency: frequency,
                     start_date: start_date,
                     end_date: end_date,
@@ -1068,7 +1149,7 @@ impl ScyllaConnector {
     
                 let result = self.session
                     .query_unpaged(
-                        "SELECT frequency, start_date, end_date, start_time, end_time FROM mma.class_frequency WHERE class_id = ?",
+                        "SELECT class_frequency_id, frequency, start_date, end_date, start_time, end_time FROM mma.class_frequency WHERE class_id = ?",
                         (class_id,),
                     )
                     .await?
@@ -1076,8 +1157,9 @@ impl ScyllaConnector {
     
                 for row in result.rows()?
                 {
-                    let ( frequency, start_date, end_date, start_time, end_time) : ( i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row?;
-                    let class_frequency = ClassFrequency {
+                    let ( class_frequency_id, frequency, start_date, end_date, start_time, end_time) : ( Uuid, i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row?;
+                    let class_frequency = ClassFrequencyId {
+                        class_frequency_id: class_frequency_id,
                         frequency: frequency,
                         start_date: start_date,
                         end_date: end_date,

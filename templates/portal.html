@@ -2108,9 +2108,12 @@
              // --- Helper Functions ---
 
              // Template for a single frequency entry (using a function to generate HTML with Tailwind classes)
-            function createFrequencyEntryHTML(frequency = {}, isEdit = false) {
-                const id = Date.now() + Math.random().toString(36).substr(2, 9); // Simple unique ID for inputs
+             function createFrequencyEntryHTML(frequency = {}, isEdit = false) {
+                // Generate a unique ID for the HTML inputs even if frequency has an ID
+                const htmlId = Date.now() + Math.random().toString(36).substr(2, 9);
                 const prefix = isEdit ? 'edit-freq' : 'freq';
+
+                const frequencyId = frequency.class_frequency_id || ''; // Get the class_frequency_id if it exists
                 const frequencyValue = frequency.frequency || '';
                 const startDateValue = frequency.start_date || '';
                 const endDateValue = frequency.end_date || '';
@@ -2118,27 +2121,28 @@
                 const endTimeValue = frequency.end_time || '';
 
                 return `
-                    <div class="frequency-entry relative border border-dashed border-gray-300 p-4 rounded-md mb-4" data-id="${id}">
+                    <div class="frequency-entry relative border border-dashed border-gray-300 p-4 rounded-md mb-4" data-id="${htmlId}" data-frequency-id="${frequencyId}">
                         <button type="button" class="remove-frequency-button absolute top-2 right-2 bg-red-500 text-white rounded px-2 py-1 text-xs font-medium hover:bg-red-600">Remove</button>
+                        ${isEdit && frequencyId ? `<input type="hidden" name="${prefix}-${htmlId}-id" value="${frequencyId}">` : ''} <!-- Hidden input for frequency ID -->
                         <div class="form-group">
-                            <label for="${prefix}-${id}-frequency" class="block text-sm font-medium text-gray-700 mb-1">Frequency (int):</label>
-                            <input type="number" id="${prefix}-${id}-frequency" value="${frequencyValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <label for="${prefix}-${htmlId}-frequency" class="block text-sm font-medium text-gray-700 mb-1">Frequency (int):</label>
+                            <input type="number" id="${prefix}-${htmlId}-frequency" value="${frequencyValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
                         <div class="form-group">
-                            <label for="${prefix}-${id}-start-date" class="block text-sm font-medium text-gray-700 mb-1">Start Date:</label>
-                            <input type="date" id="${prefix}-${id}-start-date" value="${startDateValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <label for="${prefix}-${htmlId}-start-date" class="block text-sm font-medium text-gray-700 mb-1">Start Date:</label>
+                            <input type="date" id="${prefix}-${htmlId}-start-date" value="${startDateValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
                         <div class="form-group">
-                            <label for="${prefix}-${id}-end-date" class="block text-sm font-medium text-gray-700 mb-1">End Date:</label>
-                            <input type="date" id="${prefix}-${id}-end-date" value="${endDateValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <label for="${prefix}-${htmlId}-end-date" class="block text-sm font-medium text-gray-700 mb-1">End Date:</label>
+                            <input type="date" id="${prefix}-${htmlId}-end-date" value="${endDateValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
                         <div class="form-group">
-                            <label for="${prefix}-${id}-start-time" class="block text-sm font-medium text-gray-700 mb-1">Start Time:</label>
-                            <input type="time" id="${prefix}-${id}-start-time" value="${startTimeValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <label for="${prefix}-${htmlId}-start-time" class="block text-sm font-medium text-gray-700 mb-1">Start Time:</label>
+                            <input type="time" id="${prefix}-${htmlId}-start-time" value="${startTimeValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
                         <div class="form-group">
-                            <label for="${prefix}-${id}-end-time" class="block text-sm font-medium text-gray-700 mb-1">End Time:</label>
-                            <input type="time" id="${prefix}-${id}-end-time" value="${endTimeValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <label for="${prefix}-${htmlId}-end-time" class="block text-sm font-medium text-gray-700 mb-1">End Time:</label>
+                            <input type="time" id="${prefix}-${htmlId}-end-time" value="${endTimeValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
                     </div>
                 `;
@@ -2182,7 +2186,7 @@
                  if (sortBy) queryParams.append('sort_by', sortBy);
                  if (searchTerm) queryParams.append('search', searchTerm);
 
-                 const url = `/api/class/get_list${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+                 const url = `/api/class/get_list`;
                  console.log("Fetching classes from:", url);
 
                  try {
@@ -2723,12 +2727,20 @@
 
 
                 // --- 2. Validate and Format Complex Fields (Similar to create) ---
+                console.log("Validating edit class data:", { title, description, venue_id, style_ids, publish_mode, capacity });
 
-                 if (!title || !description || !venue_id || style_ids.length === 0 || isNaN(publish_mode) || isNaN(capacity)) {
-                     displayMessage(editClassMessageDiv, 'Please fill in all required fields (Title, Description, Venue, Styles, Publish Mode, Capacity).', 'error');
-                     submitEditClassButton.disabled = false;
-                     return;
-                 }
+                if (!title || !description || !venue_id || style_ids.length === 0 || isNaN(publish_mode) || isNaN(capacity)) {
+                    var missing_fields = [];
+                    if (!title) missing_fields.push('Title');
+                    if (!description) missing_fields.push('Description');
+                    if (!venue_id) missing_fields.push('Venue');
+                    if (style_ids.length === 0) missing_fields.push('Styles');
+                    if (isNaN(publish_mode)) missing_fields.push('Publish Mode');
+                    if (isNaN(capacity)) missing_fields.push('Capacity');
+                    displayMessage(editClassMessageDiv, `Please fill in all required fields: ${missing_fields.join(', ')}.`, 'error');
+                    submitEditClassButton.disabled = false;
+                    return;
+                }
                 // Basic format validation for UUIDs
                  if (venue_id && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(venue_id)) {
                     displayMessage(editClassMessageDiv, 'Invalid Venue ID format.', 'error');
@@ -2766,48 +2778,54 @@
 
                 const frequencyEntries = editFrequencyContainer.querySelectorAll('.frequency-entry');
                 const frequencies = [];
+                var id = 1;
                 for (const entry of frequencyEntries) {
-                    const id = entry.dataset.id;
+                    const class_frequency_id = entry.dataset.frequencyId || null;
 
                     const freqNum = parseInt(entry.querySelector('[id$="-frequency"]').value, 10);
+                    // const class_frequency_id = entry.querySelector('[id$="-class_frequency_id"]').value;
                     const startDate = entry.querySelector('[id$="-start-date"]').value;
                     const endDate = entry.querySelector('[id$="-end-date"]').value;
                     const startTime = entry.querySelector('[id$="-start-time"]').value;
                     const endTime = entry.querySelector('[id$="-end-time"]').value;
+                    // console.log("Class Frequency ID:", class_frequency_id);
 
                     // Basic frequency validation
-                     if (isNaN(freqNum) || freqNum <= 0) {
-                         displayMessage(editClassMessageDiv, `Invalid frequency number for entry ID ${id}. Must be a positive integer.`, 'error');
-                         submitEditClassButton.disabled = false; return;
-                     }
-                     if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-                         displayMessage(editClassMessageDiv, `Invalid start date for frequency entry ID ${id}. Expected YYYY-MM-DD.`, 'error');
-                         submitEditClassButton.disabled = false; return;
-                     }
-                     if (!endDate || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
-                         displayMessage(editClassMessageDiv, `Invalid end date for frequency entry ID ${id}. Expected YYYY-MM-DD.`, 'error');
-                         submitEditClassButton.disabled = false; return;
-                     }
+                    if (isNaN(freqNum) || freqNum <= 0) {
+                        displayMessage(editClassMessageDiv, `Invalid frequency number for entry ID ${id}. Must be a positive integer.`, 'error');
+                        submitEditClassButton.disabled = false; return;
+                    }
+                    if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+                        displayMessage(editClassMessageDiv, `Invalid start date for frequency entry ID ${id}. Expected YYYY-MM-DD.`, 'error');
+                        submitEditClassButton.disabled = false; return;
+                    }
+                    if (!endDate || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+                        displayMessage(editClassMessageDiv, `Invalid end date for frequency entry ID ${id}. Expected YYYY-MM-DD.`, 'error');
+                        submitEditClassButton.disabled = false; return;
+                    }
 
                     const startTimeFormatted = startTime.includes(':') && startTime.split(':').length <= 2 ? startTime + ':00' : startTime;
                     const endTimeFormatted = endTime.includes(':') && endTime.split(':').length <= 2 ? endTime + ':00' : endTime;
 
-                     if (!startTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(startTimeFormatted)) {
-                         displayMessage(editClassMessageDiv, `Invalid start time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`, 'error');
-                         submitEditClassButton.disabled = false; return;
-                     }
-                     if (!endTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(endTimeFormatted)) {
-                         displayMessage(editClassMessageDiv, `Invalid end time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`, 'error');
-                         submitEditClassButton.disabled = false; return;
-                     }
+                    if (!startTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(startTimeFormatted)) {
+                        displayMessage(editClassMessageDiv, `Invalid start time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`, 'error');
+                        submitEditClassButton.disabled = false; return;
+                    }
+                    if (!endTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(endTimeFormatted)) {
+                        displayMessage(editClassMessageDiv, `Invalid end time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`, 'error');
+                        submitEditClassButton.disabled = false; return;
+                    }
 
-                     frequencies.push({
-                         frequency: freqNum,
-                         start_date: startDate,
-                         end_date: endDate,
-                         start_time: startTimeFormatted,
-                         end_time: endTimeFormatted
-                     });
+                    frequencies.push({
+                        class_frequency_id: class_frequency_id, // Include ID for update
+                        frequency: freqNum,
+                        start_date: startDate,
+                        end_date: endDate,
+                        start_time: startTimeFormatted,
+                        end_time: endTimeFormatted
+                    });
+
+                    id++;
                  }
 
                  if (frequencies.length === 0) {
@@ -2904,13 +2922,13 @@
                      if (result.success && result.class) {
                          const cls = result.class;
                          // Populate the edit modal form
-                         editClassIdInput.value = cls.id;
+                         editClassIdInput.value = cls.class_id;
                          editClassTitleInput.value = cls.title || '';
                          editClassDescriptionInput.value = cls.description || '';
 
                          // Populate venue and style selects - need to fetch available venues/styles first
                          await fetchVenuesForSelect(editClassVenueSelect, cls.venue_id);
-                         await fetchStylesForSelect(editClassStyleSelect, cls.style_ids); // Pass array of selected style IDs
+                         await fetchStylesForSelect(editClassStyleSelect, cls.styles); // Pass array of selected style IDs
 
                          editClassGradingIdsInput.value = cls.grading_ids ? cls.grading_ids.join(', ') : '';
                          editClassPriceInput.value = cls.price !== undefined && cls.price !== null ? parseFloat(cls.price) : '';
@@ -2919,8 +2937,9 @@
 
                          // Populate frequencies for edit
                          editFrequencyContainer.innerHTML = ''; // Clear existing frequencies
-                         if (cls.frequencies && cls.frequencies.length > 0) {
-                             cls.frequencies.forEach(freq => {
+                        //  console.log("Frequencies for edit:", cls);
+                         if (cls.frequency && cls.frequency.length > 0) {
+                             cls.frequency.forEach(freq => {
                                  editFrequencyContainer.innerHTML += createFrequencyEntryHTML(freq, true); // Pass true for edit mode
                              });
                          } else {
