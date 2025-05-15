@@ -283,18 +283,62 @@
         </div>
 
         <!-- Section: Classes -->
+        <!-- Section: Classes -->
         <div id="classesSection" class="portal-section">
             <h2 class="text-2xl font-bold text-gray-900 mb-4">Classes Management</h2>
             <p class="text-gray-700 mb-6">View and manage upcoming classes.</p>
-             <button id="add-class-button" class="py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200">Add New Class</button>
 
-            <!-- Class listing or management interface goes here -->
-            <div id="class-list" class="mt-6 space-y-4">
-                 <!-- Class list will be loaded here -->
+            <!-- Filter and Sort Controls -->
+            <div class="flex flex-wrap gap-4 mb-6 items-center">
+                <div>
+                    <label for="class-filter-style" class="block text-sm font-medium text-gray-700">Filter by Style:</label>
+                    <select id="class-filter-style" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                         <option value="">All Styles</option>
+                         <!-- Options will be populated by JS -->
+                    </select>
+                </div>
+                 <div>
+                    <label for="class-filter-venue" class="block text-sm font-medium text-gray-700">Filter by Venue:</label>
+                    <select id="class-filter-venue" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                         <option value="">All Venues</option>
+                         <!-- Options will be populated by JS -->
+                    </select>
+                </div>
+                <div>
+                    <label for="class-sort-by" class="block text-sm font-medium text-gray-700">Sort By:</label>
+                    <select id="class-sort-by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                         <option value="next_run_time">Next Run Time</option>
+                         <option value="title">Title (A-Z)</option>
+                         <!-- Add other sorting options -->
+                    </select>
+                </div>
+                 <div>
+                     <label for="class-search" class="block text-sm font-medium text-gray-700">Search:</label>
+                     <input type="text" id="class-search" placeholder="Search by title, description..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                 </div>
+                <button id="apply-filters-button" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition duration-200">Apply Filters</button>
+            </div>
+
+             <!-- Join by Code -->
+             <div class="mb-6 flex items-center gap-4">
+                 <label for="class-code-input" class="block text-sm font-medium text-gray-700">Join Class by Code:</label>
+                 <input type="text" id="class-code-input" placeholder="Enter Class Code" class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm flex-grow max-w-xs">
+                 <button id="join-by-code-button" class="py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200">Join</button>
+             </div>
+             <div id="join-by-code-message" class="mt-2 text-center text-gray-700 text-sm"></div>
+
+
+             <button id="add-class-button" class="py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 mb-6">Add New Class</button>
+
+
+            <!-- Class listing area -->
+            <div id="class-list" class="mt-6 space-y-6">
+                 <!-- Class cards will be loaded here -->
                  <p class="text-gray-600 italic">Loading classes...</p>
             </div>
 
-             <!-- Add Class Modal -->
+
+             <!-- Add Class Modal (Remains the same) -->
             <div id="add-class-modal" class="modal">
                 <div class="modal-content">
                     <div class="modal-header">
@@ -360,7 +404,7 @@
                                 <input type="text" id="class-waiver-id" placeholder="e.g., optional-waiver-uuid">
                             </div>
 
-                            <div id="create-class-message" class="message"></div>
+                            <div id="create-class-message" class="message text-center"></div>
 
                         </form>
                     </div>
@@ -370,6 +414,102 @@
                     </div>
                 </div>
             </div>
+
+             <!-- Edit Class Modal (New) -->
+            <div id="edit-class-modal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Edit Class</h3>
+                        <span class="close-button">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <form id="edit-class-form">
+                            <input type="hidden" id="edit-class-id"> <!-- Hidden field for class ID -->
+                            <div class="form-group">
+                                <label for="edit-class-title">Title:</label>
+                                <input type="text" id="edit-class-title" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-class-description">Description:</label>
+                                <textarea id="edit-class-description" rows="4" required></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-class-venue-id">Venue:</label>
+                                <select id="edit-class-venue-id" required>
+                                     <option value="">Loading venues...</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="edit-class-style-ids">Styles:</label>
+                                <select id="edit-class-style-ids" multiple required>
+                                     <option value="">Loading styles...</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="edit-class-grading-ids">Grading IDs (comma-separated):</label>
+                                <input type="text" id="edit-class-grading-ids" placeholder="e.g., uuidA,uuidB">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-class-price">Price (optional):</label>
+                                <input type="text" id="edit-class-price" placeholder="e.g., 10.50">
+                            </div>
+                             <div class="form-group">
+                                <label for="edit-class-publish-mode">Publish Mode (int):</label>
+                                <input type="number" id="edit-class-publish-mode" value="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-class-capacity">Capacity:</label>
+                                <input type="number" id="edit-class-capacity" value="10" required>
+                            </div>
+
+                             <!-- Frequency Section for Edit -->
+                            <div class="form-group">
+                                <label>Frequency:</label>
+                                <div id="edit-frequency-container" class="space-y-4">
+                                    <!-- Frequency entries will be loaded/added here -->
+                                </div>
+                                <button type="button" id="add-edit-frequency-button" class="py-2 px-4 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition duration-200 mt-4">Add Frequency Slot</button>
+                            </div>
+
+                            <div class="form-group checkbox-group">
+                                <input type="checkbox" id="edit-class-notify-booking">
+                                <label for="edit-class-notify-booking">Notify on Booking</label>
+                            </div>
+                             <div class="form-group">
+                                <label for="edit-class-waiver-id">Waiver ID (optional):</label>
+                                <input type="text" id="edit-class-waiver-id" placeholder="e.g., optional-waiver-uuid">
+                            </div>
+
+                            <div id="edit-class-message" class="message text-center"></div>
+
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-button">Cancel</button>
+                        <button type="button" class="submit-button" id="submit-edit-class">Save Changes</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Venue Info Modal (New) -->
+             <div id="venue-info-modal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Venue Information</h3>
+                        <span class="close-button">&times;</span>
+                    </div>
+                    <div class="modal-body" id="venue-info-content">
+                        <!-- Venue details and map will be loaded here -->
+                        <p>Loading venue information...</p>
+                    </div>
+                     <div class="modal-footer">
+                        <button type="button" class="cancel-button">Close</button>
+                    </div>
+                </div>
+             </div>
+
         </div>
 
         <!-- Section: Venues -->
@@ -545,13 +685,14 @@
                 <div class="map-container rounded-lg overflow-hidden shadow-md">
                     <!-- Replace this iframe with the actual OpenStreetMap embed code for your location -->
                      <iframe
+                        loading="lazy"
                         width="100%"
                         height="450"
                         frameborder="0"
                         scrolling="no"
                         marginheight="0"
                         marginwidth="0"
-                        src="https://www.openstreetmap.org/export/embed.html?bbox=150.3326%2C-33.7165%2C150.3426%2C-33.7065&amp;layer=mapnik&amp;marker=-33.7115,150.3376"
+                        src="https://www.openstreetmap.org/export/embed.html?bbox=149.5054,-33.3695,150.7585,-33.8664&amp;layer=mapnik&amp;marker=-33.69791913672688, 150.33542282204206"
                         style="border: 1px solid black"
                     ></iframe>
                      <br/><small><a href="https://www.openstreetmap.org/?mlat=-33.7115&amp;mlon=150.3376#map=16/-33.7115/150.3376">View Larger Map</a></small>
@@ -740,6 +881,29 @@
             Banned: 32,
             // Add any new permissions here, continuing the sequence
         };
+
+        var cached_data = {};
+
+        function add_cached_value(key_type, key, value) {
+            key = key_type.toString() + "_" + key.toString(); // Ensure the key is a string
+            value.cache_ts = Date.now();
+            // console.log("Adding to cache:", key, value);
+            cached_data[key] = value;
+        }
+
+        function get_cached_value(key_type, key) {
+            key = key_type.toString() + "_" + key.toString(); // Ensure the key is a string
+
+            if (cached_data[key] === undefined) {
+                return null;
+            }
+            if (Date.now() - cached_data[key].cache_ts > 1000 * 60 * 5) { // 5 minutes
+                delete cached_data[key];
+                return null;
+            }
+            return cached_data[key];
+        }
+
 
         /**
          * Checks if a user has a specific permission.
@@ -1131,7 +1295,8 @@
                 history.pushState(null, '', `#${sectionId}`);
 
                 if (sectionId === 'classes') {
-                    fetchClasses();
+                    fetchAndDisplayClasses(); // Fetch and display classes when this section is shown
+                    // fetchClasses();
                 }
                 if (sectionId === 'venues') {
                     getVenues();
@@ -1493,7 +1658,7 @@
 
 
 
-            handleClassSection();
+            // handleClassSection();
 
 
             // Get elements related to adding a venue
@@ -1829,264 +1994,641 @@
         });
 
         // Function to handle the class section display logic
-        function handleClassSection() {
+        // function handleClassSection() {
+   
+            // --- Portal Navigation Logic (Keep your existing navigation logic here) ---
+            // ... (Your showPortalSection, navLinks event listeners, popstate, initial section logic) ...
+
+             // --- Global Modal Closing (Keep your existing global modal closing logic here) ---
+             // ... (Your closeModal function, closeButtons event listeners, window click listener) ...
+
+            // Add references to the new modals here so closeModal can find them
+            const editClassModal = document.getElementById('edit-class-modal');
+            const venueInfoModal = document.getElementById('venue-info-modal');
+
+
+            // --- Classes Section Logic ---
+            const classListDiv = document.getElementById('class-list');
             const addClassButton = document.getElementById('add-class-button');
             const addClassModal = document.getElementById('add-class-modal');
             const addClassForm = document.getElementById('add-class-form');
-            const addClassMessageDiv = document.getElementById('create-class-message'); // Message area in modal
-
-            const modalCloseButtons = addClassModal.querySelectorAll('.close-button, .cancel-button');
             const submitCreateClassButton = document.getElementById('submit-create-class');
-
+            const classMessageDiv = document.getElementById('create-class-message');
             const frequencyContainer = document.getElementById('frequency-container');
             const addFrequencyButton = document.getElementById('add-frequency-button');
+            const classVenueSelect = document.getElementById('class-venue-id');
+            const classStyleSelect = document.getElementById('class-style-ids');
+
+            // Filter and Sort Elements
+            const classFilterStyle = document.getElementById('class-filter-style');
+            const classFilterVenue = document.getElementById('class-filter-venue');
+            const classSortBy = document.getElementById('class-sort-by');
+            const classSearchInput = document.getElementById('class-search');
+            const applyFiltersButton = document.getElementById('apply-filters-button');
+
+            // Join by Code Elements
+            const classCodeInput = document.getElementById('class-code-input');
+            const joinByCodeButton = document.getElementById('join-by-code-button');
+            const joinByCodeMessageDiv = document.getElementById('join-by-code-message');
+
+             // Edit Class Modal Elements
+             const editClassForm = document.getElementById('edit-class-form');
+             const submitEditClassButton = document.getElementById('submit-edit-class');
+             const editClassIdInput = document.getElementById('edit-class-id');
+             const editClassTitleInput = document.getElementById('edit-class-title');
+             const editClassDescriptionInput = document.getElementById('edit-class-description');
+             const editClassVenueSelect = document.getElementById('edit-class-venue-id');
+             const editClassStyleSelect = document.getElementById('edit-class-style-ids');
+             const editClassGradingIdsInput = document.getElementById('edit-class-grading-ids');
+             const editClassPriceInput = document.getElementById('edit-class-price');
+             const editClassPublishModeInput = document.getElementById('edit-class-publish-mode');
+             const editClassCapacityInput = document.getElementById('edit-class-capacity');
+             const editFrequencyContainer = document.getElementById('edit-frequency-container');
+             const addEditFrequencyButton = document.getElementById('add-edit-frequency-button');
+             const editClassNotifyBookingCheckbox = document.getElementById('edit-class-notify-booking');
+             const editClassWaiverIdInput = document.getElementById('edit-class-waiver-id');
+             const editClassMessageDiv = document.getElementById('edit-class-message');
+
+            // Venue Info Modal Elements
+            const venueInfoContentDiv = document.getElementById('venue-info-content');
+            const closeButtons = document.querySelectorAll('.modal .close-button'); // Select all close buttons for modals  .cancel-button
+
+            // Close Modals (Reusable function)
+            function closeModal(modalElement) {
+                 modalElement.style.display = 'none';
+                 // Clear specific form and message
+                 if (modalElement.id === 'add-class-modal') {
+                     addClassForm.reset();
+                     frequencyContainer.innerHTML = ''; // Clear frequency entries
+                     classMessageDiv.textContent = '';
+                     classMessageDiv.style.display = 'none';
+                 } else if (modalElement.id === 'add-venue-modal') {
+                     addVenueForm.reset();
+                     createVenueMessageDiv.textContent = '';
+                     createVenueMessageDiv.style.display = 'none';
+                 } else if (modalElement.id === 'add-style-modal') {
+                     addStyleForm.reset();
+                     createStyleMessageDiv.textContent = '';
+                     createStyleMessageDiv.style.display = 'none';
+                 } else if (modalElement.id === 'create-waiver-modal') {
+                     createWaiverModal.style.display = 'none'; // Specific closing logic for waiver modal
+                     newWaiverTitleInput.value = '';
+                     newWaiverContentInput.value = '';
+                     createWaiverErrorDiv.textContent = '';
+                     createWaiverErrorDiv.className = 'message'; // Reset classes
+                 }
+                 // Add more modals here
+             }
 
 
-            // Template for a single frequency entry (using a function to generate HTML)
-            function createFrequencyEntryHTML() {
+             // Attach close listeners to all close buttons
+            closeButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    // Find the parent modal and close it
+                    const modal = button.closest('.modal');
+                    if (modal) {
+                        closeModal(modal);
+                    }
+                });
+            });
+
+            const cancelButtons = document.querySelectorAll('.modal .cancel-button'); // Select all close buttons for modals  .cancel-button
+            // Attach close listeners to all close buttons
+            cancelButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    // Find the parent modal and close it
+                    const modal = button.closest('.modal');
+                    if (modal) {
+                        closeModal(modal);
+                    }
+                });
+            });
+
+
+             // --- Helper Functions ---
+
+             // Template for a single frequency entry (using a function to generate HTML with Tailwind classes)
+            function createFrequencyEntryHTML(frequency = {}, isEdit = false) {
                 const id = Date.now() + Math.random().toString(36).substr(2, 9); // Simple unique ID for inputs
+                const prefix = isEdit ? 'edit-freq' : 'freq';
+                const frequencyValue = frequency.frequency || '';
+                const startDateValue = frequency.start_date || '';
+                const endDateValue = frequency.end_date || '';
+                const startTimeValue = frequency.start_time || '';
+                const endTimeValue = frequency.end_time || '';
+
                 return `
-                    <div class="frequency-entry" data-id="${id}">
-                        <button type="button" class="remove-frequency-button">Remove</button>
+                    <div class="frequency-entry relative border border-dashed border-gray-300 p-4 rounded-md mb-4" data-id="${id}">
+                        <button type="button" class="remove-frequency-button absolute top-2 right-2 bg-red-500 text-white rounded px-2 py-1 text-xs font-medium hover:bg-red-600">Remove</button>
                         <div class="form-group">
-                            <label for="freq-${id}-frequency">Frequency (int):</label>
-                            <input type="number" id="freq-${id}-frequency" value="1">
+                            <label for="${prefix}-${id}-frequency" class="block text-sm font-medium text-gray-700 mb-1">Frequency (int):</label>
+                            <input type="number" id="${prefix}-${id}-frequency" value="${frequencyValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
                         <div class="form-group">
-                            <label for="freq-${id}-start-date">Start Date:</label>
-                            <input type="date" id="freq-${id}-start-date">
+                            <label for="${prefix}-${id}-start-date" class="block text-sm font-medium text-gray-700 mb-1">Start Date:</label>
+                            <input type="date" id="${prefix}-${id}-start-date" value="${startDateValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
                         <div class="form-group">
-                            <label for="freq-${id}-end-date">End Date:</label>
-                            <input type="date" id="freq-${id}-end-date">
+                            <label for="${prefix}-${id}-end-date" class="block text-sm font-medium text-gray-700 mb-1">End Date:</label>
+                            <input type="date" id="${prefix}-${id}-end-date" value="${endDateValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
                         <div class="form-group">
-                            <label for="freq-${id}-start-time">Start Time:</label>
-                            <input type="time" id="freq-${id}-start-time">
+                            <label for="${prefix}-${id}-start-time" class="block text-sm font-medium text-gray-700 mb-1">Start Time:</label>
+                            <input type="time" id="${prefix}-${id}-start-time" value="${startTimeValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
                         <div class="form-group">
-                            <label for="freq-${id}-end-time">End Time:</label>
-                            <input type="time" id="freq-${id}-end-time">
+                            <label for="${prefix}-${id}-end-time" class="block text-sm font-medium text-gray-700 mb-1">End Time:</label>
+                            <input type="time" id="${prefix}-${id}-end-time" value="${endTimeValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
                     </div>
                 `;
             }
 
+             // Function to get user ID (Implement based on how you store it after login)
+             function getUserIdFromCookieOrStorage() {
+                 // Example: Reading from a cookie named 'user_id'
+                 const name = 'user_id=';
+                 const decodedCookie = decodeURIComponent(document.cookie);
+                 const ca = decodedCookie.split(';');
+                 for(let i = 0; i <ca.length; i++) {
+                     let c = ca[i];
+                     while (c.charAt(0) === ' ') {
+                         c = c.substring(1);
+                     }
+                     if (c.indexOf(name) === 0) {
+                         return c.substring(name.length, c.length);
+                     }
+                 }
+                 return null; // Return null if not found
+             }
 
-            // Open the Add Class modal
-            addClassButton.onclick = function() {
+
+            // --- API Fetch Functions ---
+
+            // Function to fetch and display classes as cards
+             async function fetchAndDisplayClasses() {
+                 classListDiv.innerHTML = '<p class="text-gray-600 italic">Loading classes...</p>';
+
+                 // Get filter and sort parameters
+                 const styleFilter = classFilterStyle.value;
+                 const venueFilter = classFilterVenue.value;
+                 const sortBy = classSortBy.value;
+                 const searchTerm = classSearchInput.value.trim();
+
+                 // Construct query parameters
+                 const queryParams = new URLSearchParams();
+                 if (styleFilter) queryParams.append('style_id', styleFilter);
+                 if (venueFilter) queryParams.append('venue_id', venueFilter);
+                 if (sortBy) queryParams.append('sort_by', sortBy);
+                 if (searchTerm) queryParams.append('search', searchTerm);
+
+                 const url = `/api/class/get_list${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+                 console.log("Fetching classes from:", url);
+
+                 try {
+                     const response = await fetch(url, {
+                         method: 'GET',
+                         headers: {
+                            'Content-Type': 'application/json' // Although GET, good practice for APIs
+                         }
+                     });
+
+                     if (response.ok) {
+                         const classes = await response.json(); // Assuming backend returns a JSON array
+                         if (classes.length > 0) {
+                             let html = '';
+                             classes.forEach(cls => {
+                                 // Assume your class object has properties like:
+                                 // id, title, description, venue_id, style_ids, grading_ids, price,
+                                 // publish_mode, capacity, frequencies, notify_booking, waiver_id,
+                                 // next_run_time (formatted string), instructor_name, venue_name, venue_address,
+                                 // venue_latitude, venue_longitude, style_names (array of strings), eligibility (string), distance (optional string)
+
+                                 // Determine eligibility status
+                                 let eligibilityStatus = cls.eligibility || 'Not specified';
+                                 let eligibilityColor = 'text-gray-600';
+                                 if (eligibilityStatus.toLowerCase().includes('eligible')) {
+                                     eligibilityColor = 'text-green-600';
+                                 } else if (eligibilityStatus.toLowerCase().includes('ineligible')) {
+                                     eligibilityColor = 'text-red-600';
+                                 }
+
+                                 // Format price
+                                const formattedPrice = cls.price !== undefined && cls.price !== null ? `$${parseFloat(cls.price).toFixed(2)}` : 'Free';
+                                let venue_name = '';
+                                let venue_data = get_cached_value('venue', cls.venue_id);
+
+                                if (venue_data) {
+                                    venue_name = venue_data.title;
+                                } else {
+                                    venue_name = cls.venue_name || 'N/A';
+                                }
+
+                                 html += `
+                                     <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
+                                         <h3 class="text-xl font-semibold text-gray-900 mb-2">${cls.title}</h3>
+                                         <p class="text-gray-700 mb-4">${cls.description}</p>
+
+                                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
+                                             <div>
+                                                 <p><strong class="font-medium">Venue:</strong> <span class="venue-name cursor-pointer text-blue-600 hover:underline" data-venue-id="${cls.venue_id}">${venue_data.title || 'N/A'}</span></p>
+                                                  <p><strong class="font-medium">Address:</strong> ${venue_data.address || 'N/A'}</p>
+                                                  ${venue_data.latitude && venue_data.longitude ?
+                                                     `<p>
+                                                         <strong class="font-medium">Map:</strong>
+                                                         <a href="https://www.openstreetmap.org/?mlat=${venue_data.latitude}&mlon=${venue_data.longitude}#map=15/${venue_data.latitude}/${venue_data.longitude}" target="_blank" class="text-blue-600 hover:underline">View on Map</a>
+                                                      </p>`
+                                                     : ''}
+                                             </div>
+                                             <div>
+                                                 <p><strong class="font-medium">Instructor:</strong> ${cls.instructor_name || 'N/A'}</p>
+                                                 <p><strong class="font-medium">Styles:</strong> ${cls.style_names && cls.style_names.length > 0 ? cls.style_names.join(', ') : 'N/A'}</p>
+                                                  <p><strong class="font-medium">Eligibility:</strong> <span class="${eligibilityColor}">${eligibilityStatus}</span></p>
+                                                  <p><strong class="font-medium">Distance:</strong> ${cls.distance || 'N/A'}</p>
+                                             </div>
+                                         </div>
+
+                                         <div class="text-sm text-gray-600 mb-4">
+                                              <p><strong class="font-medium">Next Run Time:</strong> ${cls.next_run_time || 'Not scheduled'}</p>
+                                              <p><strong class="font-medium">Capacity:</strong> ${cls.capacity !== undefined ? cls.capacity : 'N/A'}</p>
+                                              <p><strong class="font-medium">Price:</strong> ${formattedPrice}</p>
+                                         </div>
+
+
+                                         <div class="flex flex-wrap gap-3">
+                                              <button class="join-class-button py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Join Class</button>
+                                             <button class="checkin-class-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Check-in</button>
+                                             <button class="edit-class-button py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Edit</button>
+                                             <!-- Add Delete button if needed -->
+                                         </div>
+                                     </div>
+                                 `;
+                             });
+                             classListDiv.innerHTML = html;
+
+                             // Attach event listeners after rendering
+                             attachClassButtonListeners();
+                             attachVenueNameListeners(); // Attach listeners to venue names
+
+                         } else {
+                             classListDiv.innerHTML = '<p class="text-gray-600 italic">No classes found matching your criteria.</p>';
+                         }
+                     } else if (response.status === 401 || response.status === 403) {
+                          classListDiv.innerHTML = '<p class="text-red-600">Error: You are not authorized to view classes.</p>';
+                         console.error("Authorization error fetching classes:", response.status);
+                     }
+                     else {
+                         const errorText = await response.text();
+                         classListDiv.innerHTML = `<p class="text-red-600">Error loading classes: ${response.status} - ${errorText.substring(0, 100)}...</p>`;
+                         console.error("Error fetching classes:", response.status, errorText);
+                     }
+                 } catch (error) {
+                     classListDiv.innerHTML = `<p class="text-red-600">Network error loading classes.</p>`;
+                     console.error("Fetch error for class list:", error);
+                 }
+             }
+
+
+            // Function to attach event listeners to dynamically created class buttons
+            function attachClassButtonListeners() {
+                 // Join Button Listener
+                 classListDiv.querySelectorAll('.join-class-button').forEach(button => {
+                     button.addEventListener('click', async () => {
+                         const classId = button.getAttribute('data-class-id');
+                         console.log('Attempting to join class:', classId);
+                         // Implement API call to join class here
+                         try {
+                             const response = await fetch(`/api/class/join/${classId}`, { method: 'POST' }); // Adjust endpoint as needed
+                             const result = await response.json();
+                              if (result.success) {
+                                   alert('Successfully joined class!'); // Or show a more integrated message
+                                   // Optionally, refresh the class list to reflect the change
+                                   fetchAndDisplayClasses();
+                              } else {
+                                   alert('Failed to join class: ' + (result.error_message || 'Unknown error'));
+                              }
+                         } catch (error) {
+                              console.error('Fetch error joining class:', error);
+                              alert('Network error joining class.');
+                         }
+                     });
+                 });
+
+                 // Check-in Button Listener
+                 classListDiv.querySelectorAll('.checkin-class-button').forEach(button => {
+                     button.addEventListener('click', async () => {
+                         const classId = button.getAttribute('data-class-id');
+                          console.log('Attempting to check-in for class:', classId);
+                         // Implement API call to check in here (likely requires user ID)
+                         try {
+                              // You'll need to get the current user's ID to send with the check-in request
+                              // This often comes from a cookie or local storage after login
+                              const userId = getUserIdFromCookieOrStorage(); // Implement this function
+
+                               if (!userId) {
+                                    alert("Could not determine user ID for check-in.");
+                                    return;
+                               }
+
+                             const response = await fetch(`/api/class/checkin`, {
+                                  method: 'POST',
+                                   headers: {
+                                        'Content-Type': 'application/json',
+                                        // Include authorization token if required
+                                   },
+                                   body: JSON.stringify({ user_id: userId, class_id: classId }) // Send user ID with the request
+                               }); // Adjust endpoint as needed
+
+                             const result = await response.json();
+                              if (result.success) {
+                                   alert('Successfully checked into class!'); // Or show a more integrated message
+                                   // Optionally, update the class card to show check-in status
+                              } else {
+                                   alert('Failed to check in: ' + (result.error_message || 'Unknown error'));
+                              }
+                         } catch (error) {
+                              console.error('Fetch error checking in:', error);
+                              alert('Network error checking in.');
+                         }
+                     });
+                 });
+
+                 // Edit Button Listener
+                 classListDiv.querySelectorAll('.edit-class-button').forEach(button => {
+                     button.addEventListener('click', async () => {
+                         const classId = button.getAttribute('data-class-id');
+                         console.log('Attempting to edit class:', classId);
+                         // Fetch class data and open edit modal
+                         fetchClassForEdit(classId);
+                     });
+                 });
+            }
+
+            // Function to attach event listeners to venue names for showing venue info
+            function attachVenueNameListeners() {
+                 classListDiv.querySelectorAll('.venue-name').forEach(span => {
+                     span.addEventListener('click', async () => {
+                         const venueId = span.getAttribute('data-venue-id');
+                         console.log('Attempting to fetch venue info for:', venueId);
+                          fetchAndDisplayVenueInfo(venueId);
+                     });
+                 });
+            }
+
+            // Function to fetch venues for select dropdowns
+            async function fetchVenuesForSelect(selectElement, selectedVenueId = null) {
+                 selectElement.innerHTML = '<option value="">Loading venues...</option>';
+                 selectElement.disabled = true;
+                 try {
+                     const response = await fetch('/api/venue/get_list', { method: 'GET' });
+
+                     if (response.ok) {
+                         // Assuming backend returns { success: true, venues: [...] } on success
+                         const result = await response.json();
+
+                        //  if (result.success && result.venues) {
+                            const venues = result;
+                            let optionsHtml = '<option value="">Select Venue</option>';
+                            selectElement.disabled = false;
+                            if (venues.length > 0) {
+                                venues.forEach(venue => {
+                                    const selected = selectedVenueId === venue.venue_id ? 'selected' : '';
+                                    optionsHtml += `<option value="${venue.venue_id}" ${selected}>${venue.title}</option>`;
+                                    add_cached_value("venue", venue.venue_id, venue); // Cache the venue ID and title
+
+                                });
+                                selectElement.innerHTML = optionsHtml;
+                            } else {
+                                selectElement.innerHTML = '<option value="">No venues found</option>';
+                            }
+                        //  } else {
+                        //     // Handle cases where response is OK but success is false (backend level error)
+                        //     selectElement.innerHTML = `<option value="">Error: ${result.error_message || 'Unknown error'}</option>`;
+                        //      console.error('Backend success: false for venues:', result.error_message);
+                        //  }
+
+                     } else if (response.status === 401 || response.status === 403) {
+                          selectElement.innerHTML = '<option value="">Error: Not authorized</option>';
+                          console.error("Authorization error fetching venues:", response.status);
+                     }
+                     else {
+                          // Handle other HTTP errors
+                          const errorText = await response.text();
+                           selectElement.innerHTML = `<option value="">Error: ${response.status} - ${errorText.substring(0, 50)}...</option>`;
+                          console.error("Error fetching venues:", response.status, errorText);
+                     }
+                 } catch (error) {
+                     // Handle network errors
+                     console.error('Network error fetching venues:', error);
+                     selectElement.innerHTML = '<option value="">Network Error</option>';
+                 }
+            }
+
+            // Function to fetch styles for select dropdowns
+             async function fetchStylesForSelect(selectElement, selectedStyleIds = []) {
+                 selectElement.innerHTML = '<option value="">Loading styles...</option>';
+                 selectElement.disabled = true;
+                 try {
+                     const response = await fetch('/api/style/get_list'); // Adjust endpoint
+                     if (response.ok) {
+
+                        const result = await response.json(); // Assuming the backend returns { success: true, styles: [...] } or { success: false, error_message: "" }
+
+                    //  if (result.success && result.styles) {
+                         const styles = result;
+                         let optionsHtml = '';
+                          if (!selectElement.multiple) {
+                             optionsHtml += '<option value="">Select Style</option>';
+                         }
+                         selectElement.disabled = false;
+                         if (styles.length > 0) {
+                             styles.forEach(style => {
+                                 const selected = selectedStyleIds.includes(style.style_id) ? 'selected' : '';
+                                 optionsHtml += `<option value="${style.style_id}" ${selected}>${style.title}</option>`;
+                                 add_cached_value("style", style.style_id, style); // Cache the venue ID and title
+                             });
+                             selectElement.innerHTML = optionsHtml;
+                         } else {
+                             selectElement.innerHTML = '<option value="">No styles found</option>';
+                         }
+                    } else if (response.status === 401 || response.status === 403) {
+                          selectElement.innerHTML = '<option value="">Error: Not authorized</option>';
+                          console.error("Authorization error fetching venues:", response.status);
+                     }
+                     else {
+                          // Handle other HTTP errors
+                          const errorText = await response.text();
+                           selectElement.innerHTML = `<option value="">Error: ${response.status} - ${errorText.substring(0, 50)}...</option>`;
+                          console.error("Error fetching venues:", response.status, errorText);
+                     }
+
+                 } catch (error) {
+                     console.error('Network error fetching styles:', error);
+                     selectElement.innerHTML = '<option value="">Network Error</option>';
+                 }
+             }
+
+
+             // --- Event Listeners ---
+
+            // Open Add Class Modal
+            addClassButton.addEventListener('click', () => {
                 addClassModal.style.display = 'block';
-                addClassMessageDiv.style.display = 'none'; // Hide any previous message
-                addClassMessageDiv.textContent = '';
+                classMessageDiv.textContent = ''; // Clear previous messages
+                classMessageDiv.className = 'message text-center'; // Reset classes
+                classMessageDiv.style.display = 'none'; // Hide message div
                 addClassForm.reset(); // Clear the form fields
                 frequencyContainer.innerHTML = ''; // Clear previous frequency entries
                 // Add an initial frequency entry when opening the modal
-                addFrequencyEntry();
-                getVenues("class-venue-id"); // Fetch venues when opening the modal
-                getStyles("class-style-ids"); // Fetch styles when opening the modal
-            }
+                frequencyContainer.innerHTML += createFrequencyEntryHTML();
 
-            // Close the Add Class modal using close buttons (X and Cancel)
-            modalCloseButtons.forEach(button => {
-                button.onclick = function() {
-                    addClassModal.style.display = 'none';
-                }
+                // Fetch venues and styles when modal opens
+                fetchVenuesForSelect(classVenueSelect);
+                fetchStylesForSelect(classStyleSelect);
             });
 
 
-            // Close the modal when clicking outside of it
-            window.onclick = function(event) {
-                // Check if the click target is the modal overlay AND not within the modal content
-                if (event.target === addClassModal) {
-                    addClassModal.style.display = 'none';
-                }
-                // Also handle the waiver modal if it exists
-                if (document.getElementById('create-waiver-modal') && event.target === document.getElementById('create-waiver-modal')) {
-                    document.getElementById('create-waiver-modal').style.display = 'none';
-                }
-            }
-
-
             // Add a frequency entry to the form
-            function addFrequencyEntry() {
-                const entryHtml = createFrequencyEntryHTML();
-                frequencyContainer.insertAdjacentHTML('beforeend', entryHtml);
+            function addFrequencyEntry(isEdit = false) {
+                 const container = isEdit ? editFrequencyContainer : frequencyContainer;
+                const entryHtml = createFrequencyEntryHTML({}, isEdit); // Pass isEdit to template
+                container.insertAdjacentHTML('beforeend', entryHtml);
 
-                // Add event listener to the new remove button
-                const newEntry = frequencyContainer.lastElementChild;
-                const removeButton = newEntry.querySelector('.remove-frequency-button');
-                removeButton.onclick = function() {
-                    newEntry.remove(); // Remove the frequency entry div
-                }
+                // Add event listener to the new remove button using delegation
+                // This is now handled by the delegated listener on the container itself
             }
+
 
             // Event listener for the "Add Frequency Slot" button
-            addFrequencyButton.onclick = addFrequencyEntry;
+            addFrequencyButton.addEventListener('click', () => addFrequencyEntry(false));
+            addEditFrequencyButton.addEventListener('click', () => addFrequencyEntry(true));
 
-            // --- Submit New Class Logic ---
-            submitCreateClassButton.onclick = async function() {
-                addClassMessageDiv.style.display = 'none'; // Hide previous messages
-                addClassMessageDiv.textContent = '';
-                // Optional: Disable submit button to prevent double clicks
+
+            // Handle Remove Frequency Button Click (using event delegation on containers)
+             frequencyContainer.addEventListener('click', (event) => {
+                 if (event.target.classList.contains('remove-frequency-button')) {
+                     event.target.closest('.frequency-entry').remove();
+                 }
+             });
+
+             editFrequencyContainer.addEventListener('click', (event) => {
+                 if (event.target.classList.contains('remove-frequency-button')) {
+                     event.target.closest('.frequency-entry').remove();
+                 }
+             });
+
+
+            // Submit Create Class Form
+            submitCreateClassButton.addEventListener('click', async () => {
+                classMessageDiv.style.display = 'none';
+                classMessageDiv.textContent = '';
+                classMessageDiv.className = 'message text-center';
                 submitCreateClassButton.disabled = true;
 
                 // --- 1. Gather data from the form ---
                 const title = document.getElementById('class-title').value.trim();
                 const description = document.getElementById('class-description').value.trim();
-                const venueIdString = document.getElementById('class-venue-id').value.trim(); // Get as string
-                const styleIdsString = document.getElementById('class-style-ids').value.trim();
+                const venueIdString = document.getElementById('class-venue-id').value.trim();
+                const styleIdsSelect = document.getElementById('class-style-ids');
+                const style_ids = Array.from(styleIdsSelect.selectedOptions).map(option => option.value.trim()).filter(id => id.length > 0); // Get selected options
                 const gradingIdsString = document.getElementById('class-grading-ids').value.trim();
                 const priceString = document.getElementById('class-price').value.trim();
-                const publishMode = parseInt(document.getElementById('class-publish-mode').value, 10); // Parse as integer
-                const capacity = parseInt(document.getElementById('class-capacity').value, 10); // Parse as integer
-                const notifyBooking = document.getElementById('class-notify-booking').checked; // Get checkbox state
-                const waiverIdString = document.getElementById('class-waiver-id').value.trim(); // Get as string
-                // end_ts is not included in this form
+                const publishMode = parseInt(document.getElementById('class-publish-mode').value, 10);
+                const capacity = parseInt(document.getElementById('class-capacity').value, 10);
+                const notifyBooking = document.getElementById('class-notify-booking').checked;
+                const waiverIdString = document.getElementById('class-waiver-id').value.trim();
 
 
                 // --- 2. Validate and Format Complex Fields ---
 
-                // Validate required fields (simple check)
-                if (!title || !description || !venueIdString || isNaN(publishMode) || isNaN(capacity)) {
-                    addClassMessageDiv.style.display = 'block';
-                    addClassMessageDiv.textContent = 'Please fill in all required fields (Title, Description, Venue ID, Publish Mode, Capacity).';
-                    submitCreateClassButton.disabled = false; // Re-enable button
-                    return;
-                }
-                // Simple check for publishMode and capacity being valid numbers (redundant if using type="number" and required, but safer)
-                if (isNaN(publishMode) || isNaN(capacity)) {
-                    addClassMessageDiv.style.display = 'block';
-                    addClassMessageDiv.textContent = 'Publish Mode and Capacity must be valid numbers.';
-                    submitCreateClassButton.disabled = false; // Re-enable button
-                    return;
-                }
-
-
-                // Validate Venue ID format (basic UUID format check - backend does the full parse)
+                 if (!title || !description || !venueIdString || style_ids.length === 0 || isNaN(publishMode) || isNaN(capacity)) {
+                     displayMessage(classMessageDiv, 'Please fill in all required fields (Title, Description, Venue, Styles, Publish Mode, Capacity).', 'error');
+                     submitCreateClassButton.disabled = false;
+                     return;
+                 }
+                // Basic format validation for UUIDs (optional, backend should validate definitively)
                 if (venueIdString && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(venueIdString)) {
-                    addClassMessageDiv.style.display = 'block';
-                    addClassMessageDiv.textContent = 'Invalid Venue ID format. Expected UUID.';
-                    submitCreateClassButton.disabled = false; // Re-enable button
+                    displayMessage(classMessageDiv, 'Invalid Venue ID format.', 'error');
+                    submitCreateClassButton.disabled = false;
                     return;
                 }
+                if (style_ids.some(id => !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id))) {
+                     displayMessage(classMessageDiv, 'One or more Style IDs have an invalid UUID format.', 'error');
+                     submitCreateClassButton.disabled = false;
+                     return;
+                 }
 
+                const grading_ids = gradingIdsString.split(',').map(id => id.trim()).filter(id => id.length > 0);
+                 if (grading_ids.length > 0 && grading_ids.some(id => !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id))) {
+                     displayMessage(classMessageDiv, 'One or more Grading IDs have an invalid UUID format.', 'error');
+                     submitCreateClassButton.disabled = false;
+                     return;
+                 }
 
-                // Parse Style IDs string into an array of UUID strings (and basic format check if non-empty)
-                const style_ids = styleIdsString
-                    .split(',')
-                    .map(id => id.trim())
-                    .filter(id => id.length > 0);
-                // Validate each entry looks like a UUID format if the list is not empty
-                if (style_ids.length > 0 && style_ids.some(id => !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id))) {
-                    addClassMessageDiv.style.display = 'block';
-                    addClassMessageDiv.textContent = 'One or more Style IDs have an invalid UUID format.';
-                    submitCreateClassButton.disabled = false; // Re-enable button
-                    return;
-                }
-
-
-                // Parse Grading IDs string into an array of UUID strings (and basic format check if non-empty)
-                const grading_ids = gradingIdsString
-                    .split(',')
-                    .map(id => id.trim())
-                    .filter(id => id.length > 0);
-                // Validate each entry looks like a UUID format if the list is not empty
-                if (grading_ids.length > 0 && grading_ids.some(id => !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id))) {
-                    addClassMessageDiv.style.display = 'block';
-                    addClassMessageDiv.textContent = 'One or more Grading IDs have an invalid UUID format.';
-                    submitCreateClassButton.disabled = false; // Re-enable button
-                    return;
-                }
-
-
-                // Optional Price string (send as is - backend parses BigDecimal)
-                const price = priceString === '' ? null : priceString; // Send null if empty string
-                // Optional Price format validation (basic numeric check if not null)
+                const price = priceString === '' ? null : priceString;
                 if (price !== null && isNaN(parseFloat(price))) {
-                    addClassMessageDiv.style.display = 'block';
-                    addClassMessageDiv.textContent = 'Invalid Price format. Must be a number.';
-                    submitCreateClassButton.disabled = false; // Re-enable button
-                    return;
-                }
+                     displayMessage(classMessageDiv, 'Invalid Price format. Must be a number.', 'error');
+                     submitCreateClassButton.disabled = false;
+                     return;
+                 }
+
+                const waiver_id = waiverIdString === '' ? null : waiverIdString;
+                 if (waiver_id !== null && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(waiverIdString)) {
+                     displayMessage(classMessageDiv, 'Invalid Waiver ID format. Expected UUID.', 'error');
+                     submitCreateClassButton.disabled = false;
+                     return;
+                 }
 
 
-                // Optional Waiver ID string (send as is - backend parses Uuid)
-                const waiver_id = waiverIdString === '' ? null : waiverIdString; // Send null if empty string
-                // Optional Waiver ID format validation (basic UUID format check if not null)
-                if (waiver_id !== null && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(waiverIdString)) {
-                    addClassMessageDiv.style.display = 'block';
-                    addClassMessageDiv.textContent = 'Invalid Waiver ID format. Expected UUID.';
-                    submitCreateClassButton.disabled = false; // Re-enable button
-                    return;
-                }
-
-
-                // Gather and validate frequency entries
                 const frequencyEntries = frequencyContainer.querySelectorAll('.frequency-entry');
-                const frequency = [];
+                const frequencies = [];
                 for (const entry of frequencyEntries) {
-                    const id = entry.dataset.id; // Use this for error messages
+                    const id = entry.dataset.id;
 
-                    // Get values (date and time inputs give "YYYY-MM-DD" and "HH:MM" or "HH:MM:SS")
                     const freqNum = parseInt(entry.querySelector('[id$="-frequency"]').value, 10);
-                    const startDate = entry.querySelector('[id$="-start-date"]').value; // YYYY-MM-DD string
-                    const endDate = entry.querySelector('[id$="-end-date"]').value;     // YYYY-MM-DD string
-                    const startTime = entry.querySelector('[id$="-start-time"]').value; // HH:MM or HH:MM:SS string
-                    const endTime = entry.querySelector('[id$="-end-time"]').value;     // HH:MM or HH:MM:SS string
+                    const startDate = entry.querySelector('[id$="-start-date"]').value;
+                    const endDate = entry.querySelector('[id$="-end-date"]').value;
+                    const startTime = entry.querySelector('[id$="-start-time"]').value;
+                    const endTime = entry.querySelector('[id$="-end-time"]').value;
 
-                    // Basic frequency validation
-                    if (isNaN(freqNum) || freqNum <= 0) {
-                        addClassMessageDiv.style.display = 'block';
-                        addClassMessageDiv.textContent = `Invalid frequency number for entry ID ${id}. Must be a positive integer.`;
-                        submitCreateClassButton.disabled = false; // Re-enable button
-                        return; // Stop processing
-                    }
-                    // Basic date format validation (input type="date" helps, but could still be empty/invalid)
-                    if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-                        addClassMessageDiv.style.display = 'block';
-                        addClassMessageDiv.textContent = `Invalid start date for frequency entry ID ${id}. Expected YYYY-MM-DD.`;
-                        submitCreateClassButton.disabled = false; // Re-enable button
-                        return;
-                    }
-                    if (!endDate || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
-                        addClassMessageDiv.style.display = 'block';
-                        addClassMessageDiv.textContent = `Invalid end date for frequency entry ID ${id}. Expected YYYY-MM-DD.`;
-                            submitCreateClassButton.disabled = false; // Re-enable button
-                        return;
-                    }
 
-                    // Time format validation (input type="time" gives HH:MM. Backend expects HH:MM:SS)
-                    const startTimeFormatted = startTime.includes(':') && startTime.split(':').length <= 2 ? startTime + ':00' : startTime; // Append :00 if needed
-                    const endTimeFormatted = endTime.includes(':') && endTime.split(':').length <= 2 ? endTime + ':00' : endTime;       // Append :00 if needed
+                     if (isNaN(freqNum) || freqNum <= 0) {
+                         displayMessage(classMessageDiv, `Invalid frequency number for entry ID ${id}. Must be a positive integer.`, 'error');
+                         submitCreateClassButton.disabled = false; return;
+                     }
+                     if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+                         displayMessage(classMessageDiv, `Invalid start date for frequency entry ID ${id}. Expected YYYY-MM-DD.`, 'error');
+                         submitCreateClassButton.disabled = false; return;
+                     }
+                     if (!endDate || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+                         displayMessage(classMessageDiv, `Invalid end date for frequency entry ID ${id}. Expected YYYY-MM-DD.`, 'error');
+                            submitCreateClassButton.disabled = false; return;
+                     }
 
-                    if (!startTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(startTimeFormatted)) {
-                        addClassMessageDiv.style.display = 'block';
-                        addClassMessageDiv.textContent = `Invalid start time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`;
-                            submitCreateClassButton.disabled = false; // Re-enable button
-                        return;
-                    }
-                    if (!endTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(endTimeFormatted)) {
-                        addClassMessageDiv.style.display = 'block';
-                        addClassMessageDiv.textContent = `Invalid end time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`;
-                            submitCreateClassButton.disabled = false; // Re-enable button
-                        return;
-                    }
+                    const startTimeFormatted = startTime.includes(':') && startTime.split(':').length <= 2 ? startTime + ':00' : startTime;
+                    const endTimeFormatted = endTime.includes(':') && endTime.split(':').length <= 2 ? endTime + ':00' : endTime;
 
-                    // Push the valid frequency data into the array
-                    frequency.push({
-                        frequency: freqNum,
-                        start_date: startDate, // Send as YYYY-MM-DD string
-                        end_date: endDate,     // Send as YYYY-MM-DD string
-                        start_time: startTimeFormatted, // Send as HH:MM:SS string
-                        end_time: endTimeFormatted      // Send as HH:MM:SS string
-                    });
-                }
+                     if (!startTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(startTimeFormatted)) {
+                         displayMessage(classMessageDiv, `Invalid start time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`, 'error');
+                            submitCreateClassButton.disabled = false; return;
+                     }
+                     if (!endTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(endTimeFormatted)) {
+                         displayMessage(classMessageDiv, `Invalid end time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`, 'error');
+                            submitCreateClassButton.disabled = false; return;
+                     }
 
-                // Basic check: ensure at least one frequency entry exists if required by backend
-                if (frequency.length === 0) {
-                    addClassMessageDiv.style.display = 'block';
-                    addClassMessageDiv.textContent = 'At least one frequency slot is required.';
-                    submitCreateClassButton.disabled = false; // Re-enable button
+                     frequencies.push({
+                         frequency: freqNum,
+                         start_date: startDate,
+                         end_date: endDate,
+                         start_time: startTimeFormatted,
+                         end_time: endTimeFormatted
+                     });
+                 }
+
+                 if (frequencies.length === 0) {
+                    displayMessage(classMessageDiv, 'At least one frequency slot is required.', 'error');
+                    submitCreateClassButton.disabled = false;
                     return;
                 }
 
@@ -2095,15 +2637,15 @@
                 const requestBody = {
                     title: title,
                     description: description,
-                    venue_id: venueIdString, // Send as string
-                    style_ids: style_ids,    // Send array of strings
-                    grading_ids: grading_ids, // Send array of strings
-                    price: price,            // Send string or null
+                    venue_id: venueIdString,
+                    style_ids: style_ids,
+                    grading_ids: grading_ids,
+                    price: price ? parseFloat(price) : null, // Convert price to number if not null
                     publish_mode: publishMode,
                     capacity: capacity,
-                    frequency: frequency,      // Send array of objects
+                    frequency: frequencies, // Use the corrected 'frequencies' variable name
                     notify_booking: notifyBooking,
-                    waiver_id: waiver_id,    // Send string or null
+                    waiver_id: waiver_id,
                 };
 
                 console.log("Sending class creation request:", requestBody);
@@ -2118,70 +2660,425 @@
                         body: JSON.stringify(requestBody)
                     });
 
-                    const responseData = await response.json(); // Assuming the response is JSON
+                    const responseData = await response.json();
 
-                    if (response.ok && responseData.success) { // Check both HTTP status and custom success flag
+                    if (response.ok && responseData.success) {
                         console.log("Class created successfully:", responseData);
-                        addClassMessageDiv.style.display = 'block';
-                        addClassMessageDiv.textContent = `Class created successfully! ID: ${responseData.class_id}`;
-                        addClassMessageDiv.className = 'message success'; // Add success class for styling
+                        displayMessage(classMessageDiv, responseData.message || `Class created successfully! ID: ${responseData.class_id}`, 'success');
 
-                        // Optional: Close modal after a delay or user interaction
                         setTimeout(() => {
-                            addClassModal.style.display = 'none';
-                            // Refresh the class list after creating a class
-                            fetchClasses();
-                        }, 1500); // Hide after 1.5 seconds
+                            closeModal(addClassModal);
+                            fetchAndDisplayClasses(); // Refresh the class list
+                        }, 2000); // Hide after 2 seconds
 
 
                     } else if (responseData && responseData.error_message) {
-                        // Server returned a specific error message in the JSON body
-                        addClassMessageDiv.style.display = 'block';
-                        addClassMessageDiv.textContent = `Creation failed: ${responseData.error_message}`;
-                        addClassMessageDiv.className = 'message error'; // Add error class for styling
+                        displayMessage(classMessageDiv, `Creation failed: ${responseData.error_message}`, 'error');
                         console.error("Server error creating class:", response.status, responseData.error_message);
                     }
                     else if (response.status === 400) {
-                        // Actix Web's Json extractor might return 400 for basic JSON structure errors
-                        // Or your handler might return 400 for validation errors like invalid date/time format
-                        const errorText = await response.text(); // Try to get any response text
-                        addClassMessageDiv.style.display = 'block';
-                        addClassMessageDiv.textContent = `Invalid request data: ${responseData.error_message || errorText.substring(0, 100) + '...'}`;
-                            addClassMessageDiv.className = 'message error';
+                        const errorText = await response.text();
+                        displayMessage(classMessageDiv, `Invalid request data: ${responseData.error_message || errorText.substring(0, 100) + '...'}`, 'error');
                         console.error("Bad request creating class:", response.status, errorText);
 
                     }
                     else if (response.status === 401 || response.status === 403) {
-                        // Authentication/Authorization error
-                        addClassMessageDiv.style.display = 'block';
-                        addClassMessageDiv.textContent = 'Error: You are not authorized to create classes.';
-                        addClassMessageDiv.className = 'message error';
+                        displayMessage(classMessageDiv, 'Error: You are not authorized to create classes.', 'error');
                         console.error("Authorization error creating class:", response.status);
                     }
                     else {
-                        // Other errors (e.g., 500 Internal Server Error from database issues)
-                        // The backend handler converts AppError to 500 ActixError
-                        const errorText = await response.text(); // Try to get any response text
-                        addClassMessageDiv.style.display = 'block';
-                        addClassMessageDiv.textContent = `Error creating class: ${response.status} - ${responseData.error_message || errorText.substring(0, 100) + '...'}`;
-                        addClassMessageDiv.className = 'message error';
+                        const errorText = await response.text();
+                         displayMessage(classMessageDiv, `Error creating class: ${response.status} - ${responseData.error_message || errorText.substring(0, 100) + '...'}` , 'error');
                         console.error("Error creating class:", response.status, errorText);
                     }
 
                 } catch (error) {
-                    // Network errors etc.
-                    addClassMessageDiv.style.display = 'block';
-                    addClassMessageDiv.textContent = 'Network error submitting class creation.';
-                    addClassMessageDiv.className = 'message error';
+                    displayMessage(classMessageDiv, 'Network error submitting class creation.', 'error');
                     console.error("Fetch error for class creation:", error);
                 } finally {
-                    // Always re-enable the submit button
                     submitCreateClassButton.disabled = false;
                 }
+            });
+
+
+             // Submit Edit Class Form
+            submitEditClassButton.addEventListener('click', async () => {
+                 editClassMessageDiv.style.display = 'none';
+                 editClassMessageDiv.textContent = '';
+                 editClassMessageDiv.className = 'message text-center';
+                 submitEditClassButton.disabled = true;
+
+                const classId = editClassIdInput.value;
+                const title = editClassTitleInput.value.trim();
+                const description = editClassDescriptionInput.value.trim();
+                const venue_id = editClassVenueSelect.value.trim();
+                const style_ids_select = editClassStyleSelect;
+                const style_ids = Array.from(style_ids_select.selectedOptions).map(option => option.value.trim()).filter(id => id.length > 0);
+                const grading_ids_string = editClassGradingIdsInput.value.trim();
+                const priceString = editClassPriceInput.value.trim();
+                const publish_mode = parseInt(editClassPublishModeInput.value, 10);
+                const capacity = parseInt(editClassCapacityInput.value, 10);
+                const notify_booking = editClassNotifyBookingCheckbox.checked;
+                const waiver_id_string = editClassWaiverIdInput.value.trim();
+
+
+                // --- 2. Validate and Format Complex Fields (Similar to create) ---
+
+                 if (!title || !description || !venue_id || style_ids.length === 0 || isNaN(publish_mode) || isNaN(capacity)) {
+                     displayMessage(editClassMessageDiv, 'Please fill in all required fields (Title, Description, Venue, Styles, Publish Mode, Capacity).', 'error');
+                     submitEditClassButton.disabled = false;
+                     return;
+                 }
+                // Basic format validation for UUIDs
+                 if (venue_id && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(venue_id)) {
+                    displayMessage(editClassMessageDiv, 'Invalid Venue ID format.', 'error');
+                    submitEditClassButton.disabled = false;
+                    return;
+                 }
+                 if (style_ids.some(id => !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id))) {
+                      displayMessage(editClassMessageDiv, 'One or more Style IDs have an invalid UUID format.', 'error');
+                      submitEditClassButton.disabled = false;
+                      return;
+                  }
+
+
+                const grading_ids = grading_ids_string.split(',').map(id => id.trim()).filter(id => id.length > 0);
+                if (grading_ids.length > 0 && grading_ids.some(id => !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id))) {
+                    displayMessage(editClassMessageDiv, 'One or more Grading IDs have an invalid UUID format.', 'error');
+                    submitEditClassButton.disabled = false;
+                    return;
+                }
+
+                const price = priceString === '' ? null : priceString;
+                 if (price !== null && isNaN(parseFloat(price))) {
+                     displayMessage(editClassMessageDiv, 'Invalid Price format. Must be a number.', 'error');
+                     submitEditClassButton.disabled = false;
+                     return;
+                 }
+
+                const waiver_id = waiver_id_string === '' ? null : waiver_id_string;
+                 if (waiver_id !== null && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(waiver_id_string)) {
+                     displayMessage(editClassMessageDiv, 'Invalid Waiver ID format. Expected UUID.', 'error');
+                     submitEditClassButton.disabled = false;
+                     return;
+                 }
+
+
+                const frequencyEntries = editFrequencyContainer.querySelectorAll('.frequency-entry');
+                const frequencies = [];
+                for (const entry of frequencyEntries) {
+                    const id = entry.dataset.id;
+
+                    const freqNum = parseInt(entry.querySelector('[id$="-frequency"]').value, 10);
+                    const startDate = entry.querySelector('[id$="-start-date"]').value;
+                    const endDate = entry.querySelector('[id$="-end-date"]').value;
+                    const startTime = entry.querySelector('[id$="-start-time"]').value;
+                    const endTime = entry.querySelector('[id$="-end-time"]').value;
+
+                    // Basic frequency validation
+                     if (isNaN(freqNum) || freqNum <= 0) {
+                         displayMessage(editClassMessageDiv, `Invalid frequency number for entry ID ${id}. Must be a positive integer.`, 'error');
+                         submitEditClassButton.disabled = false; return;
+                     }
+                     if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+                         displayMessage(editClassMessageDiv, `Invalid start date for frequency entry ID ${id}. Expected YYYY-MM-DD.`, 'error');
+                         submitEditClassButton.disabled = false; return;
+                     }
+                     if (!endDate || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+                         displayMessage(editClassMessageDiv, `Invalid end date for frequency entry ID ${id}. Expected YYYY-MM-DD.`, 'error');
+                         submitEditClassButton.disabled = false; return;
+                     }
+
+                    const startTimeFormatted = startTime.includes(':') && startTime.split(':').length <= 2 ? startTime + ':00' : startTime;
+                    const endTimeFormatted = endTime.includes(':') && endTime.split(':').length <= 2 ? endTime + ':00' : endTime;
+
+                     if (!startTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(startTimeFormatted)) {
+                         displayMessage(editClassMessageDiv, `Invalid start time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`, 'error');
+                         submitEditClassButton.disabled = false; return;
+                     }
+                     if (!endTimeFormatted || !/^\d{2}:\d{2}:\d{2}$/.test(endTimeFormatted)) {
+                         displayMessage(editClassMessageDiv, `Invalid end time format for frequency entry ID ${id}. Expected HH:MM or HH:MM:SS.`, 'error');
+                         submitEditClassButton.disabled = false; return;
+                     }
+
+                     frequencies.push({
+                         frequency: freqNum,
+                         start_date: startDate,
+                         end_date: endDate,
+                         start_time: startTimeFormatted,
+                         end_time: endTimeFormatted
+                     });
+                 }
+
+                 if (frequencies.length === 0) {
+                    displayMessage(editClassMessageDiv, 'At least one frequency slot is required.', 'error');
+                    submitEditClassButton.disabled = false;
+                    return;
+                }
+
+
+                // --- 3. Construct the JSON request body ---
+                const requestBody = {
+                    class_id: classId,
+                    title: title,
+                    description: description,
+                    venue_id: venue_id,
+                    style_ids: style_ids,
+                    grading_ids: grading_ids,
+                    price: price ? parseFloat(price) : null,
+                    publish_mode: publish_mode,
+                    capacity: capacity,
+                    frequency: frequencies, // Use the corrected 'frequencies' variable name
+                    notify_booking: notify_booking,
+                    waiver_id: waiver_id,
+                };
+
+                // console.log("Sending class update request:", requestBody);
+
+                // --- 4. Send the PUT/PATCH request to the backend ---
+                 try {
+                     const response = await fetch(`/api/class/update`, { // Adjust endpoint
+                         method: 'PUT', // Or 'PATCH' depending on your API design
+                         headers: {
+                             'Content-Type': 'application/json',
+                         },
+                         body: JSON.stringify(requestBody)
+                     });
+
+                     const responseData = await response.json();
+
+                     if (response.ok && responseData.success) {
+                         console.log("Class updated successfully:", responseData);
+                         displayMessage(editClassMessageDiv, responseData.message || 'Class updated successfully!', 'success');
+
+                         setTimeout(() => {
+                             closeModal(editClassModal);
+                             fetchAndDisplayClasses(); // Refresh the class list
+                         }, 2000); // Hide after 2 seconds
+
+
+                     } else if (responseData && responseData.error_message) {
+                         displayMessage(editClassMessageDiv, `Update failed: ${responseData.error_message}`, 'error');
+                         console.error("Server error updating class:", response.status, responseData.error_message);
+                     }
+                      else if (response.status === 400) {
+                          const errorText = await response.text();
+                          displayMessage(editClassMessageDiv, `Invalid request data: ${responseData.error_message || errorText.substring(0, 100) + '...'}`, 'error');
+                          console.error("Bad request updating class:", response.status, errorText);
+                      }
+                      else if (response.status === 401 || response.status === 403) {
+                          displayMessage(editClassMessageDiv, 'Error: You are not authorized to update classes.', 'error');
+                           console.error("Authorization error updating class:", response.status);
+                      }
+                     else {
+                         const errorText = await response.text();
+                         displayMessage(editClassMessageDiv, `Error updating class: ${response.status} - ${responseData.error_message || errorText.substring(0, 100) + '...'}` , 'error');
+                         console.error("Error updating class:", response.status, errorText);
+                     }
+
+                 } catch (error) {
+                     displayMessage(editClassMessageDiv, 'Network error submitting class update.', 'error');
+                     console.error("Fetch error for class update:", error);
+                 } finally {
+                     submitEditClassButton.disabled = false;
+                 }
+            });
+
+
+             // Function to fetch class data for editing and populate the modal
+            async function fetchClassForEdit(classId) {
+                 editClassMessageDiv.textContent = '';
+                 editClassMessageDiv.className = 'message text-center';
+                 editClassMessageDiv.style.display = 'none';
+
+                 try {
+                    const response = await fetch('/api/class/get', { // Adjust endpoint
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ class_id: classId })
+                    });
+
+                    //  const response = await fetch(`/api/class/${classId}`); // Adjust endpoint to get a single class by ID
+                     const result = await response.json(); // Assuming backend returns { success: true, class: {...} }
+
+                     if (result.success && result.class) {
+                         const cls = result.class;
+                         // Populate the edit modal form
+                         editClassIdInput.value = cls.id;
+                         editClassTitleInput.value = cls.title || '';
+                         editClassDescriptionInput.value = cls.description || '';
+
+                         // Populate venue and style selects - need to fetch available venues/styles first
+                         await fetchVenuesForSelect(editClassVenueSelect, cls.venue_id);
+                         await fetchStylesForSelect(editClassStyleSelect, cls.style_ids); // Pass array of selected style IDs
+
+                         editClassGradingIdsInput.value = cls.grading_ids ? cls.grading_ids.join(', ') : '';
+                         editClassPriceInput.value = cls.price !== undefined && cls.price !== null ? parseFloat(cls.price) : '';
+                         editClassPublishModeInput.value = cls.publish_mode !== undefined ? cls.publish_mode : 0;
+                         editClassCapacityInput.value = cls.capacity !== undefined ? cls.capacity : 10;
+
+                         // Populate frequencies for edit
+                         editFrequencyContainer.innerHTML = ''; // Clear existing frequencies
+                         if (cls.frequencies && cls.frequencies.length > 0) {
+                             cls.frequencies.forEach(freq => {
+                                 editFrequencyContainer.innerHTML += createFrequencyEntryHTML(freq, true); // Pass true for edit mode
+                             });
+                         } else {
+                             // Add an initial empty frequency slot if none exist
+                              editFrequencyContainer.innerHTML += createFrequencyEntryHTML({}, true);
+                         }
+
+
+                         editClassNotifyBookingCheckbox.checked = cls.notify_booking || false;
+                         editClassWaiverIdInput.value = cls.waiver_id || '';
+
+                         // Show the edit modal
+                         editClassModal.style.display = 'block';
+
+                     } else {
+                         alert('Error fetching class for editing: ' + (result.error_message || 'Unknown error'));
+                         console.error('Error fetching class for editing:', result);
+                     }
+                 } catch (error) {
+                     console.error('Fetch error fetching class for editing:', error);
+                     alert('Network error fetching class for editing.');
+                 }
             }
 
 
-        }
+             // Function to fetch and display venue info in the modal
+            async function fetchAndDisplayVenueInfo(venueId) {
+                venueInfoContentDiv.innerHTML = '<p class="text-gray-600 italic">Loading venue information...</p>';
+                venueInfoModal.style.display = 'block';
+
+                var venue = get_cached_value("venue", venueId);
+                if (venue == null)
+                {
+                    try {
+                        const response = await fetch('/api/venue/get', { // Adjust endpoint
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ venue_id: venueId })
+                        });
+
+                        const result = await response.json(); // Assuming backend returns { success: true, venue: {...} }
+
+                        if (result.success && result.venue) {
+                            add_cached_value("venue", result.venue.id, result.venue); // Cache the venue ID and title
+                        } else {
+                            venueInfoContentDiv.innerHTML = `<p class="text-red-600">Error loading venue information: ${result.error_message || 'Unknown error'}</p>`;
+                        }
+                    } catch (error) {
+                        console.error('Error fetching venue info:', error);
+                        venueInfoContentDiv.innerHTML = `<p class="text-red-600">Failed to connect to the server to load venue info.</p>`;
+                    }
+                }
+
+                venue = get_cached_value("venue", venueId);
+                if (venue == null)
+                {
+                    return;
+                }
+
+                venueInfoContentDiv.innerHTML = `
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">${venue.title}</h3>
+                    <p class="text-gray-700 mb-2"><strong class="font-medium">Description:</strong> ${venue.description || 'N/A'}</p>
+                    <p class="text-gray-700 mb-2"><strong class="font-medium">Address:</strong> ${venue.address || 'N/A'}, ${venue.suburb || ''}, ${venue.state || ''} ${venue.postcode || ''}, ${venue.country || ''}</p>
+                    <p class="text-gray-700 mb-4"><strong class="font-medium">Contact Phone:</strong> ${venue.contact_phone || 'N/A'}</p>
+
+                    ${venue.latitude && venue.longitude ?
+                        `<div class="map-container rounded-lg overflow-hidden shadow-md mt-4">
+                            <iframe
+                                loading="lazy"
+                                width="100%"
+                                height="300"
+                                frameborder="0"
+                                scrolling="no"
+                                marginheight="0"
+                                marginwidth="0"
+                                src="https://www.openstreetmap.org/export/embed.html?bbox=${parseFloat(venue.longitude) - 0.005},${parseFloat(venue.latitude) - 0.005},${parseFloat(venue.longitude) + 0.005},${parseFloat(venue.latitude) + 0.005}&amp;layer=mapnik&amp;marker=${venue.latitude},${venue.longitude}"
+                                style="border: 1px solid black"
+                            ></iframe>
+                            <br/><small><a href="https://www.openstreetmap.org/?mlat=${venue.latitude}&amp;mlon=${venue.longitude}#map=15/${venue.latitude}/${venue.longitude}" target="_blank" class="text-blue-600 hover:underline">View Larger Map</a></small>
+                        </div>
+                        <p class="text-sm text-gray-600 italic mt-2 text-center">Map data © OpenStreetMap contributors.</p>
+                        `
+                        : '<p class="text-gray-600 italic">Map location not available.</p>'}
+
+                `;
+            }
+
+
+            // Helper function to display messages with Tailwind classes
+            function displayMessage(element, message, type) {
+                 element.textContent = message;
+                 element.className = `mt-4 text-center text-sm`; // Reset classes first
+                 if (type === 'success') {
+                     element.classList.add('text-green-600');
+                 } else if (type === 'error') {
+                     element.classList.add('text-red-600');
+                 } else {
+                      element.classList.add('text-gray-700'); // Default color
+                 }
+                 element.style.display = 'block'; // Ensure it's visible
+            }
+
+
+            // --- Initial Load / Event Attachments ---
+
+            // Fetch filters (venues and styles) when the DOM is ready
+            fetchVenuesForSelect(classFilterVenue);
+            fetchStylesForSelect(classFilterStyle);
+
+            // Attach event listener for applying filters
+             applyFiltersButton.addEventListener('click', () => {
+                 fetchAndDisplayClasses(); // Refetch classes with current filters
+             });
+
+             // Handle Join by Code button click
+            joinByCodeButton.addEventListener('click', async () => {
+                const classCode = classCodeInput.value.trim();
+                joinByCodeMessageDiv.textContent = ''; // Clear previous message
+                joinByCodeMessageDiv.className = 'mt-2 text-center text-gray-700 text-sm';
+
+
+                if (!classCode) {
+                     displayMessage(joinByCodeMessageDiv, 'Please enter a class code.', 'error');
+                     return;
+                }
+
+                 console.log('Attempting to join class with code:', classCode);
+
+                 try {
+                     const response = await fetch('/api/class/join_by_code', { // Adjust endpoint
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ code: classCode })
+                     });
+
+                     const result = await response.json();
+
+                     if (result.success) {
+                         displayMessage(joinByCodeMessageDiv, result.message || 'Successfully joined class!', 'success');
+                          classCodeInput.value = ''; // Clear input
+
+                         // Optionally, refresh the class list to reflect the change
+                         fetchAndDisplayClasses();
+
+                     } else {
+                         displayMessage(joinByCodeMessageDiv, result.error_message || 'Error joining class by code.', 'error');
+                     }
+
+                 } catch (error) {
+                     console.error('Fetch error joining class by code:', error);
+                      displayMessage(joinByCodeMessageDiv, 'Failed to connect to the server.', 'error');
+                 }
+            });
+
+
+
+
+        // }
 
         async function fetchClasses() {
              const classListDiv = document.getElementById('class-list');

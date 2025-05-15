@@ -3,7 +3,7 @@ pub mod handlers {
     use argon2::password_hash;
     use std::sync::Arc;
     use uuid::Uuid;
-    use crate::state::StoreStateManager;
+    use crate::{api::{GetClassRequest, GetClassResponse}, state::StoreStateManager};
     // use crate::error::AppError;
     use crate::api::{
         LoginRequest, LoginResponse, CreateUserRequest, CreateUserResponse, ContactForm,
@@ -13,7 +13,7 @@ pub mod handlers {
         CreateClassRequest, CreateClassResponse, ClassFrequency, ClassFrequencyRequest, 
         ClassData, CreateVenueRequest, CreateVenueResponse, VenueData, CreateStyleRequest, CreateStyleResponse, StyleData,
         ForgottenPasswordRequest, ForgottenPasswordResponse, ResetPasswordQuery, ResetPasswordResponse, ResetPasswordRequest,
-        SignupResponse, SignupRequest, VerifyAccountQuery,
+        SignupResponse, SignupRequest, VerifyAccountQuery, GetVenueRequest, GetVenueResponse
     };
     use chrono::{NaiveDate, NaiveTime, Utc};
     use bigdecimal::BigDecimal;
@@ -774,11 +774,11 @@ pub mod handlers {
 
         // 3. Call the database function to create the class and related entries
         let create_result: AppResult<()> = state_manager.db.create_new_class(
-            creator_user_id,
-            class_id, // Pass the generated class_id
-            req_data.title,
-            req_data.description,
-            req_data.venue_id,
+            &creator_user_id,
+            &class_id, // Pass the generated class_id
+            &req_data.title,
+            &req_data.description,
+            &req_data.venue_id,
             &req_data.style_ids, // Pass slices
             &req_data.grading_ids, // Pass slices
             price,
@@ -815,19 +815,12 @@ pub mod handlers {
     #[get("/api/class/get_list")] // Define the GET endpoint path
     pub async fn get_class_list_handler(
         state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
-        _user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
         // query_params: Query<GetClassesQueryParams>, // Extract query parameters from the URL
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
 
-        // The LoggedUser extractor handles the authentication check.
-        // If authentication fails, Actix Web will return an Unauthorized error
-        // before the handler body executes. The _user variable is unused
-        // if the user_id isn't needed for filtering *this* specific list endpoint.
-
-        // let filters = query_params.into_inner(); // Extract the query parameter struct
-
-        // tracing::info!("Received request for class list with filters: only_future={}, publish_mode={:?}",
-        //             filters.only_future, filters.publish_mode);
+        let auth_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
 
         // Call the database function to get classes based on the provided filters
         let classes_result: AppResult<Vec<ClassData>> = state_manager.db.get_classes(
@@ -852,6 +845,56 @@ pub mod handlers {
         }
     }
     
+
+    // --- Get Class List Handler ---
+    #[post("/api/class/get")] // Define the GET endpoint path
+    pub async fn get_class_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+        req: web::Json<GetClassRequest>, // Extract query parameters from the URL
+    ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
+
+        let auth_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+
+        let class_id = req.class_id; // Extract class_id from query parameters
+
+        // Call the database function to get classes based on the provided filters
+        let class_result: AppResult<Option<ClassData>> = state_manager.db.get_class(&class_id).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
+
+        // Handle the result of the database operation explicitly
+        match class_result {
+            Ok(class) => {
+                // Database function succeeded, returns a Vec<ClassData> (could be empty)
+                // tracing::info!("Successfully fetched {} classes.", classes.len());
+                // Return the vector of ClassData as a JSON array with 200 OK status
+                match class {
+                    Some(class_data) => {
+                        Ok(HttpResponse::Ok().json(GetClassResponse {
+                            success: true,
+                            class: Some(class_data),
+                            error_message: None,
+                        }))
+                    },
+                    None => {
+                        Ok(HttpResponse::Ok().json(GetClassResponse {
+                            success: false,
+                            class: None,
+                            error_message: Some("Class does not exist".to_string()),
+                        }))
+                    }
+                }
+
+            },
+            Err(app_err) => {
+                // A database error (AppError) occurred
+                tracing::error!("Database error fetching class list: {:?}", app_err);
+                // Convert the AppError into an ActixError representing a 500 Internal Server Error
+                Err(ErrorInternalServerError(app_err))
+            }
+        }
+    }
+
 
     // Create Venue
     #[post("/api/venue/create")]
@@ -974,6 +1017,63 @@ pub mod handlers {
             }
         }
     }
+
+
+    // Handler to get a single venue by ID
+    #[post("/api/venue/get")]
+    pub async fn get_venue_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser, // Authenticate the request
+        req: web::Json<GetVenueRequest>, // Extract JSON request body
+    ) -> Result<HttpResponse, ActixError> { // Handler returns ActixResult<HttpResponse>
+        // The LoggedUser extractor handles the authentication check.
+        // If authentication fails, Actix Web will return an Unauthorized error (401)
+        // before the handler body executes.
+
+        let creator_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+
+        let venue_id = req.venue_id; // Extract the UUID from the path
+
+        // tracing::info!("Fetching venue with ID: {}", venue_id);
+
+        // Call the database function to get the venue by ID
+        let venue_result: AppResult<Option<VenueData>> = state_manager.db.get_venue(&venue_id).await;
+
+        // Handle the result of the database operation
+        match venue_result {
+            Ok(Some(venue)) => {
+                // Database function succeeded and found the venue
+                tracing::info!("Successfully fetched venue: {}", venue_id);
+                // Return the VenueData as JSON with 200 OK status
+                Ok(HttpResponse::Ok().json(GetVenueResponse {
+                    success: true,
+                    venue: Some(venue),
+                    error_message: None,
+                }))
+            },
+            Ok(None) => {
+                // Database function succeeded but the venue was not found
+                // tracing::warn!("Venue not found with ID: {}", venue_id);
+                // Return a 404 Not Found error
+                // Err(ErrorNotFound(format!("Venue with ID {} not found", venue_id)))
+                Ok(HttpResponse::Ok().json(GetVenueResponse {
+                    success: false,
+                    venue: None,
+                    error_message: Some("No venue found with this ID.".to_string()),
+                }))
+
+            },
+            Err(app_err) => {
+                // A database error (AppError) occurred
+                tracing::error!("Database error fetching venue {}: {:?}", venue_id, app_err);
+                // Convert the AppError into an ActixError representing a 500 Internal Server Error
+                Err(ErrorInternalServerError(app_err))
+            }
+        }
+    }
+
+
 
 
     // Create style

@@ -839,7 +839,7 @@ impl ScyllaConnector {
 
 
     // Function to create a new waiver and make it current
-    pub async fn create_new_class(&self, creator_user_id: Uuid, class_id: Uuid, title: String, description: String, venue_id: Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequency>, notify_booking: bool, waiver_id: Option<Uuid>) -> AppResult<()> {
+    pub async fn create_new_class(&self, creator_user_id: &Uuid, class_id: &Uuid, title: &String, description: &String, venue_id: &Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequency>, notify_booking: bool, waiver_id: Option<Uuid>) -> AppResult<()> {
         // Get current timestamp
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -984,10 +984,10 @@ impl ScyllaConnector {
         return Ok(classes);
     }
 
-    pub async fn get_venue(&self, venue_id: Uuid) -> AppResult<Option<VenueData>> {
+    pub async fn get_venue(&self, venue_id: &Uuid) -> AppResult<Option<VenueData>> {
         let result = self.session
             .query_unpaged(
-                "SELECT title, description FROM mma.venue WHERE venue_id = ?",
+                "SELECT venue_id, title, description, address, suburb, postcode, state, country, latitude, longitude, contact_phone FROM mma.venue WHERE venue_id = ?",
                 (venue_id,),
             )
             .await?
@@ -1002,6 +1002,154 @@ impl ScyllaConnector {
             return Ok(Some(row));
         }
         return Ok(None); // Venue_id not found
+    }
+
+    pub async fn get_class(&self, venue_id: &Uuid) -> AppResult<Option<ClassData>> {
+        let result = self.session
+        .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description FROM mma.class where class_id = ?", (venue_id, )) // Pass the query string and bound values
+        .await?
+        .into_rows_result()?;
+
+        let mut class: Option<ClassData> = None;
+        for row in result.rows::<ClassDataRow>()?
+        {
+            let row = row?;
+            // Successfully retrieved a row. Now extract the columns.
+            // if publish_mode_filter.is_none() || publish_mode_filter == Some(row.publish_mode) {
+
+            class = Some(ClassData {
+                class_id: row.class_id,
+                venue_id: row.venue_id,
+                waiver_id: row.waiver_id,
+                capacity: row.capacity,
+                publish_mode: row.publish_mode,
+                price: row.price,
+                notify_booking: row.notify_booking,
+                title: row.title,
+                description: row.description,
+                frequency: Vec::new(), // Initialize with an empty vector
+                styles: Vec::new(), // Initialize with an empty vector
+                grades: Vec::new(), // Initialize with an empty vector
+            });
+            // classes.push(class_data);
+
+            // } 
+        }
+        match class {
+            Some(ref mut c) => {
+                let class_id = c.class_id;
+                let result = self.session
+                    .query_unpaged(
+                        "SELECT style_id FROM mma.class_styles WHERE class_id = ?",
+                        (class_id,),
+                    )
+                    .await?
+                    .into_rows_result()?;
+    
+                for row in result.rows()?
+                {
+                    let (style_id, ): (Uuid,) = row?;
+                    c.styles.push(style_id);
+                }
+    
+                let result = self.session
+                    .query_unpaged(
+                        "SELECT grade_id FROM mma.class_grades WHERE class_id = ?",
+                        (class_id,),
+                    )
+                    .await?
+                    .into_rows_result()?;
+    
+                for row in result.rows()?
+                {
+                    let (grade_id, ): (Uuid,) = row?;
+                    c.styles.push(grade_id);
+                }
+    
+                let result = self.session
+                    .query_unpaged(
+                        "SELECT frequency, start_date, end_date, start_time, end_time FROM mma.class_frequency WHERE class_id = ?",
+                        (class_id,),
+                    )
+                    .await?
+                    .into_rows_result()?;
+    
+                for row in result.rows()?
+                {
+                    let ( frequency, start_date, end_date, start_time, end_time) : ( i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row?;
+                    let class_frequency = ClassFrequency {
+                        frequency: frequency,
+                        start_date: start_date,
+                        end_date: end_date,
+                        start_time: start_time,
+                        end_time: end_time,
+                    };
+                    c.frequency.push(class_frequency);
+                }
+                return Ok(Some(c.clone()));
+            }
+            None => {
+                // println!("No class found with ID: {}", class_id);
+                return Ok(None);
+            }
+        }
+
+        // for class in &mut classes {
+        //     let class_id = class.class_id;
+        //     let result = self.session
+        //         .query_unpaged(
+        //             "SELECT style_id FROM mma.class_styles WHERE class_id = ?",
+        //             (class_id,),
+        //         )
+        //         .await?
+        //         .into_rows_result()?;
+
+        //     for row in result.rows()?
+        //     {
+        //         let (style_id, ): (Uuid,) = row?;
+        //         class.styles.push(style_id);
+        //     }
+
+        //     let result = self.session
+        //         .query_unpaged(
+        //             "SELECT grade_id FROM mma.class_grades WHERE class_id = ?",
+        //             (class_id,),
+        //         )
+        //         .await?
+        //         .into_rows_result()?;
+
+        //     for row in result.rows()?
+        //     {
+        //         let (grade_id, ): (Uuid,) = row?;
+        //         class.styles.push(grade_id);
+        //     }
+
+        //     let result = self.session
+        //         .query_unpaged(
+        //             "SELECT frequency, start_date, end_date, start_time, end_time FROM mma.class_frequency WHERE class_id = ?",
+        //             (class_id,),
+        //         )
+        //         .await?
+        //         .into_rows_result()?;
+
+        //     for row in result.rows()?
+        //     {
+        //         let ( frequency, start_date, end_date, start_time, end_time) : ( i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row?;
+        //         let class_frequency = ClassFrequency {
+        //             frequency: frequency,
+        //             start_date: start_date,
+        //             end_date: end_date,
+        //             start_time: start_time,
+        //             end_time: end_time,
+        //         };
+        //         class.frequency.push(class_frequency);
+        //     }
+        // }
+        // if classes.is_empty() {
+        //     // println!("No class found with ID: {}", class_id);
+        //     return Ok(None);
+        // }
+        return Ok(None);
     }
 
     pub async fn create_new_venue(&self, creator_user_id: &Uuid, venue_id: &Uuid, title: &String, description: &Option<String>, address: &Option<String>, suburb: &Option<String>, postcode: &Option<String>) -> AppResult<()> {

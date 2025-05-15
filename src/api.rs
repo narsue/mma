@@ -374,3 +374,31 @@ pub struct VerifyAccountQuery {
     pub email: String,
     pub code: String,
 }
+
+// Query parameters struct to capture the venue ID
+#[derive(Deserialize)]
+pub struct GetVenueRequest {
+    pub venue_id: Uuid,
+}
+
+// Response structure for signup
+#[derive(Serialize)]
+pub struct GetVenueResponse {
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub venue: Option<VenueData>,
+}
+
+// Query parameters struct to capture the class ID
+#[derive(Deserialize)]
+pub struct GetClassRequest {
+    pub class_id: Uuid,
+}
+
+// Response structure for signup
+#[derive(Serialize)]
+pub struct GetClassResponse {
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub class: Option<ClassData>,
+}
