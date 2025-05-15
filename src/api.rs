@@ -10,6 +10,14 @@ pub struct SetGenericResponse {
     pub error_message: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct GenericResponse {
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub message: Option<String>,
+}
+
+
 // Transaction status update
 #[derive(Debug, Deserialize)]
 pub struct UpdateClassStatusRequest {
@@ -291,7 +299,7 @@ pub struct ClassData {
 }
 
 
-#[derive(Debug, Clone, Serialize, DeserializeRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, DeserializeRow)]
 pub struct VenueData {
     pub venue_id: Uuid,
     pub title: String,
@@ -443,3 +451,12 @@ pub struct GetClassResponse {
     pub error_message: Option<String>,
     pub class: Option<ClassData>,
 }
+
+// Response structure for signup
+#[derive(Serialize)]
+pub struct GetVenueListResponse {
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub venues: Option<Vec<VenueData>>,
+}
+

@@ -283,7 +283,6 @@
         </div>
 
         <!-- Section: Classes -->
-        <!-- Section: Classes -->
         <div id="classesSection" class="portal-section">
             <h2 class="text-2xl font-bold text-gray-900 mb-4">Classes Management</h2>
             <p class="text-gray-700 mb-6">View and manage upcoming classes.</p>
@@ -493,39 +492,60 @@
                 </div>
             </div>
 
-            <!-- Venue Info Modal (New) -->
-             <div id="venue-info-modal" class="modal">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3>Venue Information</h3>
-                        <span class="close-button">&times;</span>
-                    </div>
-                    <div class="modal-body" id="venue-info-content">
-                        <!-- Venue details and map will be loaded here -->
-                        <p>Loading venue information...</p>
-                    </div>
-                     <div class="modal-footer">
-                        <button type="button" class="cancel-button">Close</button>
-                    </div>
-                </div>
-             </div>
-
         </div>
+
+        <!-- Venue Info Modal (New) -->
+        <div id="venue-info-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Venue Information</h3>
+                    <span class="close-button">&times;</span>
+                </div>
+                <div class="modal-body" id="venue-info-content">
+                    <!-- Venue details and map will be loaded here -->
+                    <p>Loading venue information...</p>
+                </div>
+                    <div class="modal-footer">
+                    <button type="button" class="cancel-button">Close</button>
+                </div>
+            </div>
+        </div>
+
+
 
         <!-- Section: Venues -->
         <div id="venuesSection" class="portal-section">
             <h2 class="text-2xl font-bold text-gray-900 mb-4">Venues Management</h2>
             <p class="text-gray-700 mb-6">Information about different available venues.</p>
 
-            <button id="add-venue-button" class="py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200">Add New Venue</button>
+            <!-- Filter and Sort Controls for Venues -->
+            <div class="flex flex-wrap gap-4 mb-6 items-center">
+                <div>
+                    <label for="venue-search" class="block text-sm font-medium text-gray-700">Search:</label>
+                    <input type="text" id="venue-search" placeholder="Search by name, address..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="venue-sort-by" class="block text-sm font-medium text-gray-700">Sort By:</label>
+                    <select id="venue-sort-by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                        <option value="title">Name (A-Z)</option>
+                        <option value="distance">Distance</option> <!-- Requires location data in backend -->
+                        <!-- Add other sorting options -->
+                    </select>
+                </div>
+                <button id="apply-venue-filters-button" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition duration-200">Apply Filters</button>
+            </div>
+
+
+            <button id="add-venue-button" class="py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 mb-6">Add New Venue</button>
 
             <!-- Placeholder for displaying the list of venues -->
-            <div id="venue-list" class="mt-6 space-y-4">
+            <div id="venue-list" class="mt-6 space-y-6">
                 <p class="text-gray-600 italic">Loading venues...</p>
                 <!-- Venue data will be loaded here by JavaScript -->
             </div>
 
-             <!-- Add Venue Modal -->
+
+            <!-- Add Venue Modal (Remains the same) -->
             <div id="add-venue-modal" class="modal">
                 <div class="modal-content">
                     <div class="modal-header">
@@ -542,7 +562,7 @@
                                 <label for="venue-description">Description (optional):</label>
                                 <textarea id="venue-description" rows="4"></textarea>
                             </div>
-                             <div class="form-group">
+                            <div class="form-group">
                                 <label for="venue-address">Address (optional):</label>
                                 <input type="text" id="venue-address">
                             </div>
@@ -554,7 +574,7 @@
                                 <label for="venue-state">State (optional):</label>
                                 <input type="text" id="venue-state">
                             </div>
-                             <div class="form-group">
+                            <div class="form-group">
                                 <label for="venue-postcode">Postcode (optional):</label>
                                 <input type="text" id="venue-postcode">
                             </div>
@@ -570,18 +590,80 @@
                                 <label for="venue-longitude">Longitude (optional):</label>
                                 <input type="text" id="venue-longitude" placeholder="e.g., 151.2093">
                             </div>
-                             <div class="form-group">
+                            <div class="form-group">
                                 <label for="venue-contact-phone">Contact Phone (optional):</label>
                                 <input type="text" id="venue-contact-phone">
                             </div>
 
-                            <div id="create-venue-message" class="message"></div>
+                            <div id="create-venue-message" class="message text-center"></div>
 
                         </form>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="cancel-button">Cancel</button>
                         <button type="button" class="submit-button" id="submit-create-venue">Create Venue</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Venue Modal (New) -->
+            <div id="edit-venue-modal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Edit Venue</h3>
+                        <span class="close-button">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <form id="edit-venue-form">
+                            <input type="hidden" id="edit-venue-id"> <!-- Hidden field for venue ID -->
+                            <div class="form-group">
+                                <label for="edit-venue-title">Title:</label>
+                                <input type="text" id="edit-venue-title" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-venue-description">Description (optional):</label>
+                                <textarea id="edit-venue-description" rows="4"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-venue-address">Address (optional):</label>
+                                <input type="text" id="edit-venue-address">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-venue-suburb">Suburb (optional):</label>
+                                <input type="text" id="edit-venue-suburb">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-venue-state">State (optional):</label>
+                                <input type="text" id="edit-venue-state">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-venue-postcode">Postcode (optional):</label>
+                                <input type="text" id="edit-venue-postcode">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-venue-country">Country (optional):</label>
+                                <input type="text" id="edit-venue-country">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-venue-latitude">Latitude (optional):</label>
+                                <input type="text" id="edit-venue-latitude" placeholder="e.g., -33.8688">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-venue-longitude">Longitude (optional):</label>
+                                <input type="text" id="edit-venue-longitude" placeholder="e.g., 151.2093">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-venue-contact-phone">Contact Phone (optional):</label>
+                                <input type="text" id="edit-venue-contact-phone">
+                            </div>
+
+                            <div id="edit-venue-message" class="message text-center"></div>
+
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-button">Cancel</button>
+                        <button type="button" class="submit-button" id="submit-edit-venue">Save Changes</button>
                     </div>
                 </div>
             </div>
@@ -1299,7 +1381,8 @@
                     // fetchClasses();
                 }
                 if (sectionId === 'venues') {
-                    getVenues();
+                    // getVenues();
+                    fetchAndDisplayVenues(); // Fetch and display venues when this section is shown
                 }
                 if (sectionId === 'styles') {
                     getStyles();
@@ -1328,15 +1411,6 @@
                     showSection(sectionId);
                 });
             });
-
-            // Handle initial section display
-             const initialSection = window.location.hash ? window.location.hash.substring(1) : 'frontpage';
-             const validSections = Array.from(navLinks).map(link => link.getAttribute('data-section'));
-             if (validSections.includes(initialSection)) {
-                  showSection(initialSection);
-             } else {
-                 showSection('frontpage');
-             }
 
 
             // --- Load User Profile Data ---
@@ -1499,7 +1573,7 @@
                          if (response.status === 401) {
                             console.warn('Session expired while updating profile.');
                             alert('Your session has expired. Please log in again.');
-                            window.location.href = '/login';
+                            window.location.href = '/#login';
                             return;
                         }
                          const errorResult = await response.json();
@@ -1590,7 +1664,7 @@
                                   // Assume session expired or other auth issue
                                   console.warn('Session expired during password change or other authentication issue.');
                                   alert('Your session has expired or there was an authentication issue. Please log in again.');
-                                  window.location.href = '/login';
+                                  window.location.href = '/#login';
                              }
                             currentPasswordField.value = ''; // Always clear current password on 401
                              newPasswordField.value = '';
@@ -1646,12 +1720,12 @@
                     }
 
                     console.log('Logout attempt finished, redirecting...');
-                    window.location.href = '/login'; // Always redirect to login after logout attempt
+                    window.location.href = '/#login'; // Always redirect to login after logout attempt
 
                 } catch (error) {
                     console.error('Fetch error during logout:', error);
                      alert('Failed to connect to the server for logout. Attempting redirect.');
-                     window.location.href = '/login'; // Redirect even on fetch error
+                     window.location.href = '/#login'; // Redirect even on fetch error
                 }
             });
 
@@ -1661,37 +1735,53 @@
             // handleClassSection();
 
 
-            // Get elements related to adding a venue
+            // --- Venue Section Logic ---
             const addVenueButton = document.getElementById('add-venue-button');
             const addVenueModal = document.getElementById('add-venue-modal');
             const addVenueForm = document.getElementById('add-venue-form');
-            const addVenueMessageDiv = document.getElementById('create-venue-message'); // Message area in modal
-
-            // Get all close/cancel buttons for the ADD VENUE modal specifically
-            const addVenueModalCloseButtons = addVenueModal.querySelectorAll('.close-button, .cancel-button');
-
             const submitCreateVenueButton = document.getElementById('submit-create-venue');
+            const createVenueMessageDiv = document.getElementById('create-venue-message');
+            const venueListDiv = document.getElementById('venue-list'); // Assuming this exists in your HTML
 
-            // Get the div where the venue list will be displayed
-            const venueListDiv = document.getElementById('venue-list');
+            // Filter and Sort Elements for Venues
+            const venueSearchInput = document.getElementById('venue-search');
+            const venueSortBySelect = document.getElementById('venue-sort-by');
+            const applyVenueFiltersButton = document.getElementById('apply-venue-filters-button');
+
+            // Edit Venue Modal Elements
+            const editVenueModal = document.getElementById('edit-venue-modal');
+            const editVenueForm = document.getElementById('edit-venue-form');
+            const submitEditVenueButton = document.getElementById('submit-edit-venue');
+            const editVenueIdInput = document.getElementById('edit-venue-id');
+            const editVenueTitleInput = document.getElementById('edit-venue-title');
+            const editVenueDescriptionInput = document.getElementById('edit-venue-description');
+            const editVenueAddressInput = document.getElementById('edit-venue-address');
+            const editVenueSuburbInput = document.getElementById('edit-venue-suburb');
+            const editVenueStateInput = document.getElementById('edit-venue-state');
+            const editVenuePostcodeInput = document.getElementById('edit-venue-postcode');
+            const editVenueCountryInput = document.getElementById('edit-venue-country');
+            const editVenueLatitudeInput = document.getElementById('edit-venue-latitude');
+            const editVenueLongitudeInput = document.getElementById('edit-venue-longitude');
+            const editVenueContactPhoneInput = document.getElementById('edit-venue-contact-phone');
+            const editVenueMessageDiv = document.getElementById('edit-venue-message');
 
 
-
-            // Open the Add Venue modal
-            addVenueButton.onclick = function() { // *** CORRECTED BUTTON ID ***
+            // Open Add Venue Modal
+            addVenueButton.addEventListener('click', () => {
                 addVenueModal.style.display = 'block';
-                addVenueMessageDiv.style.display = 'none'; // Hide any previous message
-                addVenueMessageDiv.textContent = '';
-                addVenueForm.reset(); // Clear the form fields
-            }
+                createVenueMessageDiv.textContent = '';
+                createVenueMessageDiv.className = 'message text-center';
+                createVenueMessageDiv.style.display = 'none';
+                addVenueForm.reset();
+            });
 
 
             // Close the Add Venue modal using close buttons (X and Cancel)
-            addVenueModalCloseButtons.forEach(button => {
-                button.onclick = function() {
-                    addVenueModal.style.display = 'none';
-                }
-            });
+            // addVenueModalCloseButtons.forEach(button => {
+            //     button.onclick = function() {
+            //         addVenueModal.style.display = 'none';
+            //     }
+            // });
 
             // Close modals when clicking outside of them (Updated to handle multiple modals)
             // This function should already exist and handle multiple modals,
@@ -1699,154 +1789,407 @@
             // window.onclick = function(event) { ... }
 
 
-            // --- Submit New Venue Logic ---
-            submitCreateVenueButton.onclick = async function() {
-                addVenueMessageDiv.style.display = 'none'; // Hide previous messages
-                addVenueMessageDiv.textContent = '';
-                // Optional: Disable submit button to prevent double clicks
-                submitCreateVenueButton.disabled = true;
+            // Submit Create Venue Form
+            submitCreateVenueButton.addEventListener('click', async () => {
+                 createVenueMessageDiv.style.display = 'none';
+                 createVenueMessageDiv.textContent = '';
+                 createVenueMessageDiv.className = 'message text-center';
+                 submitCreateVenueButton.disabled = true;
 
-                // --- 1. Gather data from the form ---
-                const title = document.getElementById('venue-title').value.trim();
-                const description = document.getElementById('venue-description').value.trim();
-                const address = document.getElementById('venue-address').value.trim();
-                const suburb = document.getElementById('venue-suburb').value.trim();
-                const state = document.getElementById('venue-state').value.trim();
-                const postcode = document.getElementById('venue-postcode').value.trim();
-                const country = document.getElementById('venue-country').value.trim();
-                const latitudeString = document.getElementById('venue-latitude').value.trim();
-                const longitudeString = document.getElementById('venue-longitude').value.trim();
-                const contactPhone = document.getElementById('venue-contact-phone').value.trim();
+                 const title = document.getElementById('venue-title').value.trim();
+                 const description = document.getElementById('venue-description').value.trim();
+                 const address = document.getElementById('venue-address').value.trim();
+                 const suburb = document.getElementById('venue-suburb').value.trim();
+                 const state = document.getElementById('venue-state').value.trim();
+                 const postcode = document.getElementById('venue-postcode').value.trim();
+                 const country = document.getElementById('venue-country').value.trim();
+                 const latitudeString = document.getElementById('venue-latitude').value.trim();
+                 const longitudeString = document.getElementById('venue-longitude').value.trim();
+                 const contactPhone = document.getElementById('venue-contact-phone').value.trim();
 
+                 if (!title) {
+                     displayMessage(createVenueMessageDiv, 'Title is required.', 'error');
+                     submitCreateVenueButton.disabled = false;
+                     return;
+                 }
 
-                // --- 2. Validate and Format Complex Fields ---
+                 const formattedDescription = description === '' ? null : description;
+                 const formattedAddress = address === '' ? null : address;
+                 const formattedSuburb = suburb === '' ? null : suburb;
+                 const formattedState = state === '' ? null : state;
+                 const formattedPostcode = postcode === '' ? null : postcode;
+                 const formattedCountry = country === '' ? null : country;
+                 const formattedContactPhone = contactPhone === '' ? null : contactPhone;
 
-                // Validate required fields (simple check based on your handler logic)
-                if (!title || !description || !address || !suburb || !postcode) {
-                    addVenueMessageDiv.style.display = 'block';
-                    addVenueMessageDiv.textContent = 'Please fill in all required fields (Title, Description, Address, Suburb, Postcode).';
-                    submitCreateVenueButton.disabled = false; // Re-enable button
-                    return;
-                }
+                 const latitude = latitudeString === '' ? null : latitudeString;
+                 const longitude = longitudeString === '' ? null : longitudeString;
 
-                // Optional fields should be sent as null if empty string
-                const formattedDescription = description === '' ? null : description;
-                const formattedAddress = address === '' ? null : address;
-                const formattedSuburb = suburb === '' ? null : suburb;
-                const formattedState = state === '' ? null : state;
-                const formattedPostcode = postcode === '' ? null : postcode;
-                const formattedCountry = country === '' ? null : country;
-                const formattedContactPhone = contactPhone === '' ? null : contactPhone;
-
-                // Optional Latitude/Longitude (send as string or null - backend parses BigDecimal)
-                const latitude = latitudeString === '' ? null : latitudeString;
-                const longitude = longitudeString === '' ? null : longitudeString;
-
-                // Optional Latitude/Longitude format validation (basic numeric check if not null)
-                if (latitude !== null && isNaN(parseFloat(latitude))) {
-                    addVenueMessageDiv.style.display = 'block';
-                    addVenueMessageDiv.textContent = 'Invalid Latitude format. Must be a number.';
-                    submitCreateVenueButton.disabled = false; // Re-enable button
-                    return;
-                }
-                if (longitude !== null && isNaN(parseFloat(longitude))) {
-                    addVenueMessageDiv.style.display = 'block';
-                    addVenueMessageDiv.textContent = 'Invalid Longitude format. Must be a number.';
-                    submitCreateVenueButton.disabled = false; // Re-enable button
-                    return;
-                }
+                 if (latitude !== null && isNaN(parseFloat(latitude))) {
+                     displayMessage(createVenueMessageDiv, 'Invalid Latitude format. Must be a number.', 'error');
+                     submitCreateVenueButton.disabled = false;
+                     return;
+                 }
+                 if (longitude !== null && isNaN(parseFloat(longitude))) {
+                     displayMessage(createVenueMessageDiv, 'Invalid Longitude format. Must be a number.', 'error');
+                     submitCreateVenueButton.disabled = false;
+                     return;
+                 }
 
 
-                // --- 3. Construct the JSON request body ---
-                const requestBody = {
-                    title: title,
-                    description: formattedDescription,
-                    address: formattedAddress,
-                    suburb: formattedSuburb,
-                    state: formattedState,
-                    postcode: formattedPostcode,
-                    country: formattedCountry,
-                    latitude: latitude,       // Send string or null
-                    longitude: longitude,     // Send string or null
-                    contact_phone: formattedContactPhone,
-                };
+                 const requestBody = {
+                     title: title,
+                     description: formattedDescription,
+                     address: formattedAddress,
+                     suburb: formattedSuburb,
+                     state: formattedState,
+                     postcode: formattedPostcode,
+                     country: formattedCountry,
+                     latitude: latitude ? parseFloat(latitude) : null,
+                     longitude: longitude ? parseFloat(longitude) : null,
+                     contact_phone: formattedContactPhone,
+                 };
 
-                console.log("Sending venue creation request:", requestBody);
+                 console.log("Sending venue creation request:", requestBody);
 
-                // --- 4. Send the POST request to the backend ---
-                try {
-                    const response = await fetch('/api/venue/create', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(requestBody)
-                    });
+                 try {
+                     const response = await fetch('/api/venue/create', {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(requestBody)
+                     });
 
-                    const responseData = await response.json(); // Assuming the response is JSON
+                     const responseData = await response.json();
 
-                    // Your CreateVenueResponse has 'venue_id', not 'class_id'
-                    if (response.ok && responseData.success) { // Check both HTTP status and custom success flag
-                        console.log("Venue created successfully:", responseData);
-                        addVenueMessageDiv.style.display = 'block';
-                        addVenueMessageDiv.textContent = `Venue created successfully! ID: ${responseData.venue_id}`; // *** Corrected ID field ***
-                        addVenueMessageDiv.className = 'message success'; // Add success class for styling
+                     if (response.ok && responseData.success) {
+                         console.log("Venue created successfully:", responseData);
+                         displayMessage(createVenueMessageDiv, responseData.message || `Venue created successfully! ID: ${responseData.venue_id}`, 'success');
 
-                        // Optional: Close modal after a delay or user interaction
-                        setTimeout(() => {
-                            addVenueModal.style.display = 'none';
-                            // Refresh the venue list after creating a venue
-                            getVenues(); // *** Call fetchVenues ***
-                        }, 1500); // Hide after 1.5 seconds
+                         setTimeout(() => {
+                             closeModal(addVenueModal);
+                             fetchAndDisplayVenues(); // Refresh the venue list
+                         }, 2000);
 
 
-                    } else if (responseData && responseData.error_message) {
-                        // Server returned a specific error message in the JSON body
-                        addVenueMessageDiv.style.display = 'block';
-                        addVenueMessageDiv.textContent = `Creation failed: ${responseData.error_message}`;
-                        addVenueMessageDiv.className = 'message error'; // Add error class for styling
-                        console.error("Server error creating venue:", response.status, responseData.error_message);
-                    }
-                    else if (response.status === 400) {
-                        // Actix Web's Json extractor might return 400 for basic JSON structure errors
-                        // Or your handler might return 400 for validation errors
-                        const errorText = await response.text(); // Try to get any response text
-                        addVenueMessageDiv.style.display = 'block';
-                        // Prefer the error_message from your response if available
-                        addClassMessageDiv.textContent = `Invalid request data: ${responseData.error_message || errorText.substring(0, 100) + '...'}`; // *** Corrected message div ID ***
-                            addVenueMessageDiv.className = 'message error';
-                        console.error("Bad request creating venue:", response.status, errorText);
+                     } else if (responseData && responseData.error_message) {
+                         displayMessage(createVenueMessageDiv, `Creation failed: ${responseData.error_message}`, 'error');
+                         console.error("Server error creating venue:", response.status, responseData.error_message);
+                     }
+                     else if (response.status === 400) {
+                         const errorText = await response.text();
+                          displayMessage(createVenueMessageDiv, `Invalid request data: ${responseData.error_message || errorText.substring(0, 100) + '...'}`, 'error');
+                         console.error("Bad request creating venue:", response.status, errorText);
 
-                    }
-                    else if (response.status === 401 || response.status === 403) {
-                        // Authentication/Authorization error
-                        addVenueMessageDiv.style.display = 'block';
-                        addVenueMessageDiv.textContent = 'Error: You are not authorized to create venues.';
-                        addVenueMessageDiv.className = 'message error';
-                        console.error("Authorization error creating venue:", response.status);
-                    }
-                    else {
-                        // Other errors (e.g., 500 Internal Server Error from database issues)
-                        const errorText = await response.text();
-                        addVenueMessageDiv.style.display = 'block';
-                        // Prefer the error_message from your response if available
-                        addVenueMessageDiv.textContent = `Error creating venue: ${response.status} - ${responseData.error_message || errorText.substring(0, 100) + '...'}`;
-                        addVenueMessageDiv.className = 'message error';
-                        console.error("Error creating venue:", response.status, errorText);
-                    }
+                     }
+                     else if (response.status === 401 || response.status === 403) {
+                         displayMessage(createVenueMessageDiv, 'Error: You are not authorized to create venues.', 'error');
+                         console.error("Authorization error creating venue:", response.status);
+                     }
+                     else {
+                         const errorText = await response.text();
+                          displayMessage(createVenueMessageDiv, `Error creating venue: ${response.status} - ${responseData.error_message || errorText.substring(0, 100) + '...'}` , 'error');
+                         console.error("Error creating venue:", response.status, errorText);
+                     }
 
-                } catch (error) {
-                    // Network errors etc.
-                    addVenueMessageDiv.style.display = 'block';
-                    addVenueMessageDiv.textContent = 'Network error submitting venue creation.';
-                    addVenueMessageDiv.className = 'message error';
-                    console.error("Fetch error for venue creation:", error);
-                } finally {
-                    // Always re-enable the submit button
-                    submitCreateVenueButton.disabled = false;
-                }
+                 } catch (error) {
+                     displayMessage(createVenueMessageDiv, 'Network error submitting venue creation.', 'error');
+                     console.error("Fetch error for venue creation:", error);
+                 } finally {
+                     submitCreateVenueButton.disabled = false;
+                 }
+            });
+
+
+            // Function to fetch and display the list of venues as cards
+            async function fetchAndDisplayVenues() {
+                 venueListDiv.innerHTML = '<p class="text-gray-600 italic">Loading venues...</p>';
+
+                 // Get filter and sort parameters for venues
+                 const searchTerm = venueSearchInput.value.trim();
+                 const sortBy = venueSortBySelect.value;
+
+                 // Construct query parameters
+                 const queryParams = new URLSearchParams();
+                 if (searchTerm) queryParams.append('search', searchTerm);
+                 if (sortBy) queryParams.append('sort_by', sortBy);
+
+                 const url = `/api/venue/get_list${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+                 console.log("Fetching venues from:", url);
+
+                 try {
+                     const response = await fetch(url, { method: 'GET' });
+
+                     if (response.ok) {
+                         const result = await response.json(); // Assuming backend returns { success: true, venues: [...] }
+
+                         if (result.success && result.venues) {
+                            const venues = result.venues;
+                             if (venues.length > 0) {
+                                 let html = '';
+                                 venues.forEach(venue => {
+                                     html += `
+                                         <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
+                                             <h3 class="text-xl font-semibold text-gray-900 mb-2">${venue.title}</h3>
+                                             <p class="text-gray-700 mb-4">${venue.description || 'No description'}</p>
+
+                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
+                                                 <div>
+                                                     <p><strong class="font-medium">Address:</strong> ${venue.address || 'N/A'}, ${venue.suburb || ''}, ${venue.state || ''} ${venue.postcode || ''}, ${venue.country || ''}</p>
+                                                      <p><strong class="font-medium">Contact Phone:</strong> ${venue.contact_phone || 'N/A'}</p>
+                                                 </div>
+                                                  <div>
+                                                      ${venue.latitude && venue.longitude ?
+                                                         `<p><strong class="font-medium">Location:</strong> ${parseFloat(venue.latitude).toFixed(4)}, ${parseFloat(venue.longitude).toFixed(4)}</p>`
+                                                         : '<p><strong class="font-medium">Location:</strong> N/A</p>'}
+                                                       <p><strong class="font-medium">Distance:</strong> ${venue.distance || 'N/A'}</p> <!-- Assuming backend provides distance -->
+                                                  </div>
+                                             </div>
+
+                                              <div class="flex flex-wrap gap-3">
+                                                  <!-- Add buttons like View Details (opens venue info modal) or Edit -->
+                                                   <button class="view-venue-button py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 text-sm" data-venue-id="${venue.venue_id}">View Details</button>
+                                                  <button class="edit-venue-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-venue-id="${venue.venue_id}">Edit</button>
+                                                   <!-- Add Delete button if needed -->
+                                              </div>
+                                         </div>
+                                     `;
+                                 });
+                                 venueListDiv.innerHTML = html;
+
+                                // Attach event listeners after rendering
+                                attachVenueButtonListeners(); // Attach listeners to Edit button
+                                attachViewVenueButtonListeners(); // Attach listeners to View Details button
+
+                             } else {
+                                 venueListDiv.innerHTML = '<p class="text-gray-600 italic">No venues found matching your criteria.</p>';
+                             }
+                         } else {
+                              // Handle cases where response is OK but success is false (backend level error)
+                              venueListDiv.innerHTML = `<p class="text-red-600">Error loading venues: ${result.error_message || 'Unknown error'}</p>`;
+                              console.error('Backend success: false for venues:', result.error_message);
+                         }
+
+                     } else if (response.status === 401 || response.status === 403) {
+                          venueListDiv.innerHTML = '<p class="text-red-600">Error: You are not authorized to view venues.</p>';
+                         console.error("Authorization error fetching venues:", response.status);
+                     }
+                     else {
+                          // Handle other HTTP errors
+                          const errorText = await response.text();
+                           venueListDiv.innerHTML = `<p class="text-red-600">Error loading venues: ${response.status} - ${errorText.substring(0, 100)}...</p>`;
+                          console.error("Error fetching venues:", response.status, errorText);
+                     }
+                 } catch (error) {
+                     // Handle network errors
+                     venueListDiv.innerHTML = `<p class="text-red-600">Network error loading venues.</p>`;
+                     console.error("Fetch error for venue list:", error);
+                 }
+             }
+
+            // Function to attach event listeners to dynamically created venue buttons
+            function attachVenueButtonListeners() {
+                 // Edit Button Listener
+                 venueListDiv.querySelectorAll('.edit-venue-button').forEach(button => {
+                     button.addEventListener('click', async () => {
+                         const venueId = button.getAttribute('data-venue-id');
+                         console.log('Attempting to edit venue:', venueId);
+                         // Fetch venue data and open edit modal
+                         fetchVenueForEdit(venueId);
+                     });
+                 });
+                 // Add Delete button listener here if needed
             }
 
+             // Function to attach event listeners to View Details buttons
+             function attachViewVenueButtonListeners() {
+                  venueListDiv.querySelectorAll('.view-venue-button').forEach(button => {
+                      button.addEventListener('click', async () => {
+                          const venueId = button.getAttribute('data-venue-id');
+                          console.log('Attempting to view venue details for:', venueId);
+                          fetchAndDisplayVenueInfo(venueId); // Reuse the venue info modal logic
+                      });
+                  });
+             }
+
+
+             // Function to fetch venue data for editing and populate the modal
+            async function fetchVenueForEdit(venueId) {
+                 editVenueMessageDiv.textContent = '';
+                 editVenueMessageDiv.className = 'message text-center';
+                 editVenueMessageDiv.style.display = 'none';
+
+                 try {
+                     // Use POST request body for venue ID
+                     const response = await fetch('/api/venue/get', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ venue_id: venueId })
+                     });
+
+                     if (response.ok) {
+                         const result = await response.json(); // Assuming backend returns { success: true, venue: {...} } OR just the venue data
+
+                         if (!result.success) {
+                                console.error('Backend success: false fetching venue for editing:', result.error_message || 'Invalid data received');
+                                alert('Error fetching venue for editing: ' + (result.error_message || 'Invalid data received'));
+                                return;
+                         }
+                        const venue = result.venue; // Adjust based on actual API response structure
+
+                         if (venue && venue.venue_id) {
+                             // Populate the edit modal form
+                             editVenueIdInput.value = venue.venue_id;
+                             editVenueTitleInput.value = venue.title || '';
+                             editVenueDescriptionInput.value = venue.description || '';
+                             editVenueAddressInput.value = venue.address || '';
+                             editVenueSuburbInput.value = venue.suburb || '';
+                             editVenueStateInput.value = venue.state || '';
+                             editVenuePostcodeInput.value = venue.postcode || '';
+                             editVenueCountryInput.value = venue.country || '';
+                             editVenueLatitudeInput.value = venue.latitude !== null ? parseFloat(venue.latitude) : '';
+                             editVenueLongitudeInput.value = venue.longitude !== null ? parseFloat(venue.longitude) : '';
+                             editVenueContactPhoneInput.value = venue.contact_phone || '';
+
+                             // Show the edit modal
+                             editVenueModal.style.display = 'block';
+
+                         } else {
+                              alert('Error fetching venue for editing: ' + (result.error_message || 'Invalid data received'));
+                              console.error('Backend success: false fetching venue for editing:', result.error_message || 'Invalid data received');
+                         }
+
+                     } else if (response.status === 404) {
+                         alert('Venue not found.');
+                         console.warn('Venue not found for editing:', venueId);
+                     }
+                     else if (response.status === 401 || response.status === 403) {
+                         alert('You are not authorized to edit this venue.');
+                          console.error("Authorization error fetching venue for editing:", response.status);
+                     }
+                     else {
+                         const errorText = await response.text();
+                         alert(`Error fetching venue for editing: ${response.status}`);
+                         console.error("Error fetching venue for editing:", response.status, errorText);
+                     }
+                 } catch (error) {
+                     console.error('Fetch error fetching venue for editing:', error);
+                     alert('Network error fetching venue for editing.');
+                 }
+            }
+
+
+            // Submit Edit Venue Form
+            submitEditVenueButton.addEventListener('click', async () => {
+                 editVenueMessageDiv.style.display = 'none';
+                 editVenueMessageDiv.textContent = '';
+                 editVenueMessageDiv.className = 'message text-center';
+                 submitEditVenueButton.disabled = true;
+
+                const venueId = editVenueIdInput.value;
+                const title = editVenueTitleInput.value.trim();
+                const description = editVenueDescriptionInput.value.trim();
+                const address = editVenueAddressInput.value.trim();
+                const suburb = editVenueSuburbInput.value.trim();
+                const state = editVenueStateInput.value.trim();
+                const postcode = editVenuePostcodeInput.value.trim();
+                const country = editVenueCountryInput.value.trim();
+                const latitudeString = editVenueLatitudeInput.value.trim();
+                const longitudeString = editVenueLongitudeInput.value.trim();
+                const contactPhone = editVenueContactPhoneInput.value.trim();
+
+                 if (!title) {
+                     displayMessage(editVenueMessageDiv, 'Title is required.', 'error');
+                     submitEditVenueButton.disabled = false;
+                     return;
+                 }
+
+                 const formattedDescription = description === '' ? null : description;
+                 const formattedAddress = address === '' ? null : address;
+                 const formattedSuburb = suburb === '' ? null : suburb;
+                 const formattedState = state === '' ? null : state;
+                 const formattedPostcode = postcode === '' ? null : postcode;
+                 const formattedCountry = country === '' ? null : country;
+                 const formattedContactPhone = contactPhone === '' ? null : contactPhone;
+
+                 const latitude = latitudeString === '' ? null : latitudeString;
+                 const longitude = longitudeString === '' ? null : longitudeString;
+
+                 if (latitude !== null && isNaN(parseFloat(latitude))) {
+                     displayMessage(editVenueMessageDiv, 'Invalid Latitude format. Must be a number.', 'error');
+                     submitEditVenueButton.disabled = false;
+                     return;
+                 }
+                 if (longitude !== null && isNaN(parseFloat(longitude))) {
+                     displayMessage(editVenueMessageDiv, 'Invalid Longitude format. Must be a number.', 'error');
+                     submitEditVenueButton.disabled = false;
+                     return;
+                 }
+
+
+                 const requestBody = {
+                     venue_id: venueId, // Include the venue ID for update
+                     title: title,
+                     description: formattedDescription,
+                     address: formattedAddress,
+                     suburb: formattedSuburb,
+                     state: formattedState,
+                     postcode: formattedPostcode,
+                     country: formattedCountry,
+                     latitude: latitude ? parseFloat(latitude) : null,
+                     longitude: longitude ? parseFloat(longitude) : null,
+                     contact_phone: formattedContactPhone,
+                 };
+
+                console.log("Sending venue update request:", requestBody);
+
+                 try {
+                     const response = await fetch(`/api/venue/update`, { // Adjust endpoint
+                         method: 'PUT', // Or 'PATCH'
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(requestBody)
+                     });
+
+                     const responseData = await response.json();
+
+                     if (response.ok && responseData.success) {
+                         console.log("Venue updated successfully:", responseData);
+                         displayMessage(editVenueMessageDiv, responseData.message || 'Venue updated successfully!', 'success');
+
+                         setTimeout(() => {
+                             closeModal(editVenueModal);
+                             fetchAndDisplayVenues(); // Refresh the venue list
+                         }, 2000);
+                     } else if (responseData && responseData.error_message) {
+                         displayMessage(editVenueMessageDiv, `Update failed: ${responseData.error_message}`, 'error');
+                         console.error("Server error updating venue:", response.status, responseData.error_message);
+                     }
+                      else if (response.status === 400) {
+                          const errorText = await response.text();
+                          displayMessage(editVenueMessageDiv, `Invalid request data: ${responseData.error_message || errorText.substring(0, 100) + '...'}`, 'error');
+                          console.error("Bad request updating venue:", response.status, errorText);
+                      }
+                      else if (response.status === 401 || response.status === 403) {
+                          displayMessage(editVenueMessageDiv, 'Error: You are not authorized to update venues.', 'error');
+                           console.error("Authorization error updating venue:", response.status);
+                      }
+                     else {
+                         const errorText = await response.text();
+                         displayMessage(editVenueMessageDiv, `Error updating venue: ${response.status} - ${responseData.error_message || errorText.substring(0, 100) + '...'}` , 'error');
+                         console.error("Error updating venue:", response.status, errorText);
+                     }
+
+                 } catch (error) {
+                     displayMessage(editVenueMessageDiv, 'Network error submitting venue update.', 'error');
+                     console.error("Fetch error for venue update:", error);
+                 } finally {
+                     submitEditVenueButton.disabled = false;
+                 }
+            });
+
+
+            // Attach event listener for applying venue filters
+            applyVenueFiltersButton.addEventListener('click', () => {
+                fetchAndDisplayVenues(); // Refetch venues with current filters
+            });
 
             // --- Styles Management JavaScript ---
 
@@ -1990,7 +2333,14 @@
             }
 
 
-
+            // Handle initial section display
+            const initialSection = window.location.hash ? window.location.hash.substring(1) : 'frontpage';
+            const validSections = Array.from(navLinks).map(link => link.getAttribute('data-section'));
+            if (validSections.includes(initialSection)) {
+                showSection(initialSection);
+            } else {
+                showSection('frontpage');
+            }
         });
 
         // Function to handle the class section display logic
@@ -2390,8 +2740,8 @@
                          // Assuming backend returns { success: true, venues: [...] } on success
                          const result = await response.json();
 
-                        //  if (result.success && result.venues) {
-                            const venues = result;
+                         if (result.success && result.venues) {
+                            const venues = result.venues;
                             let optionsHtml = '<option value="">Select Venue</option>';
                             selectElement.disabled = false;
                             if (venues.length > 0) {
@@ -2405,11 +2755,11 @@
                             } else {
                                 selectElement.innerHTML = '<option value="">No venues found</option>';
                             }
-                        //  } else {
-                        //     // Handle cases where response is OK but success is false (backend level error)
-                        //     selectElement.innerHTML = `<option value="">Error: ${result.error_message || 'Unknown error'}</option>`;
-                        //      console.error('Backend success: false for venues:', result.error_message);
-                        //  }
+                        } else {
+                        // Handle cases where response is OK but success is false (backend level error)
+                        selectElement.innerHTML = `<option value="">Error: ${result.error_message || 'Unknown error'}</option>`;
+                            console.error('Backend success: false for venues:', result.error_message);
+                        }
 
                      } else if (response.status === 401 || response.status === 403) {
                           selectElement.innerHTML = '<option value="">Error: Not authorized</option>';
@@ -2983,7 +3333,7 @@
                         const result = await response.json(); // Assuming backend returns { success: true, venue: {...} }
 
                         if (result.success && result.venue) {
-                            add_cached_value("venue", result.venue.id, result.venue); // Cache the venue ID and title
+                            add_cached_value("venue", result.venue.venue_id, result.venue); // Cache the venue ID and title
                         } else {
                             venueInfoContentDiv.innerHTML = `<p class="text-red-600">Error loading venue information: ${result.error_message || 'Unknown error'}</p>`;
                         }
@@ -3298,6 +3648,88 @@
                 console.error("Fetch error for style list:", error);
             }
         }
+
+
+
+
+        // Function to fetch and display venue info in the modal
+        async function fetchAndDisplayVenueInfo(venueId) {
+            venueInfoContentDiv.innerHTML = '<p class="text-gray-600 italic">Loading venue information...</p>';
+            venueInfoModal.style.display = 'block';
+
+            try {
+                    // Use POST request body for venue ID
+                    const response = await fetch('/api/venue/get', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ venue_id: venueId })
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json(); // Assuming backend returns { success: true, venue: {...} } OR just the venue data
+                        if (!result.success) {
+                            venueInfoContentDiv.innerHTML = `<p class="text-red-600">Error loading venue information: ${result.error_message || 'Unknown error'}</p>`;
+                            return;
+                        }
+                        // Check for 'success' field if your API uses it, or assume data is the venue if 200 OK
+                        const venue = result.venue; // Adjust based on actual API response structure
+
+
+                        if (venue && venue.venue_id) { // Basic check if we got venue data
+                            venueInfoContentDiv.innerHTML = `
+                                <h3 class="text-xl font-semibold text-gray-800 mb-3">${venue.title}</h3>
+                                <p class="text-gray-700 mb-2"><strong class="font-medium">Description:</strong> ${venue.description || 'N/A'}</p>
+                                <p class="text-gray-700 mb-2"><strong class="font-medium">Address:</strong> ${venue.address || 'N/A'}, ${venue.suburb || ''}, ${venue.state || ''} ${venue.postcode || ''}, ${venue.country || ''}</p>
+                                <p class="text-gray-700 mb-4"><strong class="font-medium">Contact Phone:</strong> ${venue.contact_phone || 'N/A'}</p>
+
+                                ${venue.latitude && venue.longitude ?
+                                    `<div class="map-container rounded-lg overflow-hidden shadow-md mt-4">
+                                        <iframe
+                                            width="100%"
+                                            height="300"
+                                            frameborder="0"
+                                            scrolling="no"
+                                            marginheight="0"
+                                            marginwidth="0"
+                                            src="https://www.openstreetmap.org/export/embed.html?bbox=${parseFloat(venue.longitude) - 0.005},${parseFloat(venue.latitude) - 0.005},${parseFloat(venue.longitude) + 0.005},${parseFloat(venue.latitude) + 0.005}&amp;layer=mapnik&amp;marker=${venue.latitude},${venue.longitude}"
+                                            style="border: 1px solid black"
+                                        ></iframe>
+                                        <br/><small><a href="https://www.openstreetmap.org/?mlat=${venue.latitude}&amp;mlon=${venue.longitude}#map=15/${venue.latitude}/${venue.longitude}" target="_blank" class="text-blue-600 hover:underline">View Larger Map</a></small>
+                                    </div>
+                                    <p class="text-sm text-gray-600 italic mt-2 text-center">Map data © OpenStreetMap contributors.</p>
+                                    `
+                                    : '<p class="text-gray-600 italic">Map location not available.</p>'}
+
+                            `;
+                        } else {
+                            venueInfoContentDiv.innerHTML = `<p class="text-red-600">Error loading venue information: ${result.error_message || 'Invalid data received'}</p>`;
+                        }
+
+                    } else if (response.status === 404) {
+                        venueInfoContentDiv.innerHTML = `<p class="text-red-600">Venue not found.</p>`;
+                        console.warn('Venue not found:', venueId);
+                    }
+                    else if (response.status === 401 || response.status === 403) {
+                        venueInfoContentDiv.innerHTML = '<p class="text-red-600">Error: You are not authorized to view venue details.</p>';
+                        console.error("Authorization error fetching venue:", response.status);
+                    }
+                    else {
+                        const errorText = await response.text();
+                        venueInfoContentDiv.innerHTML = `<p class="text-red-600">Error loading venue information: ${response.status} - ${errorText.substring(0, 100)}...</p>`;
+                        console.error("Error fetching venue:", response.status, errorText);
+                    }
+            } catch (error) {
+                    console.error('Error fetching venue info:', error);
+                    venueInfoContentDiv.innerHTML = `<p class="text-red-600">Failed to connect to the server to load venue info.</p>`;
+            }
+        }
+
+
+
+
+
+
+
 
 
     </script>

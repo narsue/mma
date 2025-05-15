@@ -113,6 +113,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::create_venue_handler)
             .service(handlers::get_venue_list_handler)
             .service(handlers::get_venue_handler)
+            .service(handlers::update_venue_handler)
 
             // Style routes
             .service(handlers::create_style_handler)

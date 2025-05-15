@@ -1,6 +1,7 @@
 pub mod handlers {
     use actix_web::{post, get, put, web, http::header::{LOCATION, CONTENT_TYPE}, HttpRequest, HttpResponse, cookie::{Cookie, SameSite}};
     use argon2::password_hash;
+    // use mma::api::GenericResponse;
     use std::sync::Arc;
     use uuid::Uuid;
     use crate::{api::{GetClassRequest, GetClassResponse}, state::StoreStateManager};
@@ -13,7 +14,8 @@ pub mod handlers {
         CreateClassRequest, CreateClassResponse, ClassFrequency, ClassFrequencyRequest, 
         ClassData, CreateVenueRequest, CreateVenueResponse, VenueData, CreateStyleRequest, CreateStyleResponse, StyleData,
         ForgottenPasswordRequest, ForgottenPasswordResponse, ResetPasswordQuery, ResetPasswordResponse, ResetPasswordRequest,
-        SignupResponse, SignupRequest, VerifyAccountQuery, GetVenueRequest, GetVenueResponse, UpdateClassRequest, ClassFrequencyId
+        SignupResponse, SignupRequest, VerifyAccountQuery, GetVenueRequest, GetVenueResponse, UpdateClassRequest, ClassFrequencyId,
+        GetVenueListResponse, GenericResponse
     };
     use chrono::{NaiveDate, NaiveTime, Utc};
     use bigdecimal::BigDecimal;
@@ -1127,7 +1129,13 @@ pub mod handlers {
             &req_data.description,
             &req_data.address,
             &req_data.suburb,
-            &req_data.postcode ).await;
+            &req_data.state,
+            &req_data.country,
+            &req_data.postcode,
+            &req_data.latitude, // Pass Option<&Decimal>
+            &req_data.longitude, // Pass Option<&Decimal>
+            &req_data.contact_phone,
+         ).await;
         // Handle the result of the database operation
         match create_result {
             Ok(_) => {
@@ -1149,6 +1157,116 @@ pub mod handlers {
         }
     }
            
+
+    // Handler to update an existing venue
+    #[put("/api/venue/update")] // Use PUT method and include venue_id in the path
+    pub async fn update_venue_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+        mut user: LoggedUser, // Authenticate the request
+        venue_data: web::Json<VenueData>, // Extract JSON request body
+    ) -> Result<HttpResponse, ActixError> { // Handler returns ActixResult<HttpResponse>
+        let venue_id = venue_data.venue_id; // Extract the UUID from the path
+
+        // 1. Authenticate and authorize the user
+        let user_id = user.validate(&state_manager).await
+            .map_err(|e| {
+                tracing::error!("Authentication error during venue update: {:?}", e);
+                // Consider mapping specific AppErrors to different ActixErrors (e.g., Unauthorized)
+                ErrorInternalServerError("Authentication failed") // Generic error for now
+            })?;
+
+        // Implement authorization check here. For example, only admins can update venues.
+        // You'll need a way to get the user's role or permissions.
+        // Example:
+        // let user_role = state_manager.db.get_user_role(&user_id).await?; // Assuming this function exists
+        // if user_role != "admin" { // Or check specific permission flag
+        //     tracing::warn!("User {} attempted to update venue {} without sufficient permissions.", user_id, venue_id);
+        //     return Err(actix_web::error::ErrorForbidden("You do not have permission to update venues."));
+        // }
+        tracing::info!("User {} is attempting to update venue {}", user_id, venue_id);
+
+
+        let req_data = venue_data.into_inner(); // Get the raw request data
+
+        // 2. Validate incoming data from the request body
+        // Title is required for an update, just like create
+        if req_data.title.trim().is_empty() { // Trim whitespace before checking for empty
+            tracing::warn!("Attempted to update venue {} with empty title.", venue_id);
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Venue title cannot be empty.".to_string()),
+                }));
+        }
+
+        // Convert optional empty strings to None for Option<String> fields
+        // let description = req_data.description.filter(|s| !s.trim().is_empty());
+        // let address = req_data.address.filter(|s| !s.trim().is_empty());
+        // let suburb = req_data.suburb.filter(|s| !s.trim().is_empty());
+        // let state = req_data.state.filter(|s| !s.trim().is_empty());
+        // let postcode = req_data.postcode.filter(|s| !s.trim().is_empty());
+        // let country = req_data.country.filter(|s| !s.trim().is_empty());
+        // let contact_phone = req_data.contact_phone.filter(|s| !s.trim().is_empty());
+
+        // Parse optional latitude and longitude (assuming frontend sends f64 if present)
+        // let latitude = req_data.latitude;
+        // let longitude = req_data.longitude;
+
+
+        // 3. Call the database function to update the venue
+        // Assuming your db.rs has an update_venue function with a signature like:
+        // pub async fn update_venue(&self, venue_id: &Uuid, title: &str, description: Option<&str>, ...) -> AppResult<bool>;
+        // The boolean return could indicate if a venue was found and updated (false if not found)
+        let update_result: AppResult<bool> = state_manager.db.update_venue(
+            &venue_id, // Pass the venue_id from the path
+            &req_data.title, // Pass the trimmed title
+            &req_data.description, // Pass Option<&str>
+            &req_data.address,
+            &req_data.suburb,
+            &req_data.state,
+            &req_data.country,
+            &req_data.postcode,
+            &req_data.latitude, // Pass Option<&Decimal>
+            &req_data.longitude, // Pass Option<&Decimal>
+            &req_data.contact_phone,
+            // Pass other fields...
+        ).await;
+
+
+        // 4. Handle the result of the database operation
+        match update_result {
+            Ok(true) => {
+                // Database function succeeded and the venue was found and updated
+                tracing::info!("Venue {} updated successfully by user {}", venue_id, user_id);
+                // Return a success response
+                Ok(HttpResponse::Ok().json(GenericResponse {
+                    success: true,
+                    message: Some("Venue updated successfully.".to_string()),
+                    error_message: None,
+                }))
+            },
+            Ok(false) => {
+                // Database function succeeded but the venue was NOT found with that ID
+                tracing::warn!("Attempted to update non-existent venue: {}", venue_id);
+                // Err(ErrorNotFound(format!("Venue with ID {} not found", venue_id)))
+                Ok(HttpResponse::Ok().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Venue does not exist.".to_string()),
+                }))
+
+            }
+            Err(app_err) => {
+                // Database error occurred during update
+                tracing::error!("Database error updating venue {} for user {}: {:?}", venue_id, user_id, app_err);
+                // Manually convert AppError to ActixError using ErrorInternalServerError
+                Err(ErrorInternalServerError(app_err))
+            }
+        }
+    }
+
+
+
     // Get Venue List
     #[get("/api/venue/get_list")]
     pub async fn get_venue_list_handler(
@@ -1169,7 +1287,11 @@ pub mod handlers {
                 // Database function succeeded, returns a Vec<ClassData> (could be empty)
                 // tracing::info!("Successfully fetched {} venues.", venues.len());
                 // Return the vector of ClassData as a JSON array with 200 OK status
-                Ok(HttpResponse::Ok().json(venues))
+                Ok(HttpResponse::Ok().json(GetVenueListResponse{
+                    success: true,
+                    error_message: None,
+                    venues: Some(venues)
+                    }))
             },
             Err(app_err) => {
                 // A database error (AppError) occurred

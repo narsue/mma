@@ -1234,7 +1234,7 @@ impl ScyllaConnector {
         return Ok(None);
     }
 
-    pub async fn create_new_venue(&self, creator_user_id: &Uuid, venue_id: &Uuid, title: &String, description: &Option<String>, address: &Option<String>, suburb: &Option<String>, postcode: &Option<String>) -> AppResult<()> {
+    pub async fn create_new_venue(&self, creator_user_id: &Uuid, venue_id: &Uuid, title: &String, description: &Option<String>, address: &Option<String>, suburb: &Option<String>, state: &Option<String>, country: &Option<String>, postcode: &Option<String>, latitude: &Option<BigDecimal>, longitude: &Option<BigDecimal>, contact_phone: &Option<String>) -> AppResult<()> {
         // Get current timestamp
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -1244,13 +1244,33 @@ impl ScyllaConnector {
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.venue (venue_id, creator_user_id, title, description, created_ts, address, suburb, postcode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (venue_id, creator_user_id, title, description, now, address, suburb, postcode), // Include other fields as per your schema
+                "INSERT INTO mma.venue (venue_id, creator_user_id, title, description, created_ts, address, suburb, state, country, postcode, latitude, longitude, contact_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (venue_id, creator_user_id, title, description, now, address, suburb, state, country, postcode, latitude, longitude, contact_phone), // Include other fields as per your schema
             )
             .await?;
 
         Ok(())
     }
+
+    pub async fn update_venue(&self, venue_id: &Uuid, title: &String, description: &Option<String>, address: &Option<String>, suburb: &Option<String>, state: &Option<String>, country: &Option<String>,  postcode: &Option<String>, latitude: &Option<BigDecimal>, longitude: &Option<BigDecimal>, contact_phone: &Option<String>) -> AppResult<bool> {
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let now = scylla::value::CqlTimestamp(now);
+
+        self.session
+            .query_unpaged(
+                "INSERT INTO mma.venue (venue_id, title, description, created_ts, address, suburb, state, country, postcode, latitude, longitude, contact_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (venue_id, title, description, now, address, suburb, state, country, postcode, latitude, longitude, contact_phone), // Include other fields as per your schema
+            )
+            .await?;
+
+        Ok(true)
+    }
+    
+
 
     // get_venues
     pub async fn get_venues(&self) -> AppResult<Vec<VenueData>> {
