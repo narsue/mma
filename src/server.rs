@@ -1099,7 +1099,7 @@ pub mod handlers {
                     
                     // Generate the reset URL with email and code
                     let reset_url = format!(
-                        "https://narsue.com/reset-password?email={}&code={}", 
+                        "https://narsue.com/reset_password?email={}&code={}", 
                         urlencoding::encode(&email), 
                         reset_code
                     );

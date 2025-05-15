@@ -2,69 +2,91 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <link rel="stylesheet" href="/style.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MMA Gym Portal</title>
-
-
+    <!-- Include Tailwind CSS from CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Basic CSS for tabs (example - adapt to your existing style) */
-        .tabs { list-style: none; padding: 0; }
-        .tabs li { display: inline-block; margin-right: 10px; }
-        .tabs a { cursor: pointer; text-decoration: none; padding: 5px; border: 1px solid #ccc; }
-        .tab-content { display: none; border: 1px solid #ccc; padding: 10px; margin-top: 10px; }
-        .tab-content.active { display: block; }
+        /* Basic nav styling to demonstrate */
+        nav ul {
+            display: flex;
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            background-color: #1f2937; /* Tailwind: bg-gray-800 */
+        }
+        nav ul li {
+            margin-right: 1rem; /* Tailwind: mr-4 */
+        }
+        nav ul li a {
+            color: #f3f4f6; /* Tailwind: text-gray-100 */
+            text-decoration: none;
+            padding: 1rem; /* Tailwind: p-4 */
+            display: block;
+        }
+        nav ul li a:hover {
+            background-color: #374151; /* Tailwind: bg-gray-700 */
+        }
 
-        /* Basic CSS for modal */
+        /* Styles for content sections */
+        .portal-section {
+            display: none; /* Initially hide all content sections */
+        }
+        .portal-section.active {
+            display: block; /* Show the active section */
+        }
+
+        /* Modal styles (retained and adapted for Tailwind context) */
         .modal {
             display: none; /* Hidden by default */
             position: fixed; /* Stay in place */
-            z-index: 1; /* Sit on top */
+            z-index: 50; /* Sit on top */
             left: 0;
             top: 0;
             width: 100%; /* Full width */
             height: 100%; /* Full height */
             overflow: auto; /* Enable scroll if needed */
-            background-color: rgb(0,0,0); /* Fallback color */
             background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
         }
 
         .modal-content {
             background-color: #fefefe;
-            margin: 15% auto; /* 15% from the top and centered */
-            padding: 20px;
-            border: 1px solid #888;
-            width: 80%; /* Could be more responsive */
-            max-width: 600px; /* Max width */
-            position: relative;
+            margin: 5% auto; /* Adjusted margin to be higher */
+            padding: 24px; /* Increased padding */
+            border: 1px solid #e5e7eb; /* Tailwind border-gray-200 */
+            width: 90%; /* Adjusted width */
+            max-width: 700px; /* Increased max width for forms */
+            border-radius: 8px; /* More rounded corners */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); /* Added a subtle shadow */
         }
 
         .modal-header {
              display: flex;
              justify-content: space-between;
              align-items: center;
-             border-bottom: 1px solid #eee;
-             padding-bottom: 10px;
-             margin-bottom: 15px;
+             border-bottom: 1px solid #e5e7eb; /* Tailwind border-gray-200 */
+             padding-bottom: 16px; /* Increased padding */
+             margin-bottom: 24px; /* Increased margin */
         }
 
         .modal-header h3 {
              margin: 0;
+             font-size: 1.5rem; /* Tailwind text-2xl */
+             font-weight: 600; /* Tailwind font-semibold */
+             color: #1f2937; /* Tailwind text-gray-900 */
          }
 
         .close-button {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
+            color: #9ca3af; /* Tailwind text-gray-400 */
+            font-size: 2rem; /* Larger close button */
             font-weight: bold;
             cursor: pointer;
         }
 
         .close-button:hover,
         .close-button:focus {
-            color: black;
+            color: #6b7280; /* Tailwind text-gray-500 */
             text-decoration: none;
-            cursor: pointer;
         }
 
          #new-waiver-content {
@@ -73,42 +95,58 @@
              margin-bottom: 10px;
          }
 
+         /* Styles for waiver/accept messages */
          #create-waiver-error, #accept-waiver-message {
              margin-top: 10px;
-             padding: 5px;
+             padding: 10px; /* Increased padding */
              border-radius: 4px;
+             font-size: 0.875rem; /* Tailwind text-sm */
          }
-         #create-waiver-error, #accept-waiver-message.error {
-             color: red;
-             border: 1px solid red;
-             background-color: #ffebeb;
+         #create-waiver-error.error, #accept-waiver-message.error {
+             color: #b91c1c; /* Tailwind text-red-700 */
+             border: 1px solid #f87171; /* Tailwind border-red-400 */
+             background-color: #fee2e2; /* Tailwind bg-red-100 */
          }
-          #accept-waiver-message.success {
-             color: green;
-             border: 1px solid green;
-             background-color: #ebffeb;
+          #create-waiver-error.success, #accept-waiver-message.success {
+             color: #065f46; /* Tailwind text-green-700 */
+             border: 1px solid #34d399; /* Tailwind border-green-400 */
+             background-color: #d1fae5; /* Tailwind bg-green-100 */
          }
 
          .form-group {
-             margin-bottom: 15px;
+             margin-bottom: 16px; /* Increased margin */
          }
 
          .form-group label {
              display: block;
-             margin-bottom: 5px;
-             font-weight: bold;
+             margin-bottom: 8px; /* Increased margin */
+             font-weight: 500; /* Tailwind font-medium */
+             color: #374151; /* Tailwind text-gray-700 */
          }
 
          .form-group input[type="text"],
          .form-group input[type="number"],
-         .form-group input[type="checkbox"],
+         .form-group input[type="date"], /* Added date input */
+         .form-group input[type="time"], /* Added time input */
          .form-group textarea,
          .form-group select {
-             width: calc(100% - 12px); /* Account for padding/border */
-             padding: 6px;
-             border: 1px solid #ccc;
-             border-radius: 4px;
+             width: 100%; /* Use full width with Tailwind padding */
+             padding: 8px 12px; /* Tailwind py-2 px-3 */
+             border: 1px solid #d1d5db; /* Tailwind border-gray-300 */
+             border-radius: 6px; /* Tailwind rounded-md */
+             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); /* Tailwind shadow-sm */
+             font-size: 0.875rem; /* Tailwind text-sm */
+             color: #1f2937; /* Tailwind text-gray-900 */
+             transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
          }
+          .form-group input:focus,
+          .form-group textarea:focus,
+          .form-group select:focus {
+              outline: none;
+              border-color: #3b82f6; /* Tailwind border-blue-500 */
+              box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5); /* Tailwind ring-blue-500 */
+          }
+
 
          .form-group textarea {
              resize: vertical; /* Allow vertical resizing */
@@ -117,128 +155,143 @@
          .checkbox-group {
              display: flex;
              align-items: center;
+             margin-bottom: 16px; /* Consistent form-group margin */
          }
-         .checkbox-group input {
-             margin-right: 5px;
+         .checkbox-group input[type="checkbox"] {
+             margin-right: 8px; /* Tailwind mr-2 */
              width: auto; /* Don't use 100% width */
+             padding: 0; /* Remove padding from checkbox */
+             box-shadow: none; /* Remove shadow from checkbox */
+             /* Further checkbox styling can be added with Tailwind, but it's often
+                easier with a custom approach or a library for cross-browser consistency */
          }
           .checkbox-group label {
              margin-bottom: 0; /* Reset margin */
+             font-weight: 400; /* Normal font weight */
+             color: #374151; /* Consistent text color */
          }
 
          #frequency-container .frequency-entry {
-             border: 1px dashed #ccc;
-             padding: 10px;
-             margin-bottom: 10px;
-             border-radius: 4px;
+             border: 1px dashed #d1d5db; /* Tailwind border-dashed border-gray-300 */
+             padding: 16px; /* Increased padding */
+             margin-bottom: 16px; /* Consistent margin */
+             border-radius: 6px; /* Tailwind rounded-md */
              position: relative; /* Needed for absolute positioning of remove button */
          }
 
          .remove-frequency-button {
             position: absolute;
-            top: 5px;
-            right: 5px;
-            background: red;
+            top: 8px; /* Adjusted position */
+            right: 8px; /* Adjusted position */
+            background: #ef4444; /* Tailwind bg-red-500 */
             color: white;
             border: none;
-            border-radius: 4px;
-            padding: 2px 5px;
+            border-radius: 4px; /* Tailwind rounded */
+            padding: 4px 8px; /* Tailwind py-1 px-2 */
             cursor: pointer;
-            font-size: 0.8em;
+            font-size: 0.75rem; /* Tailwind text-xs */
+            font-weight: 500; /* Tailwind font-medium */
+            transition: background-color 0.2s ease-in-out;
          }
+          .remove-frequency-button:hover {
+              background-color: #dc2626; /* Tailwind bg-red-600 */
+          }
+
 
          .modal-footer {
-             border-top: 1px solid #eee;
-             padding-top: 15px;
-             margin-top: 15px;
+             border-top: 1px solid #e5e7eb; /* Tailwind border-gray-200 */
+             padding-top: 16px; /* Increased padding */
+             margin-top: 24px; /* Increased margin */
              text-align: right; /* Buttons to the right */
          }
 
          .modal-footer button {
-             padding: 8px 15px;
-             margin-left: 10px;
+             padding: 10px 20px; /* Tailwind py-2.5 px-5 */
+             margin-left: 12px; /* Tailwind ml-3 */
              border: none;
-             border-radius: 4px;
+             border-radius: 6px; /* Tailwind rounded-md */
              cursor: pointer;
+             font-size: 0.875rem; /* Tailwind text-sm */
+             font-weight: 500; /* Tailwind font-medium */
+             transition: background-color 0.2s ease-in-out, opacity 0.2s ease-in-out;
          }
 
          .modal-footer .submit-button {
-             background-color: #5cb85c; /* Green */
+             background-color: #22c55e; /* Tailwind bg-green-500 */
              color: white;
          }
+          .modal-footer .submit-button:hover {
+              background-color: #16a34a; /* Tailwind bg-green-600 */
+          }
+
 
          .modal-footer .cancel-button {
-             background-color: #f0ad4e; /* Orange */
-             color: white;
+             background-color: #facc15; /* Tailwind bg-yellow-400 */
+             color: #1f2937; /* Tailwind text-gray-900 */
+         }
+         .modal-footer .cancel-button:hover {
+             background-color: #eab308; /* Tailwind bg-yellow-500 */
          }
 
          #create-class-message {
-             margin-top: 10px;
-             padding: 8px;
+             margin-top: 16px; /* Consistent margin */
+             padding: 10px; /* Consistent padding */
              border-radius: 4px;
-             color: red;
-             border: 1px solid red;
-             background-color: #ffebeb;
+             font-size: 0.875rem; /* Tailwind text-sm */
+             color: #b91c1c; /* Tailwind text-red-700 */
+             border: 1px solid #f87171; /* Tailwind border-red-400 */
+             background-color: #fee2e2; /* Tailwind bg-red-100 */
              display: none; /* Hidden by default */
          }
-
-        /* Style for waiver/accept messages (from previous snippet) */
-         #create-waiver-error, #accept-waiver-message {
-             margin-top: 10px;
-             padding: 5px;
-             border-radius: 4px;
-         }
-         #create-waiver-error, #accept-waiver-message.error {
-             color: red;
-             border: 1px solid red;
-             background-color: #ffebeb;
-         }
-          #accept-waiver-message.success {
-             color: green;
-             border: 1px solid green;
-             background-color: #ebffeb;
+         #create-class-message.success {
+             color: #065f46; /* Tailwind text-green-700 */
+             border: 1px solid #34d399; /* Tailwind border-green-400 */
+             background-color: #d1fae5; /* Tailwind bg-green-100 */
          }
 
 
     </style>
 
 </head>
-<body>
+<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col">
     <nav>
         <ul>
             <!-- Nav items for client-side tab switching -->
-            <li><a href="#" data-section="frontpage">Front Page</a></li>
-            <li><a href="#" data-section="classes">Classes</a></li>
-            <li><a href="#" data-section="venues">Venues</a></li>
-            <li><a href="#" data-section="styles">Styles</a></li>
-            <li><a href="#" data-section="waivers">Waivers</a></li>
-            <li><a href="#" data-section="locations">Locations</a></li>
-            <li id="users-nav" style="display: none;"><a href="#" data-section="users">Users</a></li>
-            <li><a href="#" data-section="account">Account</a></li>
+            <li><a href="#" data-section="frontpage" class="nav-link">Front Page</a></li>
+            <li><a href="#" data-section="classes" class="nav-link">Classes</a></li>
+            <li><a href="#" data-section="venues" class="nav-link">Venues</a></li>
+            <li><a href="#" data-section="styles" class="nav-link">Styles</a></li>
+            <li><a href="#" data-section="waivers" class="nav-link">Waivers</a></li>
+            <li><a href="#" data-section="locations" class="nav-link">Locations</a></li>
+            <li id="users-nav" class="nav-item" style="display: none;"><a href="#" data-section="users" class="nav-link">Users</a></li>
+            <li><a href="#" data-section="account" class="nav-link">Account</a></li>
             <!-- Logout is a different action -->
-            <li><a href="#" id="logoutLink">Log out</a></li>
+            <li><a href="#" id="logoutLink" class="nav-link">Log out</a></li>
         </ul>
     </nav>
 
-    <div class="container">
+    <div class="container mx-auto mt-8 p-6 bg-white rounded-lg shadow-md flex-grow mb-8 max-w-7xl"> <!-- Increased max-w -->
         <!-- Section: Front Page -->
         <div id="frontpageSection" class="portal-section">
-            <h2>Welcome to the Portal!</h2>
-            <p>This is your main dashboard area. Select an option from the navigation above.</p>
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Welcome to the Portal!</h2>
+            <p class="text-gray-700 mb-6">This is your main dashboard area. Select an option from the navigation above.</p>
             <!-- Add summary data, recent activity, etc. here -->
+             <div id="dashboard-content">
+                  <!-- Dynamic dashboard content will go here -->
+                  <p>Loading dashboard content...</p>
+             </div>
         </div>
 
         <!-- Section: Classes -->
-        <!-- Add Classes Tab Content -->
         <div id="classesSection" class="portal-section">
-            <h2>Classes Management</h2>
-            <p>View and manage upcoming classes.</p>
-             <button id="add-class-button">Add New Class</button>
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Classes Management</h2>
+            <p class="text-gray-700 mb-6">View and manage upcoming classes.</p>
+             <button id="add-class-button" class="py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200">Add New Class</button>
 
             <!-- Class listing or management interface goes here -->
-            <div id="class-list">
+            <div id="class-list" class="mt-6 space-y-4">
                  <!-- Class list will be loaded here -->
-                 <p>Loading classes...</p>
+                 <p class="text-gray-600 italic">Loading classes...</p>
             </div>
 
              <!-- Add Class Modal -->
@@ -259,34 +312,29 @@
                                 <textarea id="class-description" rows="4" required></textarea>
                             </div>
                             <div class="form-group">
-                                <label for="class-venue-id">Venue:</label> <!-- Updated label text -->
-                                 <!-- Replaced input with select dropdown -->
+                                <label for="class-venue-id">Venue:</label>
                                 <select id="class-venue-id" required>
-                                     <option value="">Loading venues...</option> <!-- Initial loading state -->
+                                     <option value="">Loading venues...</option>
                                 </select>
                             </div>
 
                             <div class="form-group">
-                                <label for="class-style-ids">Styles:</label> <!-- Updated label text -->
-                                 <!-- Replaced input with select dropdown -->
-                                <select id="class-style-ids" required>
-                                     <option value="">Loading styles...</option> <!-- Initial loading state -->
+                                <label for="class-style-ids">Styles:</label>
+                                <select id="class-style-ids" multiple required> <!-- Added 'multiple' for selecting multiple styles -->
+                                     <option value="">Loading styles...</option>
                                 </select>
                             </div>
 
                             <div class="form-group">
                                 <label for="class-grading-ids">Grading IDs (comma-separated):</label>
-                                <!-- Consider replacing with multiple select/checkboxes fetched from server -->
                                 <input type="text" id="class-grading-ids" placeholder="e.g., uuidA,uuidB">
                             </div>
                             <div class="form-group">
                                 <label for="class-price">Price (optional):</label>
-                                 <!-- Use text input as BigDecimal might have decimals -->
                                 <input type="text" id="class-price" placeholder="e.g., 10.50">
                             </div>
                              <div class="form-group">
                                 <label for="class-publish-mode">Publish Mode (int):</label>
-                                 <!-- Consider replacing with a select/dropdown -->
                                 <input type="number" id="class-publish-mode" value="0" required>
                             </div>
                             <div class="form-group">
@@ -297,10 +345,10 @@
                              <!-- Frequency Section -->
                             <div class="form-group">
                                 <label>Frequency:</label>
-                                <div id="frequency-container">
+                                <div id="frequency-container" class="space-y-4">
                                     <!-- Frequency entries will be added here -->
                                 </div>
-                                <button type="button" id="add-frequency-button">Add Frequency Slot</button>
+                                <button type="button" id="add-frequency-button" class="py-2 px-4 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition duration-200 mt-4">Add Frequency Slot</button>
                             </div>
 
                             <div class="form-group checkbox-group">
@@ -311,7 +359,6 @@
                                 <label for="class-waiver-id">Waiver ID (optional):</label>
                                 <input type="text" id="class-waiver-id" placeholder="e.g., optional-waiver-uuid">
                             </div>
-                            <!-- end_ts is not included in this basic form for simplicity -->
 
                             <div id="create-class-message" class="message"></div>
 
@@ -323,23 +370,20 @@
                     </div>
                 </div>
             </div>
-
         </div>
 
         <!-- Section: Venues -->
-        <!-- Rename id to match tab href -->
         <div id="venuesSection" class="portal-section">
-            <h2>Venues Management</h2>
-            <p>Information about different available venues.</p>
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Venues Management</h2>
+            <p class="text-gray-700 mb-6">Information about different available venues.</p>
 
-            <button id="add-venue-button">Add New Venue</button>
+            <button id="add-venue-button" class="py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200">Add New Venue</button>
 
             <!-- Placeholder for displaying the list of venues -->
-            <div id="venue-list">
-                <p>Loading venues...</p>
+            <div id="venue-list" class="mt-6 space-y-4">
+                <p class="text-gray-600 italic">Loading venues...</p>
                 <!-- Venue data will be loaded here by JavaScript -->
             </div>
-
 
              <!-- Add Venue Modal -->
             <div id="add-venue-modal" class="modal">
@@ -380,12 +424,10 @@
                             </div>
                             <div class="form-group">
                                 <label for="venue-latitude">Latitude (optional):</label>
-                                <!-- Use text for potential decimal/empty string handling -->
                                 <input type="text" id="venue-latitude" placeholder="e.g., -33.8688">
                             </div>
                             <div class="form-group">
                                 <label for="venue-longitude">Longitude (optional):</label>
-                                <!-- Use text for potential decimal/empty string handling -->
                                 <input type="text" id="venue-longitude" placeholder="e.g., 151.2093">
                             </div>
                              <div class="form-group">
@@ -407,16 +449,15 @@
         </div>
 
         <!-- Section: Styles -->
-        <!-- Updated ID to match tab href -->
         <div id="stylesSection" class="portal-section">
-            <h2>Styles Management</h2>
-            <p>Information about different styles.</p>
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Styles Management</h2>
+            <p class="text-gray-700 mb-6">Information about different styles.</p>
 
-             <button id="add-style-button">Add New Style</button>
+             <button id="add-style-button" class="py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200">Add New Style</button>
 
             <!-- Placeholder for displaying the list of styles -->
-            <div id="style-list">
-                <p>Loading styles...</p>
+            <div id="style-list" class="mt-6 space-y-4">
+                <p class="text-gray-600 italic">Loading styles...</p>
                 <!-- Style data will be loaded here by JavaScript -->
             </div>
 
@@ -448,203 +489,218 @@
                     </div>
                 </div>
             </div>
-
         </div>
 
-         <!-- Section: Gradings (Optional placeholder) -->
-         <!-- You might want a similar structure for Gradings -->
-        <div id="gradings-tab" class="tab-content">
-             <h2>Gradings Management</h2>
-             <p>Information about different grading requirements.</p>
-             <!-- Add Grading button, list, and modal here -->
-             <button id="add-grading-button">Add New Grading</button>
-             <div id="grading-list">
-                  <p>Loading gradings...</p>
-             </div>
-             <!-- Add Grading Modal structure here -->
-        </div>
+         <!-- Section: Waivers -->
+        <div id="waiversSection" class="portal-section">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Waiver Management</h2>
 
-        <!-- Add the Waiver tab content -->
-        <div id="waiversSection" class="portal-section" style="display: none;">
-            <h2>Waiver Management</h2>
-
-            <div id="latest-waiver-display">
+            <div id="latest-waiver-display" class="mt-6 p-4 border border-gray-300 rounded-md bg-gray-50">
                 <!-- Latest waiver content will be loaded here by JavaScript -->
-                <p>Loading waiver...</p>
+                <p class="text-gray-600 italic">Loading waiver...</p>
             </div>
 
-            <div id="accept-waiver-area">
+            <div id="accept-waiver-area" class="mt-4">
                 <!-- Accept button and messages will appear here -->
-                <div id="accept-waiver-message"></div>
-                <button id="accept-waiver-button" style="display: none;">Accept Waiver</button>
+                <div id="accept-waiver-message" class="message text-center"></div>
+                <button id="accept-waiver-button" class="py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 mt-4" style="display: none;">Accept Waiver</button>
             </div>
 
 
-            <button id="create-waiver-button" style="display: none;">Create New Waiver</button>
+            <button id="create-waiver-button" class="py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 mt-6" style="display: none;">Create New Waiver</button>
 
             <!-- Waiver Creation Modal -->
             <div id="create-waiver-modal" class="modal">
                 <div class="modal-content">
-                    <span class="close-button">&times;</span>
-                    <h3>Create New Waiver Version</h3>
-                    <textarea id="new-waiver-title" rows="1" placeholder="Enter the new waiver title here..."></textarea>
-                    <textarea id="new-waiver-content" rows="15" placeholder="Enter the new waiver content here..."></textarea>
-                    <button id="submit-new-waiver">Submit Waiver</button>
-                    <div id="create-waiver-error"></div>
+                    <div class="modal-header">
+                        <h3>Create New Waiver Version</h3>
+                        <span class="close-button">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                         <div class="form-group">
+                            <label for="new-waiver-title">Title:</label>
+                            <input type="text" id="new-waiver-title" rows="1" placeholder="Enter the new waiver title here...">
+                         </div>
+                         <div class="form-group">
+                            <label for="new-waiver-content">Content:</label>
+                            <textarea id="new-waiver-content" rows="15" placeholder="Enter the new waiver content here..."></textarea>
+                         </div>
+                         <div id="create-waiver-error" class="message"></div>
+                    </div>
+                    <div class="modal-footer">
+                         <button type="button" class="cancel-button">Cancel</button>
+                        <button type="button" class="submit-button" id="submit-new-waiver">Submit Waiver</button>
+                    </div>
                 </div>
             </div>
-
         </div>
 
         <!-- Section: Locations -->
-        <div id="locationsSection" class="portal-section" style="display: none;">
-            <h2>Locations</h2>
-            <p>Find gym locations and details.</p>
-             <div class="map-container">
-                <p><strong>Leura Gym (Example)</strong></p>
-                <iframe
-                    loading="lazy"
-                    allowfullscreen
-                    referrerpolicy="no-referrer-when-downgrade"
-                    src="https://www.google.com/maps/embed/v1/place?key=YOUR_API_KEY&q=114+Mount+St,+Leura+NSW+2780,+Australia">
-                </iframe>
-                 <p><small>Note: Replace YOUR_API_KEY with your Google Maps Embed API key.</small></p>
+        <div id="locationsSection" class="portal-section">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Locations</h2>
+            <p class="text-gray-700 mb-6">Find gym locations and details.</p>
+             <!-- You could potentially fetch and display multiple locations here -->
+             <div class="map-section mb-8">
+                <p class="text-xl font-semibold text-gray-800 mb-3 text-center">Leura Gym (Example)</p>
+                <div class="map-container rounded-lg overflow-hidden shadow-md">
+                    <!-- Replace this iframe with the actual OpenStreetMap embed code for your location -->
+                     <iframe
+                        width="100%"
+                        height="450"
+                        frameborder="0"
+                        scrolling="no"
+                        marginheight="0"
+                        marginwidth="0"
+                        src="https://www.openstreetmap.org/export/embed.html?bbox=150.3326%2C-33.7165%2C150.3426%2C-33.7065&amp;layer=mapnik&amp;marker=-33.7115,150.3376"
+                        style="border: 1px solid black"
+                    ></iframe>
+                     <br/><small><a href="https://www.openstreetmap.org/?mlat=-33.7115&amp;mlon=150.3376#map=16/-33.7115/150.3376">View Larger Map</a></small>
+                </div>
+                 <p class="text-sm text-gray-600 italic mt-2 text-center">Map data © OpenStreetMap contributors.</p>
             </div>
-            <!-- Map or list of locations goes here -->
         </div>
 
         <!-- Section: Users -->
-        <div id="usersSection" class="portal-section" style="display: none;">
-            <h2>Users</h2>
-            <p>Allocate user permissions.</p>
-            <!-- Map or list of locations goes here -->
+        <div id="usersSection" class="portal-section">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Users</h2>
+            <p class="text-gray-700 mb-6">Allocate user permissions.</p>
+            <!-- User listing/management interface goes here -->
+             <div id="user-list" class="mt-6 space-y-4">
+                  <p class="text-gray-600 italic">Loading users...</p>
+             </div>
         </div>
 
         <!-- Section: Account -->
-        <div id="accountSection" class="portal-section" style="display: none;">
-            <h2>Account Settings</h2>
+        <div id="accountSection" class="portal-section">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Account Settings</h2>
 
             <!-- Profile Update Form -->
-            <form id="profileUpdateForm">
-                <h3>Your Profile</h3>
-                <div>
+            <form id="profileUpdateForm" class="space-y-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Your Profile</h3>
+                <div class="form-group">
                     <label for="email">Email:</label>
-                    <!-- Email is read-only here -->
-                    <input type="email" id="email" name="email" required readonly disabled>
+                    <input type="email" id="email" name="email" required readonly disabled
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed sm:text-sm">
                 </div>
-                <div>
+                <div class="form-group">
                     <label for="first_name">First Name:</label>
-                    <input type="text" id="first_name" name="first_name" required maxlength="64">
+                    <input type="text" id="first_name" name="first_name" required maxlength="64"
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                 </div>
-                 <div>
+                 <div class="form-group">
                     <label for="surname">Surname:</label>
-                    <input type="text" id="surname" name="surname" required maxlength="64">
+                    <input type="text" id="surname" name="surname" required maxlength="64"
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                 </div>
-                <div>
+                <div class="form-group">
                     <label for="gender">Gender:</label>
-                    <!-- Use a dropdown for gender -->
-                    <select id="gender" name="gender">
-                        <option value="">Select Gender</option> <!-- Optional empty value -->
+                    <select id="gender" name="gender"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        <option value="">Select Gender</option>
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
-                        <!-- Add other options if needed -->
                     </select>
                 </div>
-                <div>
+                <div class="form-group">
                     <label for="phone">Phone:</label>
-                    <input type="tel" id="phone" name="phone" maxlength="64"> <!-- Use tel type for phone, max length 64 -->
+                    <input type="tel" id="phone" name="phone" maxlength="64"
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                 </div>
-                 <div>
+                 <div class="form-group">
                     <label for="dob">Date of Birth:</label>
-                    <!-- Use type="date" for calendar picker -->
-                    <input type="date" id="dob" name="dob">
+                    <input type="date" id="dob" name="dob"
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                 </div>
-                 <div>
+                 <div class="form-group">
                     <label for="address">Address:</label>
-                    <!-- Increased max length for address -->
-                    <input type="text" id="address" name="address" maxlength="512">
+                    <input type="text" id="address" name="address" maxlength="512"
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                 </div>
-                 <div>
+                 <div class="form-group">
                     <label for="suburb">Suburb:</label>
-                    <input type="text" id="suburb" name="suburb" maxlength="64">
+                    <input type="text" id="suburb" name="suburb" maxlength="64"
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                 </div>
-                 <h4>Emergency Contact</h4>
-                 <div>
+                 <h4 class="text-lg font-semibold text-gray-800 mb-3 mt-6">Emergency Contact</h4>
+                 <div class="form-group">
                     <label for="emergency_name">Name:</label>
-                    <input type="text" id="emergency_name" name="emergency_name" maxlength="64">
+                    <input type="text" id="emergency_name" name="emergency_name" maxlength="64"
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                 </div>
-                 <div>
+                 <div class="form-group">
                     <label for="emergency_relationship">Relationship:</label>
-                    <input type="text" id="emergency_relationship" name="emergency_relationship" maxlength="64">
-                </div>
-                 <div>
-                    <label for="emergency_phone">Phone:</label>
-                    <input type="tel" id="emergency_phone" name="emergency_phone" maxlength="64">
-                </div>
-                 <div>
-                    <label for="emergency_medical">Medical Notes:</label>
-                    <!-- Textarea doesn't use maxlength attribute in the same way, but backend validation is key -->
-                    <!-- You could add JS logic to limit input here if needed -->
-                    <textarea id="emergency_medical" name="emergency_medical"></textarea>
-                </div>
-                 <h4>Uniform Details</h4>
-                 <div>
-                    <label for="belt_size">Belt Size:</label>
-                    <!-- Use type="number" and min/max -->
-                    <input type="number" id="belt_size" name="belt_size" min="0" max="100">
-                </div>
-                 <div>
-                    <label for="uniform_size">Uniform Size:</label>
-                     <!-- Use type="number" and min/max -->
-                    <input type="number" id="uniform_size" name="uniform_size" min="0" max="100">
-                </div>
-                 <!-- Fields like waiver_id, stripe_payment_method_id, photo_id, member_number, contracted_until are read-only -->
-                 <div id="readOnlyFields">
-                     <!-- These will be populated by JS -->
-                     <p><strong>User ID:</strong> <span id="user_id_display"></span></p> <!-- Display User ID -->
-                     <p><strong>Member Number:</strong> <span id="member_number_display"></span></p>
-                     <p><strong>Joined:</strong> <span id="created_ts_display"></span></p>
-                     <p><strong>Contracted Until:</strong> <span id="contracted_until_display"></span></p>
-                     <p><strong>Email Verified:</strong> <span id="email_verified_display"></span></p>
-                     <p><strong>Waiver ID:</strong> <span id="waiver_id_display"></span></p>
-                     <p><strong>Photo ID:</strong> <span id="photo_id_display"></span></p>
-                     <p><strong>Stripe Payment Method ID:</strong> <span id="stripe_payment_method_id_display"></span></p>
-                     <!-- Add other read-only fields as needed -->
-                 </div>
+                    <input type="text"id="emergency_relationship" name="emergency_relationship" maxlength="64"
+                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+         </div>
+          <div class="form-group">
+             <label for="emergency_phone">Phone:</label>
+             <input type="tel" id="emergency_phone" name="emergency_phone" maxlength="64"
+                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+         </div>
+          <div class="form-group">
+             <label for="emergency_medical">Medical Notes:</label>
+             <textarea id="emergency_medical" name="emergency_medical" rows="4"
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></textarea>
+         </div>
+          <h4 class="text-lg font-semibold text-gray-800 mb-3 mt-6">Uniform Details</h4>
+          <div class="form-group">
+             <label for="belt_size">Belt Size:</label>
+             <input type="number" id="belt_size" name="belt_size" min="0" max="100"
+                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+         </div>
+          <div class="form-group">
+             <label for="uniform_size">Uniform Size:</label>
+             <input type="number" id="uniform_size" name="uniform_size" min="0" max="100"
+                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+         </div>
+          <div id="readOnlyFields" class="mt-6 space-y-2 text-gray-700 text-sm">
+              <p><strong>User ID:</strong> <span id="user_id_display"></span></p>
+              <p><strong>Member Number:</strong> <span id="member_number_display"></span></p>
+              <p><strong>Joined:</strong> <span id="created_ts_display"></span></p>
+              <p><strong>Contracted Until:</strong> <span id="contracted_until_display"></span></p>
+              <p><strong>Email Verified:</strong> <span id="email_verified_display"></span></p>
+              <p><strong>Waiver ID:</strong> <span id="waiver_id_display"></span></p>
+              <p><strong>Photo ID:</strong> <span id="photo_id_display"></span></p>
+              <p><strong>Stripe Payment Method ID:</strong> <span id="stripe_payment_method_id_display"></span></p>
+          </div>
 
-                <button type="submit">Update Profile</button>
-                 <div id="profileStatusMessage" style="margin-top: 10px;"></div>
-            </form>
+         <button type="submit" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Update Profile</button>
+          <div id="profileStatusMessage" class="mt-4 text-center text-gray-700"></div>
+     </form>
 
-            <hr style="margin: 40px 0;"> <!-- Separator -->
+     <hr class="my-8 border-gray-300"> <!-- Separator -->
 
-            <!-- Change Password Form -->
-            <form id="passwordChangeForm">
-                 <h3>Change Password</h3>
-                 <div>
-                    <label for="currentPassword">Current Password:</label>
-                    <input type="password" id="currentPassword" name="current_password" required>
-                </div>
-                 <div>
-                    <label for="newPassword">New Password:</label>
-                    <input type="password" id="newPassword" name="new_password" required>
-                </div>
-                 <div>
-                     <label for="confirmNewPassword">Confirm New Password:</label>
-                     <input type="password" id="confirmNewPassword" name="confirm_new_password" required>
-                 </div>
+     <!-- Change Password Form -->
+     <form id="passwordChangeForm" class="space-y-6">
+          <h3 class="text-xl font-semibold text-gray-800 mb-4">Change Password</h3>
+          <div class="form-group">
+             <label for="currentPassword">Current Password:</label>
+             <input type="password" id="currentPassword" name="current_password" required
+                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+         </div>
+          <div class="form-group">
+             <label for="newPassword">New Password:</label>
+             <input type="password" id="newPassword" name="new_password" required
+                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+         </div>
+          <div class="form-group">
+              <label for="confirmNewPassword">Confirm New Password:</label>
+              <input type="password" id="confirmNewPassword" name="confirm_new_password" required
+                     class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+          </div>
+
+          <button type="submit" class="w-full py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Change Password</button>
+          <div id="passwordStatusMessage" class="mt-4 text-center text-gray-700"></div>
+     </form>
+ </div>
+ <!-- Add more sections as needed -->
+</div>
+
+<footer class="mt-auto text-center py-4 text-gray-600 text-sm">
+ <p>&copy; 2025 MMA Gym Management</p>
+</footer>
 
 
-                 <button type="submit" class="secondary">Change Password</button>
-                 <div id="passwordStatusMessage" style="margin-top: 10px;"></div>
-            </form>
-        </div>
-        <!-- Add more sections as needed -->
-    </div>
-
-    <footer>
-        <p>&copy; 2025 MMA Gym Management</p>
-    </footer>
 
     <script>
 
@@ -1133,7 +1189,7 @@
                         if (response.status === 401) {
                             console.warn('Session expired while loading profile.');
                             alert('Your session has expired. Please log in again.');
-                            window.location.href = '/login'; // Redirect to login
+                            window.location.href = '/#login'; // Redirect to login
                             return; // Stop further processing
                         }
                          // Handle other non-OK statuses
