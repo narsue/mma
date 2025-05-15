@@ -2,50 +2,579 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <link rel="stylesheet" href="/style.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MMA Gym Management</title>
+    <!-- Include Tailwind CSS from CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { font-family: sans-serif; line-height: 1.6; }
-        h1, h2 { color: #333; }
-        .map-container { margin-top: 20px; }
-        iframe { border: 0; width: 100%; height: 450px; }
+        /* Optional: Basic styling for the body if not handled by Tailwind */
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+        }
+        /* Basic nav styling to demonstrate */
+        nav ul {
+            display: flex;
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            background-color: #1f2937; /* Tailwind: bg-gray-800 */
+        }
+        nav ul li {
+            margin-right: 1rem; /* Tailwind: mr-4 */
+        }
+        nav ul li a {
+            color: #f3f4f6; /* Tailwind: text-gray-100 */
+            text-decoration: none;
+            padding: 1rem; /* Tailwind: p-4 */
+            display: block;
+        }
+        nav ul li a:hover {
+            background-color: #374151; /* Tailwind: bg-gray-700 */
+        }
+
+        /* Modal styles (retained and slightly adapted for Tailwind context) */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 50; /* Increased z-index to be above other elements */
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4); /* Semi-transparent black background */
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 24px; /* Increased padding */
+            border: 1px solid #e5e7eb; /* Tailwind border-gray-200 */
+            width: 90%; /* Adjusted width */
+            max-width: 500px;
+            border-radius: 8px; /* More rounded corners */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); /* Added a subtle shadow */
+        }
+
+        .close {
+            color: #9ca3af; /* Tailwind text-gray-400 */
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: #6b7280; /* Tailwind text-gray-500 */
+            text-decoration: none;
+        }
+
+        /* Map container specific styling */
+        .map-container iframe {
+            width: 100%;
+            height: 450px;
+            border: 0; /* Remove default iframe border */
+        }
+
+        /* Styles for content sections */
+        .content-section {
+            display: none; /* Initially hide all content sections */
+        }
     </style>
 </head>
-<body>
+<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col">
     <nav>
         <ul>
-            <li><a href="/">Home</a></li>
-            <li><a href="/login">Login/Sign Up</a></li>
-            <li><a href="/gym-signup">Gym Sign Up</a></li>
-            <li><a href="/contact">Contact Us</a></li>
+            <li><a href="#" data-section="home">Home</a></li>
+            <li><a href="#" data-section="login">Login/Sign Up</a></li>
+            <li><a href="#" data-section="gym-signup">Gym Sign Up</a></li>
+            <li><a href="#" data-section="contact">Contact Us</a></li>
             <!-- Add more links as needed -->
         </ul>
     </nav>
 
-    <h1>Welcome to MMA Gym Management</h1>
+    <!-- Home Section -->
+    <div id="home-section" class="content-section container mx-auto mt-10 p-8 bg-white rounded-xl shadow-xl max-w-4xl flex-grow mb-8">
+        <h1 class="text-4xl font-extrabold text-gray-900 mb-6 text-center">Welcome to MMA Gym Management</h1>
+
+        <p class="text-lg text-gray-700 mb-6 leading-relaxed">
+            The premier solution for managing your Mixed Martial Arts gym. Track members,
+            classes, attendance, gradings, and more, all in one place.
+        </p>
+        <p class="text-lg text-gray-700 mb-8 leading-relaxed">
+            Find our affiliated gyms below.
+        </p>
+
+        <h2 class="text-3xl font-bold text-gray-900 mb-4 text-center">Our Locations</h2>
+
+        <!-- Map Section -->
+        <div class="map-section mb-8">
+            <div class="map-container rounded-lg overflow-hidden shadow-md mb-4">
+                <!-- OpenStreetMap Embed with Multiple Markers and Bounding Box -->
+                <!-- To generate this embed code with multiple markers and a bounding box:
+                    1. Go to OpenStreetMap.org
+                    2. Zoom/pan to the region you want to show.
+                    3. Use the "Export" button.
+                    4. Select "Manually select a different bounding box" if needed to fine-tune the area.
+                    5. Use the "Share" button.
+                    6. Add markers by right-clicking on the map where you want them.
+                    7. Copy the "Embed HTML" code.
+                    Replace the src below with the generated code.
+                -->
+                <iframe
+                    width="100%"
+                    height="450"
+                    frameborder="0"
+                    scrolling="no"
+                    marginheight="0"
+                    marginwidth="0"
+                    src="https://www.openstreetmap.org/export/embed.html?bbox=149.4731,-33.1663,151.7816,-34.2992&amp;layer=T6&amp;marker=-33.7115,150.3376"  // Example src with bbox and multiple markers
+                    style="border: 1px solid black"
+                ></iframe>
+                <br/><small><a href="https://www.openstreetmap.org/?mlat=-33.7115&amp;mlon=150.3376#map=10/-33.7346/150.3870&layers=T6">View Larger Map</a></small>
+            </div>
+
+            <!-- Location Info Below the Map -->
+            <div class="space-y-6">
+                <div>
+                    <p class="text-xl font-semibold text-gray-800 mb-1">Blue Mountains Martial Arts Center</p>
+                    <p class="text-gray-700">114 Mount St, Leura, NSW 2780, Australia</p>
+                    <p class="text-gray-600 text-sm">Latitude: -33.7115, Longitude: 150.3376</p>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Rest of the Home Section content... -->
+        <p class="text-sm text-gray-600 italic mt-8 text-center">Map data © OpenStreetMap contributors.</p>
 
 
-
-    <p>
-        The premiera solution for managing your Mixed Martial Arts gym. Track members,
-        classes, attendance, gradings, and more, all in one place.
-    </p>
-    <p>
-        Find our affiliated gyms below.
-    </p>
-
-    <h2>Our Locations</h2>
-    <div class="map-container">
-        <p><strong>Leura Gym (Example)</strong></p>
-        <iframe
-            loading="lazy"
-            allowfullscreen
-            referrerpolicy="no-referrer-when-downgrade"
-            src="https://www.google.com/maps/embed/v1/place?key=YOUR_API_KEY&q=114+Mount+St,+Leura+NSW+2780,+Australia">
-        </iframe>
-        <p><small>Note: You'll need a Google Maps API key for the embed to work reliably in production.</small></p>
     </div>
 
+    <!-- Login/Sign Up Section -->
+    <div id="login-section" class="content-section container mx-auto mt-10 p-8 bg-white rounded-xl shadow-xl max-w-md flex-grow mb-8">
+        <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">Account Access</h2>
+
+        <!-- Login Form -->
+        <form id="loginForm" class="space-y-6">
+            <h3 class="text-2xl font-semibold text-gray-800 mb-4 text-center">Sign In</h3>
+            <div>
+                <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email:</label>
+                <input type="email" id="email" name="email" required
+                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password:</label>
+                <input type="password" id="password" name="password" required
+                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div>
+                <button type="submit"
+                        class="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                    Login
+                </button>
+            </div>
+        </form>
+
+        <div class="mt-6 space-y-3">
+             <button class="w-full py-3 px-4 border border-gray-300 rounded-md shadow-sm text-base font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500" id="signUpBtn">Sign Up</button>
+            <button class="w-full py-3 px-4 border border-gray-300 rounded-md shadow-sm text-base font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500" id="forgotPasswordBtn">Forgotten Password</button>
+        </div>
+
+        <div id="errorMessage" class="mt-4 text-center text-red-600"></div>
+    </div>
+
+    <!-- Gym Sign Up Section -->
+    <div id="gym-signup-section" class="content-section container mx-auto mt-10 p-8 bg-white rounded-xl shadow-xl max-w-2xl flex-grow mb-8">
+        <h1 class="text-4xl font-extrabold text-gray-900 mb-6 text-center">Sign Up Your Gym</h1>
+        <p class="text-xl text-gray-700 mb-6 leading-relaxed">
+            Ready to streamline your gym's operations? Our platform offers:
+        </p>
+
+        <!-- Enhanced Dot Points Section -->
+        <div class="mb-8">
+            <ul class="space-y-4 text-lg text-gray-700">
+                <li class="flex items-start">
+                    <svg class="flex-shrink-0 w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span><strong class="font-semibold">Member Management & Profiles:</strong> Keep track of all your members with detailed profiles.</span>
+                </li>
+                <li class="flex items-start">
+                     <svg class="flex-shrink-0 w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span><strong class="font-semibold">Class Scheduling:</strong> Easily schedule and manage your classes.</span>
+                </li>
+                <li class="flex items-start">
+                     <svg class="flex-shrink-0 w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span><strong class="font-semibold">Attendance Tracking:</strong> Monitor class attendance efficiently.</span>
+                </li>
+                <li class="flex items-start">
+                     <svg class="flex-shrink-0 w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span><strong class="font-semibold">Grading and Belt Progression:</strong> Track student progress and gradings.</span>
+                </li>
+                <li class="flex items-start">
+                     <svg class="flex-shrink-0 w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span><strong class="font-semibold">Basic Reporting:</strong> Gain insights into your gym's performance.</span>
+                </li>
+                <li class="flex items-start">
+                     <svg class="flex-shrink-0 w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span><strong class="font-semibold">Secure User Authentication:</strong> Keep your and your members' data safe.</span>
+                </li>
+            </ul>
+        </div>
+
+        <h2 class="text-3xl font-bold text-gray-900 mb-4 text-center">Pricing</h2>
+        <p class="text-lg text-gray-700 mb-3 text-center">Simple, affordable pricing for gyms of all sizes:</p>
+        <div class="text-center mb-6">
+             <span class="text-5xl font-extrabold text-indigo-600">$50</span>
+             <span class="text-2xl font-medium text-gray-600"> AUD / month</span>
+        </div>
+        <p class="text-gray-600 text-sm italic mb-8 text-center">(Includes support for unlimited members and classes)</p>
+
+        <button
+            class="w-full py-4 px-6 bg-blue-600 text-white font-bold text-xl rounded-lg shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition duration-300 ease-in-out"
+            onclick="alert('Gym registration flow would start here.');"
+        >
+            Sign Up Now
+        </button>
+    </div>
+
+    <!-- Contact Section -->
+    <div id="contact-section" class="content-section container mx-auto mt-10 p-8 bg-white rounded-xl shadow-xl max-w-md flex-grow mb-8">
+        <h2 class="text-3xl font-bold text-gray-900 mb-6 text-center">Get In Touch</h2>
+        <p class="text-lg text-gray-700 mb-8 text-center">Have questions? Fill out the form below and we'll get back to you.</p>
+
+        <form action="/contact/submit" method="post" class="space-y-6">
+            <div>
+                <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name:</label>
+                <input type="text" id="name" name="name" required
+                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email:</label>
+                <input type="email" id="email" name="email" required
+                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="message" class="block text-sm font-medium text-gray-700 mb-1">Message:</label>
+                <textarea id="message" name="message" required rows="6"
+                          class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"></textarea>
+            </div>
+            <div>
+                <button type="submit"
+                        class="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Send Message
+                </button>
+            </div>
+        </form>
+    </div>
+
+
+    <!-- Forgotten Password Modal (Remains the same) -->
+    <div id="forgotPasswordModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3 class="text-2xl font-semibold text-gray-800 mb-4 text-center">Reset Password</h3>
+            <p class="text-gray-700 mb-6 text-center">Please enter your email address. If an account exists, we'll send you instructions to reset your password.</p>
+            
+            <form id="forgotPasswordForm" class="space-y-4">
+                <div>
+                    <label for="resetEmail" class="block text-sm font-medium text-gray-700 mb-1">Email Address:</label>
+                    <input type="email" id="resetEmail" name="resetEmail" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+                <div>
+                    <button type="submit"
+                            class="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        Submit
+                    </button>
+                </div>
+            </form>
+            
+            <div id="resetMessage" class="mt-4 text-center text-gray-700"></div>
+        </div>
+    </div>
+
+    <!-- Sign Up Modal (Remains the same) -->
+    <div id="signUpModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeSignUp">&times;</span>
+            <h3 class="text-2xl font-semibold text-gray-800 mb-4 text-center">Create an Account</h3>
+            
+            <form id="signUpForm" class="space-y-4">
+                <div>
+                    <label for="firstName" class="block text-sm font-medium text-gray-700 mb-1">First Name:</label>
+                    <input type="text" id="firstName" name="firstName" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="surname" class="block text-sm font-medium text-gray-700 mb-1">Surname:</label>
+                    <input type="text" id="surname" name="surname" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="signUpEmail" class="block text-sm font-medium text-gray-700 mb-1">Email Address:</label>
+                    <input type="email" id="signUpEmail" name="signUpEmail" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="signUpPassword" class="block text-sm font-medium text-gray-700 mb-1">Password (min 8 characters):</label>
+                    <input type="password" id="signUpPassword" name="signUpPassword" minlength="8" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="confirmPassword" class="block text-sm font-medium text-gray-700 mb-1">Confirm Password:</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" minlength="8" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+                <div>
+                    <button type="submit"
+                            class="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        Sign Up
+                    </button>
+                </div>
+            </form>
+            
+            <div id="signUpMessage" class="mt-4 text-center text-gray-700"></div>
+        </div>
+    </div>
+
+
+    <footer class="mt-auto text-center py-4 text-gray-600 text-sm">
+        <p>&copy; 2025 MMA Gym Management</p>
+    </footer>
+
+    <script>
+        // Wait for the DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Page Navigation Logic ---
+            const contentSections = document.querySelectorAll('.content-section');
+            const navLinks = document.querySelectorAll('nav ul li a');
+
+            // Function to show a specific content section
+            const showSection = (sectionId) => {
+                contentSections.forEach(section => {
+                    if (section.id === `${sectionId}-section`) {
+                        section.style.display = 'block';
+                    } else {
+                        section.style.display = 'none';
+                    }
+                });
+                 // Update active nav link (optional but good practice)
+                 navLinks.forEach(link => {
+                     if (link.getAttribute('data-section') === sectionId) {
+                         link.classList.add('font-bold', 'underline'); // Example active styles
+                     } else {
+                         link.classList.remove('font-bold', 'underline');
+                     }
+                 });
+            };
+
+            // Handle navigation link clicks
+            navLinks.forEach(link => {
+                link.addEventListener('click', (event) => {
+                    event.preventDefault(); // Prevent default link behavior
+                    const sectionId = link.getAttribute('data-section');
+                    showSection(sectionId);
+                    // Update URL with hash without reloading (History API)
+                    history.pushState({ section: sectionId }, '', `#${sectionId === 'home' ? '' : sectionId}`);
+                });
+            });
+
+            // Handle browser back/forward buttons
+            window.addEventListener('popstate', (event) => {
+                const hash = window.location.hash.substring(1); // Get hash without '#'
+                const sectionId = hash || 'home'; // Default to 'home' if hash is empty
+                showSection(sectionId);
+            });
+
+            // Determine the initial section to show based on the URL hash
+            const initialHash = window.location.hash.substring(1); // Get hash without '#'
+            const initialSection = initialHash || 'home'; // Default to 'home' if hash is empty
+            showSection(initialSection);
+            // Replace the initial state to ensure back button works correctly from the start
+            history.replaceState({ section: initialSection }, '', `#${initialSection === 'home' ? '' : initialSection}`);
+
+
+            // --- Modal and Form Logic (Retained and slightly adapted) ---
+
+            const loginForm = document.getElementById('loginForm');
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const errorMessageDiv = document.getElementById('errorMessage');
+
+            // Forgotten password elements
+            const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
+            const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+            const closeBtns = document.querySelectorAll('.modal .close'); // Select all close buttons
+            const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+            const resetEmailInput = document.getElementById('resetEmail');
+            const resetMessageDiv = document.getElementById('resetMessage');
+
+            // Sign up elements
+            const signUpBtn = document.getElementById('signUpBtn');
+            const signUpModal = document.getElementById('signUpModal');
+            const closeSignUpBtn = document.getElementById('closeSignUp');
+            const signUpForm = document.getElementById('signUpForm');
+            const firstNameInput = document.getElementById('firstName');
+            const surnameInput = document.getElementById('surname');
+            const signUpEmailInput = document.getElementById('signUpEmail');
+            const signUpPasswordInput = document.getElementById('signUpPassword');
+            const confirmPasswordInput = document.getElementById('confirmPassword');
+            const signUpMessageDiv = document.getElementById('signUpMessage');
+
+            // Function to close modals
+            const closeModals = () => {
+                forgotPasswordModal.style.display = 'none';
+                signUpModal.style.display = 'none';
+                resetMessageDiv.textContent = '';
+                resetMessageDiv.className = ''; // Clear any previous class
+                signUpMessageDiv.textContent = '';
+                signUpMessageDiv.style.color = ''; // Clear any previous color
+                signUpForm.reset(); // Reset sign-up form
+            };
+
+            // Login form submission handler
+            loginForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                errorMessageDiv.textContent = '';
+                errorMessageDiv.className = 'mt-4 text-center text-red-600';
+
+                const data = { email: emailInput.value, password: passwordInput.value };
+
+                try {
+                    const response = await fetch('/api/user/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        console.log('Login successful:', result);
+                        // Redirect to portal after login (this is still a server request)
+                        window.location.href = '/portal';
+                    } else {
+                        console.error('Login failed:', result.error_message);
+                        errorMessageDiv.textContent = result.error_message || 'An unknown error occurred.';
+                        errorMessageDiv.className = 'mt-4 text-center text-red-600';
+                    }
+
+                } catch (error) {
+                    console.error('Fetch error:', error);
+                    errorMessageDiv.textContent = 'Failed to connect to the server.';
+                    errorMessageDiv.className = 'mt-4 text-center text-red-600';
+                }
+            });
+
+            // Show the forgotten password modal
+            forgotPasswordBtn.addEventListener('click', () => {
+                forgotPasswordModal.style.display = 'block';
+                if (emailInput.value) {
+                    resetEmailInput.value = emailInput.value;
+                }
+            });
+
+            // Close modals using the 'x' button
+            closeBtns.forEach(btn => {
+                btn.addEventListener('click', closeModals);
+            });
+
+            // Close modals when clicking outside
+            window.addEventListener('click', (event) => {
+                if (event.target === forgotPasswordModal || event.target === signUpModal) {
+                    closeModals();
+                }
+            });
+
+            // Handle forgotten password form submission
+            forgotPasswordForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                resetMessageDiv.textContent = '';
+                resetMessageDiv.className = 'mt-4 text-center text-gray-700';
+
+                const email = resetEmailInput.value;
+
+                try {
+                    const response = await fetch('/api/user/forgotten_password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: email })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        resetMessageDiv.textContent = result.message || 'Password reset instructions have been sent to your email.';
+                        resetMessageDiv.className = 'mt-4 text-center text-green-600';
+                    } else {
+                        resetMessageDiv.textContent = result.error_message || 'An error occurred while processing your request.';
+                        resetMessageDiv.className = 'mt-4 text-center text-red-600';
+                    }
+
+                } catch (error) {
+                    console.error('Fetch error:', error);
+                    resetMessageDiv.textContent = 'Failed to connect to the server.';
+                    resetMessageDiv.className = 'mt-4 text-center text-red-600';
+                }
+            });
+
+            // Show the sign-up modal
+            signUpBtn.addEventListener('click', () => {
+                signUpModal.style.display = 'block';
+                if (emailInput.value) {
+                    signUpEmailInput.value = emailInput.value;
+                }
+            });
+
+            // Handle sign-up form submission
+            signUpForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                signUpMessageDiv.textContent = '';
+                signUpMessageDiv.className = 'mt-4 text-center text-gray-700';
+
+                const firstName = firstNameInput.value;
+                const surname = surnameInput.value;
+                const email = signUpEmailInput.value;
+                const password = signUpPasswordInput.value;
+                const confirmPassword = confirmPasswordInput.value;
+
+                if (password !== confirmPassword) {
+                    signUpMessageDiv.textContent = 'Passwords do not match.';
+                    signUpMessageDiv.className = 'mt-4 text-center text-red-600';
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/user/signup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ first_name: firstName, surname: surname, email: email, password: password })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        signUpMessageDiv.textContent = result.message || 'Account created successfully! Please check your email to verify.';
+                        signUpMessageDiv.className = 'mt-4 text-center text-green-600';
+                        signUpForm.reset();
+
+                        setTimeout(closeModals, 3000);
+                    } else {
+                        signUpMessageDiv.textContent = result.error_message || 'An error occurred while creating your account.';
+                        signUpMessageDiv.className = 'mt-4 text-center text-red-600';
+                    }
+
+                } catch (error) {
+                    console.error('Fetch error:', error);
+                    signUpMessageDiv.textContent = 'Failed to connect to the server.';
+                    signUpMessageDiv.className = 'mt-4 text-center text-red-600';
+                }
+            });
+        });
+    </script>
 </body>
 </html>

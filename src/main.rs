@@ -72,13 +72,13 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .wrap(Logger::default())
 
             // --- Serve CSS from Cache ---
-            .service(handlers::serve_css)
+            // .service(handlers::serve_css)
 
             // --- Page Routes ---
             .service(handlers::home_page)
-            .service(handlers::login_signup_page)
-            .service(handlers::gym_signup_page)
-            .service(handlers::contact_page)
+            // .service(handlers::login_signup_page)
+            // .service(handlers::gym_signup_page)
+            // .service(handlers::contact_page)
             .service(handlers::contact_submit) // POST handler for the form
 
             // Public routes

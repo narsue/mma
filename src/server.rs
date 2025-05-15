@@ -204,16 +204,16 @@ pub mod handlers {
 
 
     // --- New CSS Handler ---
-    #[get("/style.css")]
-    pub async fn serve_css(cache: web::Data<TemplateCache>) -> HttpResponse {
-        match get_template_content(&cache, "style.css") {
-            Ok(content) => HttpResponse::Ok()
-                // Set the correct Content-Type for CSS files
-                .content_type("text/css")
-                .body(content),
-            Err(resp) => resp, // Return 404 or other error from get_template_content
-        }
-    }
+    // #[get("/style.css")]
+    // pub async fn serve_css(cache: web::Data<TemplateCache>) -> HttpResponse {
+    //     match get_template_content(&cache, "style.css") {
+    //         Ok(content) => HttpResponse::Ok()
+    //             // Set the correct Content-Type for CSS files
+    //             .content_type("text/css")
+    //             .body(content),
+    //         Err(resp) => resp, // Return 404 or other error from get_template_content
+    //     }
+    // }
 
     #[get("/")]
     pub async fn home_page(cache: web::Data<TemplateCache>) -> HttpResponse {
@@ -225,35 +225,35 @@ pub mod handlers {
         }
     }
 
-    #[get("/login")]
-    pub async fn login_signup_page(cache: web::Data<TemplateCache>) -> HttpResponse {
-         match get_template_content(&cache, "login.html") {
-            Ok(content) => HttpResponse::Ok()
-                .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
-                .body(content),
-            Err(resp) => resp,
-        }
-    }
+    // #[get("/login")]
+    // pub async fn login_signup_page(cache: web::Data<TemplateCache>) -> HttpResponse {
+    //      match get_template_content(&cache, "login.html") {
+    //         Ok(content) => HttpResponse::Ok()
+    //             .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
+    //             .body(content),
+    //         Err(resp) => resp,
+    //     }
+    // }
 
-    #[get("/gym-signup")]
-    pub async fn gym_signup_page(cache: web::Data<TemplateCache>) -> HttpResponse {
-         match get_template_content(&cache, "gym_signup.html") {
-            Ok(content) => HttpResponse::Ok()
-                .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
-                .body(content),
-            Err(resp) => resp,
-        }
-    }
+    // #[get("/gym-signup")]
+    // pub async fn gym_signup_page(cache: web::Data<TemplateCache>) -> HttpResponse {
+    //      match get_template_content(&cache, "gym_signup.html") {
+    //         Ok(content) => HttpResponse::Ok()
+    //             .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
+    //             .body(content),
+    //         Err(resp) => resp,
+    //     }
+    // }
 
-    #[get("/contact")]
-    pub async fn contact_page(cache: web::Data<TemplateCache>) -> HttpResponse {
-         match get_template_content(&cache, "contact.html") {
-            Ok(content) => HttpResponse::Ok()
-                .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
-                .body(content),
-            Err(resp) => resp,
-        }
-    }
+    // #[get("/contact")]
+    // pub async fn contact_page(cache: web::Data<TemplateCache>) -> HttpResponse {
+    //      match get_template_content(&cache, "contact.html") {
+    //         Ok(content) => HttpResponse::Ok()
+    //             .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
+    //             .body(content),
+    //         Err(resp) => resp,
+    //     }
+    // }
 
     #[get("/portal")]
     // This route requires authentication. Use LoggedUser to protect it.
