@@ -58,6 +58,9 @@ pub struct ClassDataRow {
     pub notify_booking: bool,
     pub title: String,
     pub description: String,
+    pub styles: Vec<Uuid>,
+    pub grades: Vec<Uuid>,
+    pub deleted_ts: Option<CqlTimestamp>,
 }
 
 
@@ -167,6 +170,14 @@ pub async fn init_schema(session: &Session) -> Result<()> {
 
     session
     .query_unpaged(
+        "CREATE INDEX IF NOT EXISTS user_email_index ON mma.user (email)",
+        &[],
+    )
+    .await?;
+    println!("user_email_index created");
+
+    session
+    .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.club_class \
         (club_id uuid, class_id uuid, PRIMARY KEY (club_id, class_id))",
         &[],
@@ -218,13 +229,20 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.class \
-        (class_id uuid, venue_id uuid, waiver_id uuid, capacity int, publish_mode int, price decimal, notify_booking boolean, title text, description text, created_ts timestamp, end_ts timestamp, creator_user_id uuid, \
+        (class_id uuid, venue_id uuid, waiver_id uuid, capacity int, publish_mode int, price decimal, notify_booking boolean, title text, description text, created_ts timestamp, end_ts timestamp, creator_user_id uuid, styles SET<uuid>, grades SET<uuid>, gender_req text, deleted_ts timestamp, \
             PRIMARY KEY (class_id))",
         &[],
     )
     .await?;
     println!("Class table created");
     
+    session
+    .query_unpaged(
+        "CREATE INDEX IF NOT EXISTS class_deleted_index ON mma.class (deleted_ts)",
+        &[],
+    )
+    .await?;
+    println!("class_deleted_index created");
 
     session
     .query_unpaged(
@@ -329,14 +347,14 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     .await?;
     println!("Session table created");
 
-    session
-    .query_unpaged(
-        "CREATE TABLE IF NOT EXISTS mma.user_by_email \
-        (email text PRIMARY KEY, user_id uuid, password_hash text,)",
-        &[],
-    )
-    .await?;
-    println!("Email to user table created");
+    // session
+    // .query_unpaged(
+    //     "CREATE TABLE IF NOT EXISTS mma.user_by_email \
+    //     (email text PRIMARY KEY, user_id uuid, password_hash text,)",
+    //     &[],
+    // )
+    // .await?;
+    // println!("Email to user table created");
 
     session
     .query_unpaged(
@@ -376,7 +394,7 @@ impl ScyllaConnector {
             .map_err(|e| AppError::Internal(format!("Failed to connect to Scylla: {}", e)))?;
         println!("DB Connected");
         init_schema(&session).await?;
-        let select_user_by_email_stmt = create_prepared_statement(&session, "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?").await?;
+        let select_user_by_email_stmt = create_prepared_statement(&session, "SELECT user_id, password_hash FROM mma.user WHERE email = ?").await?;
 
         Ok(Self {
             session: Arc::new(session),
@@ -386,22 +404,22 @@ impl ScyllaConnector {
 
     pub async fn get_user_by_email(&self, email: &str) -> Result<Option<(Uuid, String)>> {
         // First, get the user_id from the email lookup table
-        // let email_result = self.session
-        //     .execute_unpaged(
-        //         // "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?",
-        //         &self.select_user_by_email_stmt.clone(),
-        //         (email,),
-        //     )
-        //     .await?
-        //     .into_rows_result()?;
-
         let email_result = self.session
-            .query_unpaged(
-                "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?",
+            .execute_unpaged(
+                // "SELECT user_id, password_hash FROM mma.user_by_email WHERE email = ?",
+                &self.select_user_by_email_stmt.clone(),
                 (email,),
             )
             .await?
             .into_rows_result()?;
+
+        // let email_result = self.session
+        //     .query_unpaged(
+        //         "SELECT user_id, password_hash FROM mma.user WHERE email = ?",
+        //         (email,),
+        //     )
+        //     .await?
+        //     .into_rows_result()?;
 
         for row in email_result.rows()?
         {
@@ -535,7 +553,7 @@ impl ScyllaConnector {
         // Check if email already exists using the email lookup table
         let result = self.session
             .query_unpaged(
-                "SELECT user_id FROM mma.user_by_email WHERE email = ?",
+                "SELECT user_id FROM mma.user WHERE email = ?",
                 (email,),
             )
             .await?
@@ -602,12 +620,12 @@ impl ScyllaConnector {
             .await?;
         
         // Insert into email lookup table
-        self.session
-            .query_unpaged(
-                "INSERT INTO mma.user_by_email (email, user_id, password_hash) VALUES (?, ?, ?)",
-                (email, user_id, &password_hash),
-            )
-            .await?;
+        // self.session
+        //     .query_unpaged(
+        //         "INSERT INTO mma.user_by_email (email, user_id, password_hash) VALUES (?, ?, ?)",
+        //         (email, user_id, &password_hash),
+        //     )
+        //     .await?;
         
         Ok(user_id)
     }
@@ -719,20 +737,20 @@ impl ScyllaConnector {
             )
             .await?;
 
-        let result = self.session.query_unpaged("SELECT email from mma.user where user_id = ?", (user_id, ))
-            .await?
-            .into_rows_result()?;
+        // let result = self.session.query_unpaged("SELECT email from mma.user where user_id = ?", (user_id, ))
+        //     .await?
+        //     .into_rows_result()?;
 
-        for row in result.rows()?
-        {
-            let (email,): (String,) = row?;
-            self.session
-                .query_unpaged(
-                    "UPDATE mma.user_by_email SET password_hash = ? WHERE email = ?",
-                    (&new_password_hash, email),
-                )
-                .await?;
-        }
+        // for row in result.rows()?
+        // {
+        //     let (email,): (String,) = row?;
+        //     self.session
+        //         .query_unpaged(
+        //             "UPDATE mma.user_by_email SET password_hash = ? WHERE email = ?",
+        //             (&new_password_hash, email),
+        //         )
+        //         .await?;
+        // }
 
         Ok(())
     }
@@ -851,8 +869,8 @@ impl ScyllaConnector {
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.class (creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price, waiver_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id), 
+                "INSERT INTO mma.class (creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids), 
             )
             .await?;
 
@@ -903,8 +921,8 @@ impl ScyllaConnector {
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.class (class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id), 
+                "INSERT INTO mma.class (class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids), 
             )
             .await?;
 
@@ -980,7 +998,7 @@ impl ScyllaConnector {
     ) -> AppResult<Vec<ClassData>> {
 
         let result = self.session
-            .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description FROM mma.class", ()) // Pass the query string and bound values
+            .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts FROM mma.class", ()) // Pass the query string and bound values
             .await?
             .into_rows_result()?;
 
@@ -1002,8 +1020,8 @@ impl ScyllaConnector {
                     title: row.title,
                     description: row.description,
                     frequency: Vec::new(), // Initialize with an empty vector
-                    styles: Vec::new(), // Initialize with an empty vector
-                    grades: Vec::new(), // Initialize with an empty vector
+                    styles: row.styles, // Initialize with an empty vector
+                    grades: row.grades,
                 };
                 classes.push(class_data);
             } 
@@ -1011,33 +1029,33 @@ impl ScyllaConnector {
 
         for class in &mut classes {
             let class_id = class.class_id;
-            let result = self.session
-                .query_unpaged(
-                    "SELECT style_id FROM mma.class_styles WHERE class_id = ?",
-                    (class_id,),
-                )
-                .await?
-                .into_rows_result()?;
+            // let result = self.session
+            //     .query_unpaged(
+            //         "SELECT style_id FROM mma.class_styles WHERE class_id = ?",
+            //         (class_id,),
+            //     )
+            //     .await?
+            //     .into_rows_result()?;
 
-            for row in result.rows()?
-            {
-                let (style_id, ): (Uuid,) = row?;
-                class.styles.push(style_id);
-            }
+            // for row in result.rows()?
+            // {
+            //     let (style_id, ): (Uuid,) = row?;
+            //     class.styles.push(style_id);
+            // }
 
-            let result = self.session
-                .query_unpaged(
-                    "SELECT grade_id FROM mma.class_grades WHERE class_id = ?",
-                    (class_id,),
-                )
-                .await?
-                .into_rows_result()?;
+            // let result = self.session
+            //     .query_unpaged(
+            //         "SELECT grade_id FROM mma.class_grades WHERE class_id = ?",
+            //         (class_id,),
+            //     )
+            //     .await?
+            //     .into_rows_result()?;
 
-            for row in result.rows()?
-            {
-                let (grade_id, ): (Uuid,) = row?;
-                class.styles.push(grade_id);
-            }
+            // for row in result.rows()?
+            // {
+            //     let (grade_id, ): (Uuid,) = row?;
+            //     class.styles.push(grade_id);
+            // }
 
             let result = self.session
             .query_unpaged(
@@ -1087,7 +1105,7 @@ impl ScyllaConnector {
 
     pub async fn get_class(&self, venue_id: &Uuid) -> AppResult<Option<ClassData>> {
         let result = self.session
-        .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description FROM mma.class where class_id = ?", (venue_id, )) // Pass the query string and bound values
+        .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts FROM mma.class where class_id = ?", (venue_id, )) // Pass the query string and bound values
         .await?
         .into_rows_result()?;
 
@@ -1097,6 +1115,12 @@ impl ScyllaConnector {
             let row = row?;
             // Successfully retrieved a row. Now extract the columns.
             // if publish_mode_filter.is_none() || publish_mode_filter == Some(row.publish_mode) {
+            // The class is deleted
+            if row.deleted_ts != None {
+                // println!("Class is deleted");
+                tracing::info!("Class is deleted");
+                return Ok(None);
+            }
 
             class = Some(ClassData {
                 class_id: row.class_id,
@@ -1119,33 +1143,33 @@ impl ScyllaConnector {
         match class {
             Some(ref mut c) => {
                 let class_id = c.class_id;
-                let result = self.session
-                    .query_unpaged(
-                        "SELECT style_id FROM mma.class_styles WHERE class_id = ?",
-                        (class_id,),
-                    )
-                    .await?
-                    .into_rows_result()?;
+                // let result = self.session
+                //     .query_unpaged(
+                //         "SELECT style_id FROM mma.class_styles WHERE class_id = ?",
+                //         (class_id,),
+                //     )
+                //     .await?
+                //     .into_rows_result()?;
     
-                for row in result.rows()?
-                {
-                    let (style_id, ): (Uuid,) = row?;
-                    c.styles.push(style_id);
-                }
+                // for row in result.rows()?
+                // {
+                //     let (style_id, ): (Uuid,) = row?;
+                //     c.styles.push(style_id);
+                // }
     
-                let result = self.session
-                    .query_unpaged(
-                        "SELECT grade_id FROM mma.class_grades WHERE class_id = ?",
-                        (class_id,),
-                    )
-                    .await?
-                    .into_rows_result()?;
+                // let result = self.session
+                //     .query_unpaged(
+                //         "SELECT grade_id FROM mma.class_grades WHERE class_id = ?",
+                //         (class_id,),
+                //     )
+                //     .await?
+                //     .into_rows_result()?;
     
-                for row in result.rows()?
-                {
-                    let (grade_id, ): (Uuid,) = row?;
-                    c.styles.push(grade_id);
-                }
+                // for row in result.rows()?
+                // {
+                //     let (grade_id, ): (Uuid,) = row?;
+                //     c.styles.push(grade_id);
+                // }
     
                 let result = self.session
                     .query_unpaged(
