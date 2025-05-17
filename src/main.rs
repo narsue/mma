@@ -95,6 +95,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::signup_success)
             .service(handlers::verify_account)
             .service(handlers::handle_signup)
+            .service(handlers::refresh_session_handler)
 
             .service(handlers::get_user_profile_data)
             .service(handlers::update_user_profile)

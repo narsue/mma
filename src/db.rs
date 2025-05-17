@@ -476,8 +476,12 @@ impl ScyllaConnector {
         Ok(session_token)
     }
 
+
+
+
+
     // Verify a session token and return the user ID if valid
-    pub async fn verify_session(&self, user_id: Uuid, session_token: &str) -> Result<bool> {
+    pub async fn verify_session(&self, user_id: Uuid, session_token: &str) -> Result<(bool, i64)> {
         // println!("Verifying session: {}", session_token);
         let result = self.session
             .query_unpaged(
@@ -493,17 +497,17 @@ impl ScyllaConnector {
             let now = Utc::now().timestamp();
             // Check if session is valid (not expired and is active)
             if now <= expires_ts.0 && is_active {
-                return Ok(true);
+                return Ok((true, expires_ts.0));
             } else {
                 // Optionally invalidate expired sessions
                 if now > expires_ts.0 {
                     self.invalidate_session(user_id, session_token).await?;
                 }
-                return Ok(false);
+                return Ok((false, 0));
             }
         }
 
-        return Ok(false);
+        return Ok((false, 0));
 
     }
     
@@ -1527,7 +1531,6 @@ impl ScyllaConnector {
         // Return false if no valid code was found
         Ok((false, None, None, None))
     }
-
 
 
 }

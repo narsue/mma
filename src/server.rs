@@ -27,6 +27,8 @@ pub mod handlers {
     use actix_web::error::ErrorInternalServerError;
     use crate::email_sender::send_custom_email;
     use urlencoding;
+    use std::time::SystemTime;
+
 
     // Get User Profile Handler ---
     #[get("/api/user/profile_data")]
@@ -1996,6 +1998,96 @@ pub mod handlers {
             Err(resp) => resp,
         }
     }
+
+
+    // Handler to refresh a user's session
+    #[post("/api/user/refresh_session")]
+    pub async fn refresh_session_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+        mut user: LoggedUser, // Authenticate the request and get user/session info
+    ) -> Result<HttpResponse, ActixError> { // Handler returns ActixResult<HttpResponse>
+        // The LoggedUser extractor validates the current session cookie.
+        // If authentication fails, Actix Web returns a 401 Unauthorized.
+
+        let user_id = user.user_id;
+
+
+        let current_time_millis = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+
+
+        let creator_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        let current_expires_ts = user.expire_ts; // Get the expiry timestamp (millis)
+        // let current_session_token = user.session_token; // Get the token from the extractor
+
+        // Define the refresh window (2 hours in milliseconds)
+        let refresh_window_millis: i64 = 2 * 60 * 60 * 1000;
+
+        // Check if the current session is within the refresh window
+        // We also check that the current session hasn't expired *before* the refresh window
+        if current_expires_ts > current_time_millis && (current_expires_ts - current_time_millis) < refresh_window_millis {
+            tracing::info!("Session for user {} is within the refresh window.", user_id);
+
+            // Call the database function to issue a new session token
+            // You need a db function that handles renewing an *existing* session
+            // Let's refine the `refresh_session` function in db.rs
+
+            match state_manager.db.create_session(&user_id, None, None, 24).await { // Renew for 8 hours
+                Ok(new_token) => {
+                    tracing::info!("Session renewed successfully for user {}.", user_id);
+                    // let new_expiry_ts_millis = new_expiry_ts_cql;
+
+                    // Set the new cookies in the response
+                    let new_expires_duration = time::Duration::hours(8); // Match DB expiry
+
+                    let session_cookie = Cookie::build("session", new_token.clone())
+                        .path("/")
+                        .secure(true)
+                        .http_only(true)
+                        .same_site(SameSite::Strict)
+                        .max_age(new_expires_duration)
+                        .finish();
+
+                    let user_id_cookie = Cookie::build("user_id", user_id.to_string())
+                        .path("/")
+                        .secure(true)
+                        .http_only(false)
+                        .same_site(SameSite::Strict)
+                        .max_age(new_expires_duration)
+                        .finish();
+
+                    // Return success response with new token and expiry, and set cookies
+                    Ok(HttpResponse::Ok()
+                        .cookie(session_cookie)
+                        .cookie(user_id_cookie)
+                        .json(GenericResponse {
+                            success: true,
+                            message: Some("Session refreshed.".to_string()),
+                            error_message: None,
+                        }))
+
+                },
+                Err(e) => {
+                    tracing::error!("Database error renewing session for user {}: {:?}", user_id, e);
+                    // Return an internal server error if renewing fails
+                    Err(ErrorInternalServerError(e))
+                }
+            }
+
+        } else {
+            tracing::info!("Session for user {} not within refresh window or already expired.", user_id);
+            // Return success, but indicate no refresh was needed/performed
+            Ok(HttpResponse::Ok().json(GenericResponse {
+                success: true,
+                message: Some("Session does not require immediate refresh.".to_string()),
+                error_message: None,
+            }))
+        }
+    }
+
 
 
 }

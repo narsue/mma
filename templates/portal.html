@@ -1926,6 +1926,7 @@
                              if (venues.length > 0) {
                                  let html = '';
                                  venues.forEach(venue => {
+                                     add_cached_value("venue", venue.venue_id, venue); // Cache the venue data
                                      html += `
                                          <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
                                              <h3 class="text-xl font-semibold text-gray-900 mb-2">${venue.title}</h3>
@@ -2051,6 +2052,7 @@
 
                              // Show the edit modal
                              editVenueModal.style.display = 'block';
+                             add_cached_value("venue", venue.venue_id, venue); // Cache the venue data
 
                          } else {
                               alert('Error fetching venue for editing: ' + (result.error_message || 'Invalid data received'));
@@ -3522,6 +3524,7 @@
                              option.textContent = `${venue.title}`; // Display title
                               // Optional: add venue_id to text for debugging: `${venue.title} (${venue.venue_id.substring(0, 8)}...)`
                              targetElement.appendChild(option);
+                             add_cached_value("venue", venue.venue_id, venue); // Cache the venue ID and title
                          });
 
                      } else {
@@ -3676,6 +3679,7 @@
 
 
                         if (venue && venue.venue_id) { // Basic check if we got venue data
+                            add_cached_value("venue", venue.venue_id, venue); // Cache the venue ID and title
                             venueInfoContentDiv.innerHTML = `
                                 <h3 class="text-xl font-semibold text-gray-800 mb-3">${venue.title}</h3>
                                 <p class="text-gray-700 mb-2"><strong class="font-medium">Description:</strong> ${venue.description || 'N/A'}</p>
@@ -3727,10 +3731,52 @@
 
 
 
+        // Function to initiate session refresh
+        async function refreshSession() {
+            console.log('Attempting to refresh session...');
+            try {
+                const response = await fetch('/api/user/refresh_session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    // No body needed, authentication is handled by the session cookie
+                });
 
+                // Check if the response is OK (200-299)
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        if (result.new_session_token && result.new_expires_ts) {
+                            console.log('Session successfully refreshed.');
+                            // Cookies are already set by the server using Set-Cookie headers
+                            // You might want to store the new expiry timestamp client-side
+                            // if you are doing client-side expiry checks, but it's not strictly
+                            // necessary if you rely on server validation and the refresh window.
+                            // Example: localStorage.setItem('sessionExpiry', result.new_expires_ts);
 
+                        } else {
+                             console.log('Session refresh request successful, but no refresh was needed.');
+                        }
+                    } else {
+                        // Server returned success: false (backend logic prevented refresh)
+                        console.warn('Session refresh failed:', result.error_message || 'Unknown error');
+                        // Handle specific errors if needed (e.g., user is now unauthorized)
+                    }
+                } else if (response.status === 401) {
+                    // User is no longer authenticated (session cookie invalid or expired)
+                    console.warn('Session refresh failed: User Unauthorized. Redirecting to login.');
+                    window.location.href = '/login'; // Redirect to login page
+                }
+                 else {
+                    // Handle other HTTP errors
+                    console.error('Session refresh failed with HTTP status:', response.status);
+                }
+            } catch (error) {
+                console.error('Network error during session refresh:', error);
+                // Handle network errors (e.g., server down). User might need to log in again later.
+            }
+        }
 
-
+        const sessionRefreshInterval = setInterval(refreshSession, 30 * 60 * 1000);
 
     </script>
 </body>

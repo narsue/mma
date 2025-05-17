@@ -11,6 +11,7 @@ use crate::state::StoreStateManager;
 pub struct LoggedUser {
     pub user_id: Uuid,
     pub session_token: String,     // Added session_token field
+    pub expire_ts: i64,
     // pub state: Arc<StoreStateManager>, // Added state field
 }
 
@@ -39,6 +40,7 @@ impl FromRequest for LoggedUser {
                         ready(Ok(LoggedUser {
                             user_id, // Store the parsed Uuid
                             session_token: session_cookie.value().to_owned(),
+                            expire_ts: 0
                         }))
                     },
                     Err(e) => {
@@ -63,20 +65,20 @@ impl LoggedUser {
         let verification_result = state.db.verify_session(self.user_id, &self.session_token).await;
         
         match verification_result {
-            Ok(true) => {
-                // Session is valid and matches the user_id
-                tracing::debug!("Session valid for user_id: {}", self.user_id);
+            Ok((true, expires_ts_millis)) => {
+                // Session is valid and matches the user_id, and we got the expiry timestamp in milliseconds
+                tracing::debug!("Session valid for user_id: {}, expires at (millis): {}", self.user_id, expires_ts_millis);
+                self.expire_ts = expires_ts_millis; // Store the fetched expiry timestamp (convert i64 to CqlTimestamp)
                 Ok(self.user_id) // Return the successfully validated user_id
             }
-            Ok(false) => {
-                // Session is invalid (token doesn't exist, expired, or doesn't match user_id)
+            Ok((false, _)) => {
+                // Database call succeeded, but the session verification failed (invalid token for user, etc.)
                 tracing::debug!("Session verification failed for user_id: {}", self.user_id);
                 Err(ErrorUnauthorized("Invalid or expired session"))
             }
             Err(app_err) => {
                 // A database error occurred during verification
                 tracing::error!("Database error during session verification for user_id {}: {:?}", self.user_id, app_err);
-                // Manually convert AppError to ActixError using ErrorInternalServerError
                 Err(ErrorInternalServerError(app_err))
             }
         }
