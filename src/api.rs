@@ -348,7 +348,7 @@ pub struct CreateStyleRequest {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, DeserializeRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, DeserializeRow)]
 pub struct StyleData {
     pub style_id: Uuid,
     pub title: String,
@@ -460,3 +460,24 @@ pub struct GetVenueListResponse {
     pub venues: Option<Vec<VenueData>>,
 }
 
+// Response structure for signup
+#[derive(Serialize)]
+pub struct GetStlyeListResponse {
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub styles: Option<Vec<StyleData>>,
+}
+
+// Query parameters struct to capture the class ID
+#[derive(Deserialize)]
+pub struct GetStyleRequest {
+    pub style_id: Uuid,
+}
+
+// Response structure for signup
+#[derive(Serialize)]
+pub struct GetStyleResponse {
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub style: Option<StyleData>,
+}

@@ -675,15 +675,32 @@
             <h2 class="text-2xl font-bold text-gray-900 mb-4">Styles Management</h2>
             <p class="text-gray-700 mb-6">Information about different styles.</p>
 
-             <button id="add-style-button" class="py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200">Add New Style</button>
+            <!-- Filter and Sort Controls for Styles -->
+            <div class="flex flex-wrap gap-4 mb-6 items-center">
+                <div>
+                    <label for="style-search" class="block text-sm font-medium text-gray-700">Search:</label>
+                    <input type="text" id="style-search" placeholder="Search by name, description..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="style-sort-by" class="block text-sm font-medium text-gray-700">Sort By:</label>
+                    <select id="style-sort-by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                        <option value="title">Name (A-Z)</option>
+                        <!-- Add other sorting options if needed -->
+                    </select>
+                </div>
+                <button id="apply-style-filters-button" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition duration-200">Apply Filters</button>
+            </div>
+
+
+            <button id="add-style-button" class="py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 mb-6">Add New Style</button>
 
             <!-- Placeholder for displaying the list of styles -->
-            <div id="style-list" class="mt-6 space-y-4">
+            <div id="style-list" class="mt-6 space-y-6">
                 <p class="text-gray-600 italic">Loading styles...</p>
                 <!-- Style data will be loaded here by JavaScript -->
             </div>
 
-             <!-- Add Style Modal -->
+            <!-- Add Style Modal (Remains the same) -->
             <div id="add-style-modal" class="modal">
                 <div class="modal-content">
                     <div class="modal-header">
@@ -701,13 +718,43 @@
                                 <textarea id="style-description" rows="4"></textarea>
                             </div>
 
-                            <div id="create-style-message" class="message"></div>
+                            <div id="create-style-message" class="message text-center"></div>
 
                         </form>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="cancel-button">Cancel</button>
                         <button type="button" class="submit-button" id="submit-create-style">Create Style</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Style Modal (New) -->
+            <div id="edit-style-modal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Edit Style</h3>
+                        <span class="close-button">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <form id="edit-style-form">
+                            <input type="hidden" id="edit-style-id"> <!-- Hidden field for style ID -->
+                            <div class="form-group">
+                                <label for="edit-style-title">Title:</label>
+                                <input type="text" id="edit-style-title" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-style-description">Description (optional):</label>
+                                <textarea id="edit-style-description" rows="4"></textarea>
+                            </div>
+
+                            <div id="edit-style-message" class="message text-center"></div>
+
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-button">Cancel</button>
+                        <button type="button" class="submit-button" id="submit-edit-style">Save Changes</button>
                     </div>
                 </div>
             </div>
@@ -1385,7 +1432,7 @@
                     fetchAndDisplayVenues(); // Fetch and display venues when this section is shown
                 }
                 if (sectionId === 'styles') {
-                    getStyles();
+                    fetchAndDisplayStyles();
                 }
 
                  // --- Load profile data when Account section is shown ---
@@ -2195,144 +2242,325 @@
 
             // --- Styles Management JavaScript ---
 
-            // Get elements related to adding a style
+            // --- Styles Section Logic ---
             const addStyleButton = document.getElementById('add-style-button');
-            const addStyleModal = document.getElementById('add-style-modal');
-            const addStyleForm = document.getElementById('add-style-form');
-            const addStyleMessageDiv = document.getElementById('create-style-message'); // Message area in modal
+             const addStyleModal = document.getElementById('add-style-modal');
+             const addStyleForm = document.getElementById('add-style-form');
+             const submitCreateStyleButton = document.getElementById('submit-create-style');
+             const createStyleMessageDiv = document.getElementById('create-style-message');
+             const styleListDiv = document.getElementById('style-list');
 
-            // Get all close/cancel buttons for the ADD STYLE modal specifically
-            const addStyleModalCloseButtons = addStyleModal.querySelectorAll('.close-button, .cancel-button');
+             // Filter and Sort Elements for Styles
+             const styleSearchInput = document.getElementById('style-search'); // Add this
+             const styleSortBySelect = document.getElementById('style-sort-by'); // Add this
+             const applyStyleFiltersButton = document.getElementById('apply-style-filters-button'); // Add this
 
-            const submitCreateStyleButton = document.getElementById('submit-create-style');
+             // Edit Style Modal Elements
+             const editStyleModal = document.getElementById('edit-style-modal'); // Add this
+             const editStyleForm = document.getElementById('edit-style-form'); // Add this
+             const submitEditStyleButton = document.getElementById('submit-edit-style'); // Add this
+             const editStyleIdInput = document.getElementById('edit-style-id'); // Add this
+             const editStyleTitleInput = document.getElementById('edit-style-title'); // Add this
+             const editStyleDescriptionInput = document.getElementById('edit-style-description'); // Add this
+             const editStyleMessageDiv = document.getElementById('edit-style-message'); // Add this
 
-            // Get the div where the style list will be displayed
-            const styleListDiv = document.getElementById('style-list');
-            
-            // --- Add Style Modal Open Logic ---
-            addStyleButton.onclick = function() {
-                addStyleModal.style.display = 'block';
-                addStyleMessageDiv.style.display = 'none'; // Hide any previous message
-                addStyleMessageDiv.textContent = '';
-                addStyleForm.reset(); // Clear the form fields
+
+             // Open Add Style Modal
+             addStyleButton.addEventListener('click', () => {
+                  addStyleModal.style.display = 'block';
+                  createStyleMessageDiv.textContent = '';
+                  createStyleMessageDiv.className = 'message text-center';
+                  createStyleMessageDiv.style.display = 'none';
+                  addStyleForm.reset();
+             });
+
+
+            // Submit Create Style Form
+            submitCreateStyleButton.addEventListener('click', async () => {
+                 createStyleMessageDiv.style.display = 'none';
+                 createStyleMessageDiv.textContent = '';
+                 createStyleMessageDiv.className = 'message text-center';
+                 submitCreateStyleButton.disabled = true;
+
+                 const title = document.getElementById('style-title').value.trim();
+                 const description = document.getElementById('style-description').value.trim();
+
+                  if (!title) {
+                     displayMessage(createStyleMessageDiv, 'Title is required.', 'error');
+                     submitCreateStyleButton.disabled = false;
+                     return;
+                 }
+
+                  const styleData = {
+                     title: title,
+                     description: description || null,
+                 };
+
+                 console.log("Sending Style Data:", styleData);
+
+                  try {
+                     const response = await fetch('/api/style/create', {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(styleData)
+                     });
+
+                     const responseData = await response.json();
+
+                     if (response.ok && responseData.success) {
+                         console.log("Style created successfully:", responseData);
+                         displayMessage(createStyleMessageDiv, responseData.message || 'Style created successfully!', 'success');
+
+                         setTimeout(() => {
+                             closeModal(addStyleModal);
+                             fetchAndDisplayStyles();
+                            //  fetchStylesForSelect(classStyleSelect);
+                            //  fetchStylesForSelect(editClassStyleSelect);
+                         }, 2000);
+
+                     } else if (responseData && responseData.error_message) {
+                         displayMessage(createStyleMessageDiv, `Creation failed: ${responseData.error_message}`, 'error');
+                         console.error("Server error creating style:", response.status, responseData.error_message);
+                     }
+                      else if (response.status === 400) {
+                           const errorText = await response.text();
+                           displayMessage(createStyleMessageDiv, `Invalid request data: ${responseData.error_message || errorText.substring(0, 100) + '...'}`, 'error');
+                           console.error("Bad request creating style:", response.status, errorText);
+                      }
+                      else if (response.status === 401 || response.status === 403) {
+                           displayMessage(createStyleMessageDiv, 'Error: You are not authorized to create styles.', 'error');
+                            console.error("Authorization error creating style:", response.status);
+                      }
+                     else {
+                         const errorText = await response.text();
+                         displayMessage(createStyleMessageDiv, `Error creating style: ${response.status} - ${responseData.error_message || errorText.substring(0, 100) + '...'}` , 'error');
+                         console.error("Error creating style:", response.status, errorText);
+                     }
+
+                  } catch (error) {
+                      console.error('Error creating style:', error);
+                     displayMessage(createStyleMessageDiv, 'Failed to connect to the server.', 'error');
+                  } finally {
+                      submitCreateStyleButton.disabled = false;
+                  }
+             });
+
+            // Function to fetch and display the list of styles as cards
+            async function fetchAndDisplayStyles() {
+                 styleListDiv.innerHTML = '<p class="text-gray-600 italic">Loading styles...</p>';
+
+                 // Get filter and sort parameters for styles
+                 const searchTerm = styleSearchInput.value.trim();
+                 const sortBy = styleSortBySelect.value;
+
+                 // Construct query parameters
+                 const queryParams = new URLSearchParams();
+                 if (searchTerm) queryParams.append('search', searchTerm);
+                 if (sortBy) queryParams.append('sort_by', sortBy);
+
+                 const url = `/api/style/get_list${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+
+                 try {
+                     const response = await fetch(url, { method: 'GET' });
+
+                     if (response.ok) {
+                         const result = await response.json();
+
+                         if (result.success && result.styles) {
+                             const styles = result.styles;
+                             if (styles.length > 0) {
+                                 let html = '';
+                                 styles.forEach(style => {
+                                     html += `
+                                         <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
+                                             <h3 class="text-xl font-semibold text-gray-900 mb-2">${style.title}</h3>
+                                             <p class="text-gray-700">${style.description || 'No description'}</p>
+
+                                             <div class="flex flex-wrap gap-3 mt-4">
+                                                  <button class="edit-style-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-style-id="${style.style_id}">Edit</button>
+                                                  <!-- Add Delete button if needed -->
+                                              </div>
+                                         </div>
+                                     `;
+                                 });
+                                 styleListDiv.innerHTML = html;
+
+                                 attachStyleButtonListeners(); // Attach listeners to Edit button
+
+                             } else {
+                                 styleListDiv.innerHTML = '<p class="text-gray-600 italic">No styles found matching your criteria.</p>';
+                             }
+                         } else {
+                             displayMessage(styleListDiv, `Error loading styles: ${result.error_message || 'Unknown error'}`, 'error');
+                              console.error('Backend success: false for styles:', result.error_message);
+                         }
+                     } else if (response.status === 401 || response.status === 403) {
+                          displayMessage(styleListDiv, 'Error: You are not authorized to view styles.', 'error');
+                          console.error("Authorization error fetching styles:", response.status);
+                     }
+                     else {
+                         const errorText = await response.text();
+                         displayMessage(styleListDiv, `Error loading styles: ${response.status} - ${errorText.substring(0, 100) + '...'}`, 'error');
+                         console.error("Error fetching styles:", response.status, errorText);
+                     }
+                 } catch (error) {
+                      console.error('Error fetching styles:', error);
+                     displayMessage(styleListDiv, 'Network error loading styles.', 'error');
+                 }
+             }
+
+             // Function to attach event listeners to dynamically created style buttons
+            function attachStyleButtonListeners() {
+                 // Edit Button Listener
+                 styleListDiv.querySelectorAll('.edit-style-button').forEach(button => {
+                     button.addEventListener('click', async () => {
+                         const styleId = button.getAttribute('data-style-id');
+                         console.log('Attempting to edit style:', styleId);
+                         // Fetch style data and open edit modal
+                         fetchStyleForEdit(styleId);
+                     });
+                 });
+                 // Add Delete button listener here if needed
             }
 
-            // Close the Add Style modal using close buttons (X and Cancel)
-            addStyleModalCloseButtons.forEach(button => {
-                button.onclick = function() {
-                    addStyleModal.style.display = 'none';
-                }
+
+             // Function to fetch style data for editing and populate the modal
+            async function fetchStyleForEdit(styleId) {
+                 editStyleMessageDiv.textContent = '';
+                 editStyleMessageDiv.className = 'message text-center';
+                 editStyleMessageDiv.style.display = 'none';
+
+                 try {
+                    console.log('Fetching style for editing:', styleId);
+
+   
+                    const requestBody = {
+                        style_id: styleId, // Include the style ID for update
+                    };
+
+                     // Assuming you have a GET /api/style/{id} endpoint
+                     const response = await fetch(`/api/style/get`, {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(requestBody)
+                     });
+
+                    //  const response = await fetch(`/api/style/${styleId}`, { method: 'GET' });
+                     const result = await response.json(); // Assuming backend returns { success: true, style: {...} }
+
+                     if (response.ok && result.success && result.style) {
+                         const style = result.style;
+                         // Populate the edit modal form
+                         editStyleIdInput.value = style.style_id;
+                         editStyleTitleInput.value = style.title || '';
+                         editStyleDescriptionInput.value = style.description || '';
+
+                         // Show the edit modal
+                         editStyleModal.style.display = 'block';
+
+                     } else if (response.ok && result.error_message) {
+                          alert('Error fetching style for editing: ' + (result.error_message || 'Unknown error'));
+                          console.error('Backend success: false fetching style for editing:', result.error_message);
+                     } else if (response.status === 404) {
+                         alert('Style not found.');
+                         console.warn('Style not found for editing:', styleId);
+                     }
+                     else if (response.status === 401 || response.status === 403) {
+                         alert('You are not authorized to edit this style.');
+                          console.error("Authorization error fetching style for editing:", response.status);
+                     }
+                     else {
+                         const errorText = await response.text();
+                         alert(`Error fetching style for editing: ${response.status}`);
+                         console.error("Error fetching style for editing:", response.status, errorText);
+                     }
+                 } catch (error) {
+                     console.error('Fetch error fetching style for editing:', error);
+                     alert('Network error fetching style for editing.');
+                 }
+            }
+
+
+            // Submit Edit Style Form
+            submitEditStyleButton.addEventListener('click', async () => {
+                 editStyleMessageDiv.style.display = 'none';
+                 editStyleMessageDiv.textContent = '';
+                 editStyleMessageDiv.className = 'message text-center';
+                 submitEditStyleButton.disabled = true;
+
+                const styleId = editStyleIdInput.value;
+                const title = editStyleTitleInput.value.trim();
+                const description = editStyleDescriptionInput.value.trim();
+
+                 if (!title) {
+                     displayMessage(editStyleMessageDiv, 'Title is required.', 'error');
+                     submitEditStyleButton.disabled = false;
+                     return;
+                 }
+
+                 const formattedDescription = description === '' ? null : description;
+
+                 const requestBody = {
+                     style_id: styleId, // Include the style ID for update
+                     title: title,
+                     description: formattedDescription,
+                 };
+
+                console.log("Sending style update request:", requestBody);
+
+                 try {
+                     // Assuming you have a PUT /api/style/update/{id} endpoint
+                     const response = await fetch(`/api/style/update`, {
+                         method: 'PUT',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(requestBody)
+                     });
+
+                     const responseData = await response.json();
+
+                     if (response.ok && responseData.success) {
+                         console.log("Style updated successfully:", responseData);
+                         displayMessage(editStyleMessageDiv, responseData.message || 'Style updated successfully!', 'success');
+
+                         setTimeout(() => {
+                             closeModal(editStyleModal);
+                             fetchAndDisplayStyles();
+                              // Also refresh style selects in other modals if open
+                             fetchStylesForSelect(classStyleSelect);
+                             fetchStylesForSelect(editClassStyleSelect);
+                         }, 2000);
+                     } else if (responseData && responseData.error_message) {
+                         displayMessage(editStyleMessageDiv, `Update failed: ${responseData.error_message}`, 'error');
+                         console.error("Server error updating style:", response.status, responseData.error_message);
+                     }
+                      else if (response.status === 400) {
+                          const errorText = await response.text();
+                          displayMessage(editStyleMessageDiv, `Invalid request data: ${responseData.error_message || errorText.substring(0, 100) + '...'}`, 'error');
+                          console.error("Bad request updating style:", response.status, errorText);
+                      }
+                      else if (response.status === 401 || response.status === 403) {
+                          displayMessage(editStyleMessageDiv, 'Error: You are not authorized to update styles.', 'error');
+                           console.error("Authorization error updating style:", response.status);
+                      }
+                     else {
+                         const errorText = await response.text();
+                         displayMessage(editStyleMessageDiv, `Error updating style: ${response.status} - ${responseData.error_message || errorText.substring(0, 100) + '...'}` , 'error');
+                         console.error("Error updating style:", response.status, errorText);
+                     }
+
+                 } catch (error) {
+                     displayMessage(editStyleMessageDiv, 'Network error submitting style update.', 'error');
+                     console.error("Fetch error for style update:", error);
+                 } finally {
+                     submitEditStyleButton.disabled = false;
+                 }
             });
 
-            // --- Submit New Style Logic ---
-            submitCreateStyleButton.onclick = async function() {
-                addStyleMessageDiv.style.display = 'none'; // Hide previous messages
-                addStyleMessageDiv.textContent = '';
-                // Optional: Disable submit button to prevent double clicks
-                submitCreateStyleButton.disabled = true;
+             // Attach event listener for applying style filters
+             applyStyleFiltersButton.addEventListener('click', () => {
+                 fetchAndDisplayStyles();
+             });
 
-                // --- 1. Gather data from the form ---
-                const title = document.getElementById('style-title').value.trim();
-                const description = document.getElementById('style-description').value.trim();
-
-                // --- 2. Validate and Format Fields ---
-
-                // Validate required fields
-                if (!title) {
-                    addStyleMessageDiv.style.display = 'block';
-                    addStyleMessageDiv.textContent = 'Style title cannot be empty.';
-                    submitCreateStyleButton.disabled = false; // Re-enable button
-                    return;
-                }
-
-                // Optional description field (send as null if empty string)
-                const formattedDescription = description === '' ? null : description;
-
-
-                // --- 3. Construct the JSON request body ---
-                const requestBody = {
-                    title: title,
-                    description: formattedDescription,
-                };
-
-                console.log("Sending style creation request:", requestBody);
-                // Add message to indicate submission is in progress
-                addStyleMessageDiv.style.display = 'block';
-                addStyleMessageDiv.textContent = 'Submitting style...';
-                addStyleMessageDiv.className = 'message'; // Clear previous success/error classes
-
-
-                // --- 4. Send the POST request to the backend ---
-                try {
-                    const response = await fetch('/api/style/create', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(requestBody)
-                    });
-
-                    const responseData = await response.json(); // Assuming the response is JSON (even on error)
-
-                    // Your CreateStyleResponse has 'style_id'
-                    if (response.ok && responseData.success) { // Check both HTTP status (2xx) and custom success flag
-                        console.log("Style created successfully:", responseData);
-                        addStyleMessageDiv.textContent = `Style created successfully!`; // *** Use style_id ***
-                        addStyleMessageDiv.className = 'message success'; // Add success class for styling
-
-                        // Optional: Close modal after a delay or user interaction
-                        setTimeout(() => {
-                            addStyleModal.style.display = 'none';
-                            addStyleMessageDiv.style.display = 'none'; // Hide message after closing modal
-                            // Refresh the style list after creating a style
-                            getStyles(); // *** Call fetchStyles ***
-                        }, 1500); // Hide after 1.5 seconds
-
-
-                    } else if (responseData && responseData.error_message) {
-                        // Server returned a specific error message in the JSON body
-                        addStyleMessageDiv.style.display = 'block';
-                        addStyleMessageDiv.textContent = `Creation failed: ${responseData.error_message}`;
-                        addStyleMessageDiv.className = 'message error'; // Add error class for styling
-                        console.error("Server error creating style:", response.status, responseData.error_message);
-                    }
-                    else if (response.status === 400) {
-                        // Actix Web's Json extractor or your handler might return 400 for validation errors
-                        const msg = responseData && responseData.error_message ? responseData.error_message : 'Invalid request data.';
-                        addStyleMessageDiv.style.display = 'block';
-                        addStyleMessageDiv.textContent = `Invalid request data: ${msg}`;
-                        addStyleMessageDiv.className = 'message error';
-                        console.error("Bad request creating style:", response.status, responseData); // Log full response
-
-                    }
-                    else if (response.status === 401 || response.status === 403) {
-                        // Authentication/Authorization error
-                        addStyleMessageDiv.style.display = 'block';
-                        addStyleMessageDiv.textContent = 'Error: You are not authorized to create styles.';
-                        addStyleMessageDiv.className = 'message error';
-                        console.error("Authorization error creating style:", response.status);
-                    }
-                    else {
-                        // Other errors (e.g., 500 Internal Server Error)
-                        const errorText = await response.text();
-                        const msg = responseData && responseData.error_message ? responseData.error_message : errorText.substring(0, 100) + '...';
-                        addStyleMessageDiv.style.display = 'block';
-                        addStyleMessageDiv.textContent = `Error creating style: ${response.status} - ${msg}`;
-                        addClassMessageDiv.className = 'message error'; // Typo here, should be addStyleMessageDiv
-                        console.error("Error creating style:", response.status, errorText);
-                    }
-
-                } catch (error) {
-                    // Network errors etc.
-                    addStyleMessageDiv.style.display = 'block';
-                    addStyleMessageDiv.textContent = 'Network error submitting style creation.';
-                    addStyleMessageDiv.className = 'message error';
-                    console.error("Fetch error for style creation:", error);
-                } finally {
-                    // Always re-enable the submit button
-                    submitCreateStyleButton.disabled = false;
-                }
-            }
 
 
             // Handle initial section display
@@ -2790,23 +3018,24 @@
 
                         const result = await response.json(); // Assuming the backend returns { success: true, styles: [...] } or { success: false, error_message: "" }
 
-                    //  if (result.success && result.styles) {
-                         const styles = result;
-                         let optionsHtml = '';
-                          if (!selectElement.multiple) {
-                             optionsHtml += '<option value="">Select Style</option>';
-                         }
-                         selectElement.disabled = false;
-                         if (styles.length > 0) {
-                             styles.forEach(style => {
-                                 const selected = selectedStyleIds.includes(style.style_id) ? 'selected' : '';
-                                 optionsHtml += `<option value="${style.style_id}" ${selected}>${style.title}</option>`;
-                                 add_cached_value("style", style.style_id, style); // Cache the venue ID and title
-                             });
-                             selectElement.innerHTML = optionsHtml;
-                         } else {
-                             selectElement.innerHTML = '<option value="">No styles found</option>';
-                         }
+                        if (result.success && result.styles) {
+                            const styles = result.styles;
+                            let optionsHtml = '';
+                            if (!selectElement.multiple) {
+                                optionsHtml += '<option value="">Select Style</option>';
+                            }
+                            selectElement.disabled = false;
+                            if (styles.length > 0) {
+                                styles.forEach(style => {
+                                    const selected = selectedStyleIds.includes(style.style_id) ? 'selected' : '';
+                                    optionsHtml += `<option value="${style.style_id}" ${selected}>${style.title}</option>`;
+                                    add_cached_value("style", style.style_id, style); // Cache the venue ID and title
+                                });
+                                selectElement.innerHTML = optionsHtml;
+                            } else {
+                                selectElement.innerHTML = '<option value="">No styles found</option>';
+                            }
+                        }
                     } else if (response.status === 401 || response.status === 403) {
                           selectElement.innerHTML = '<option value="">Error: Not authorized</option>';
                           console.error("Authorization error fetching venues:", response.status);

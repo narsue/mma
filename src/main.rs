@@ -119,6 +119,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             // Style routes
             .service(handlers::create_style_handler)
             .service(handlers::get_style_list_handler)
+            .service(handlers::get_style_handler)
+            .service(handlers::update_style_handler)
             
     })
     .bind("127.0.0.1:1227")?

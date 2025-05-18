@@ -132,12 +132,19 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
         .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.venue \
-            (venue_id uuid, creator_user_id uuid, title text, description text, longitude decimal, latitude decimal, address text, postcode text, suburb text, street_no text, state text, country text, street_name text, google_maps_link text, contact_phone text, created_ts timestamp, PRIMARY KEY (venue_id))",
+            (venue_id uuid, creator_user_id uuid, title text, description text, longitude decimal, latitude decimal, address text, postcode text, suburb text, street_no text, state text, country text, street_name text, google_maps_link text, contact_phone text, created_ts timestamp, deleted_ts timestamp, PRIMARY KEY (venue_id))",
             &[],
         )
         .await?;
     println!("venue table created");
 
+    session
+    .query_unpaged(
+        "CREATE INDEX IF NOT EXISTS venue_deleted_index ON mma.venue (deleted_ts)",
+        &[],
+    )
+    .await?;
+    println!("venue_deleted_index created");
 
     session
         .query_unpaged(
@@ -297,12 +304,21 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.style \
-        (style_id uuid, title text, description text, created_ts timestamp, creator_user_id uuid, deleted boolean, \
+        (style_id uuid, title text, description text, created_ts timestamp, creator_user_id uuid, deleted_ts timestamp, \
             PRIMARY KEY (style_id))",
         &[],
     )
     .await?;
     println!("Style table created");
+
+
+    session
+    .query_unpaged(
+        "CREATE INDEX IF NOT EXISTS style_deleted_index ON mma.style (deleted_ts)",
+        &[],
+    )
+    .await?;
+    println!("style_deleted_index created");
 
     session
     .query_unpaged(
@@ -741,21 +757,6 @@ impl ScyllaConnector {
             )
             .await?;
 
-        // let result = self.session.query_unpaged("SELECT email from mma.user where user_id = ?", (user_id, ))
-        //     .await?
-        //     .into_rows_result()?;
-
-        // for row in result.rows()?
-        // {
-        //     let (email,): (String,) = row?;
-        //     self.session
-        //         .query_unpaged(
-        //             "UPDATE mma.user_by_email SET password_hash = ? WHERE email = ?",
-        //             (&new_password_hash, email),
-        //         )
-        //         .await?;
-        // }
-
         Ok(())
     }
 
@@ -870,11 +871,11 @@ impl ScyllaConnector {
         let now = scylla::value::CqlTimestamp(now);
         // let price: Option<CqlDecimal> = price
         //     .map(|p| CqlDecimal::from(p));
-
+        let zero_ts = scylla::value::CqlTimestamp(0);
         self.session
             .query_unpaged(
-                "INSERT INTO mma.class (creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids), 
+                "INSERT INTO mma.class (creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades, deleted_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids, zero_ts), 
             )
             .await?;
 
@@ -1033,33 +1034,6 @@ impl ScyllaConnector {
 
         for class in &mut classes {
             let class_id = class.class_id;
-            // let result = self.session
-            //     .query_unpaged(
-            //         "SELECT style_id FROM mma.class_styles WHERE class_id = ?",
-            //         (class_id,),
-            //     )
-            //     .await?
-            //     .into_rows_result()?;
-
-            // for row in result.rows()?
-            // {
-            //     let (style_id, ): (Uuid,) = row?;
-            //     class.styles.push(style_id);
-            // }
-
-            // let result = self.session
-            //     .query_unpaged(
-            //         "SELECT grade_id FROM mma.class_grades WHERE class_id = ?",
-            //         (class_id,),
-            //     )
-            //     .await?
-            //     .into_rows_result()?;
-
-            // for row in result.rows()?
-            // {
-            //     let (grade_id, ): (Uuid,) = row?;
-            //     class.styles.push(grade_id);
-            // }
 
             let result = self.session
             .query_unpaged(
@@ -1120,7 +1094,7 @@ impl ScyllaConnector {
             // Successfully retrieved a row. Now extract the columns.
             // if publish_mode_filter.is_none() || publish_mode_filter == Some(row.publish_mode) {
             // The class is deleted
-            if row.deleted_ts != None {
+            if row.deleted_ts != Some(CqlTimestamp(0)) {
                 // println!("Class is deleted");
                 tracing::info!("Class is deleted");
                 return Ok(None);
@@ -1140,40 +1114,10 @@ impl ScyllaConnector {
                 styles: Vec::new(), // Initialize with an empty vector
                 grades: Vec::new(), // Initialize with an empty vector
             });
-            // classes.push(class_data);
-
-            // } 
         }
         match class {
             Some(ref mut c) => {
                 let class_id = c.class_id;
-                // let result = self.session
-                //     .query_unpaged(
-                //         "SELECT style_id FROM mma.class_styles WHERE class_id = ?",
-                //         (class_id,),
-                //     )
-                //     .await?
-                //     .into_rows_result()?;
-    
-                // for row in result.rows()?
-                // {
-                //     let (style_id, ): (Uuid,) = row?;
-                //     c.styles.push(style_id);
-                // }
-    
-                // let result = self.session
-                //     .query_unpaged(
-                //         "SELECT grade_id FROM mma.class_grades WHERE class_id = ?",
-                //         (class_id,),
-                //     )
-                //     .await?
-                //     .into_rows_result()?;
-    
-                // for row in result.rows()?
-                // {
-                //     let (grade_id, ): (Uuid,) = row?;
-                //     c.styles.push(grade_id);
-                // }
     
                 let result = self.session
                     .query_unpaged(
@@ -1204,61 +1148,6 @@ impl ScyllaConnector {
             }
         }
 
-        // for class in &mut classes {
-        //     let class_id = class.class_id;
-        //     let result = self.session
-        //         .query_unpaged(
-        //             "SELECT style_id FROM mma.class_styles WHERE class_id = ?",
-        //             (class_id,),
-        //         )
-        //         .await?
-        //         .into_rows_result()?;
-
-        //     for row in result.rows()?
-        //     {
-        //         let (style_id, ): (Uuid,) = row?;
-        //         class.styles.push(style_id);
-        //     }
-
-        //     let result = self.session
-        //         .query_unpaged(
-        //             "SELECT grade_id FROM mma.class_grades WHERE class_id = ?",
-        //             (class_id,),
-        //         )
-        //         .await?
-        //         .into_rows_result()?;
-
-        //     for row in result.rows()?
-        //     {
-        //         let (grade_id, ): (Uuid,) = row?;
-        //         class.styles.push(grade_id);
-        //     }
-
-        //     let result = self.session
-        //         .query_unpaged(
-        //             "SELECT frequency, start_date, end_date, start_time, end_time FROM mma.class_frequency WHERE class_id = ?",
-        //             (class_id,),
-        //         )
-        //         .await?
-        //         .into_rows_result()?;
-
-        //     for row in result.rows()?
-        //     {
-        //         let ( frequency, start_date, end_date, start_time, end_time) : ( i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row?;
-        //         let class_frequency = ClassFrequency {
-        //             frequency: frequency,
-        //             start_date: start_date,
-        //             end_date: end_date,
-        //             start_time: start_time,
-        //             end_time: end_time,
-        //         };
-        //         class.frequency.push(class_frequency);
-        //     }
-        // }
-        // if classes.is_empty() {
-        //     // println!("No class found with ID: {}", class_id);
-        //     return Ok(None);
-        // }
         return Ok(None);
     }
 
@@ -1269,11 +1158,12 @@ impl ScyllaConnector {
             .unwrap_or_default()
             .as_millis() as i64;
         let now = scylla::value::CqlTimestamp(now);
+        let zero_ts = scylla::value::CqlTimestamp(0);
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.venue (venue_id, creator_user_id, title, description, created_ts, address, suburb, state, country, postcode, latitude, longitude, contact_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (venue_id, creator_user_id, title, description, now, address, suburb, state, country, postcode, latitude, longitude, contact_phone), // Include other fields as per your schema
+                "INSERT INTO mma.venue (venue_id, creator_user_id, title, description, created_ts, address, suburb, state, country, postcode, latitude, longitude, contact_phone, deleted_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (venue_id, creator_user_id, title, description, now, address, suburb, state, country, postcode, latitude, longitude, contact_phone, zero_ts), // Include other fields as per your schema
             )
             .await?;
 
@@ -1282,22 +1172,49 @@ impl ScyllaConnector {
 
     pub async fn update_venue(&self, venue_id: &Uuid, title: &String, description: &Option<String>, address: &Option<String>, suburb: &Option<String>, state: &Option<String>, country: &Option<String>,  postcode: &Option<String>, latitude: &Option<BigDecimal>, longitude: &Option<BigDecimal>, contact_phone: &Option<String>) -> AppResult<bool> {
         // Get current timestamp
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
-        let now = scylla::value::CqlTimestamp(now);
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.venue (venue_id, title, description, created_ts, address, suburb, state, country, postcode, latitude, longitude, contact_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (venue_id, title, description, now, address, suburb, state, country, postcode, latitude, longitude, contact_phone), // Include other fields as per your schema
+                "INSERT INTO mma.venue (venue_id, title, description, address, suburb, state, country, postcode, latitude, longitude, contact_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (venue_id, title, description, address, suburb, state, country, postcode, latitude, longitude, contact_phone), // Include other fields as per your schema
             )
             .await?;
 
         Ok(true)
     }
     
+
+    pub async fn update_style(&self, style_id: &Uuid, title: &String, description: &Option<String>) -> AppResult<bool> {
+        // Get current timestamp
+
+        self.session
+            .query_unpaged(
+                "UPDATE mma.style SET title = ?, description = ? WHERE style_id = ?",
+                (title, description, style_id), // Include other fields as per your schema
+            )
+            .await?;
+
+        Ok(true)
+    }
+
+    
+
+
+    pub async fn get_style(&self, style_id: &Uuid) -> AppResult<Option<StyleData>> {
+        let result = self.session
+        .query_unpaged("SELECT style_id, title, description FROM mma.style where style_id = ?", (style_id, )) // Pass the query string and bound values
+        .await?
+        .into_rows_result()?;
+
+        // let mut class: Option<ClassData> = None;
+        for row in result.rows::<StyleData>()?
+        {
+            let row = row?;
+            return Ok(Some(row));
+        }
+        return Ok(None); // style_id not found
+    }
+
 
 
     // get_venues
@@ -1328,11 +1245,12 @@ impl ScyllaConnector {
             .unwrap_or_default()
             .as_millis() as i64;
         let now = scylla::value::CqlTimestamp(now);
+        let zero_ts = scylla::value::CqlTimestamp(0);
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.style (style_id, title, description, created_ts, creator_user_id) VALUES (?, ?, ?, ?, ?)",
-                (style_id, title, description, now, creator_user_id), // Include other fields as per your schema
+                "INSERT INTO mma.style (style_id, title, description, created_ts, creator_user_id, deleted_ts) VALUES (?, ?, ?, ?, ?, ?)",
+                (style_id, title, description, now, creator_user_id, zero_ts), // Include other fields as per your schema
             )
             .await?;
 
@@ -1342,7 +1260,7 @@ impl ScyllaConnector {
     // list styles
     pub async fn get_styles(&self) -> AppResult<Vec<StyleData>> {
         let mut statement = Statement::new( 
-            "SELECT style_id, title, description FROM mma.style",
+            "SELECT style_id, title, description FROM mma.style where deleted_ts = 0",
         );
         statement.set_consistency(Consistency::LocalQuorum);
 

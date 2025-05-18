@@ -15,7 +15,7 @@ pub mod handlers {
         ClassData, CreateVenueRequest, CreateVenueResponse, VenueData, CreateStyleRequest, CreateStyleResponse, StyleData,
         ForgottenPasswordRequest, ForgottenPasswordResponse, ResetPasswordQuery, ResetPasswordResponse, ResetPasswordRequest,
         SignupResponse, SignupRequest, VerifyAccountQuery, GetVenueRequest, GetVenueResponse, UpdateClassRequest, ClassFrequencyId,
-        GetVenueListResponse, GenericResponse
+        GetVenueListResponse, GenericResponse, GetStlyeListResponse, GetStyleRequest, GetStyleResponse,
     };
     use chrono::{NaiveDate, NaiveTime, Utc};
     use bigdecimal::BigDecimal;
@@ -1062,6 +1062,9 @@ pub mod handlers {
     }
 
 
+
+
+
     // Create Venue
     #[post("/api/venue/create")]
     pub async fn create_venue_handler(
@@ -1177,16 +1180,7 @@ pub mod handlers {
                 ErrorInternalServerError("Authentication failed") // Generic error for now
             })?;
 
-        // Implement authorization check here. For example, only admins can update venues.
-        // You'll need a way to get the user's role or permissions.
-        // Example:
-        // let user_role = state_manager.db.get_user_role(&user_id).await?; // Assuming this function exists
-        // if user_role != "admin" { // Or check specific permission flag
-        //     tracing::warn!("User {} attempted to update venue {} without sufficient permissions.", user_id, venue_id);
-        //     return Err(actix_web::error::ErrorForbidden("You do not have permission to update venues."));
-        // }
         tracing::info!("User {} is attempting to update venue {}", user_id, venue_id);
-
 
         let req_data = venue_data.into_inner(); // Get the raw request data
 
@@ -1200,20 +1194,6 @@ pub mod handlers {
                     error_message: Some("Venue title cannot be empty.".to_string()),
                 }));
         }
-
-        // Convert optional empty strings to None for Option<String> fields
-        // let description = req_data.description.filter(|s| !s.trim().is_empty());
-        // let address = req_data.address.filter(|s| !s.trim().is_empty());
-        // let suburb = req_data.suburb.filter(|s| !s.trim().is_empty());
-        // let state = req_data.state.filter(|s| !s.trim().is_empty());
-        // let postcode = req_data.postcode.filter(|s| !s.trim().is_empty());
-        // let country = req_data.country.filter(|s| !s.trim().is_empty());
-        // let contact_phone = req_data.contact_phone.filter(|s| !s.trim().is_empty());
-
-        // Parse optional latitude and longitude (assuming frontend sends f64 if present)
-        // let latitude = req_data.latitude;
-        // let longitude = req_data.longitude;
-
 
         // 3. Call the database function to update the venue
         // Assuming your db.rs has an update_venue function with a signature like:
@@ -1423,6 +1403,80 @@ pub mod handlers {
         }
     }
 
+
+    // Handler to update an existing venue
+    #[put("/api/style/update")] // Use PUT method and include venue_id in the path
+    pub async fn update_style_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+        mut user: LoggedUser, // Authenticate the request
+        style_data: web::Json<StyleData>, // Extract JSON request body
+    ) -> Result<HttpResponse, ActixError> { // Handler returns ActixResult<HttpResponse>
+        let style_id = style_data.style_id; // Extract the UUID from the path
+
+        // 1. Authenticate and authorize the user
+        let user_id = user.validate(&state_manager).await
+            .map_err(|e| {
+                tracing::error!("Authentication error during style update: {:?}", e);
+                // Consider mapping specific AppErrors to different ActixErrors (e.g., Unauthorized)
+                ErrorInternalServerError("Authentication failed") // Generic error for now
+            })?;
+
+        tracing::info!("User {} is attempting to style venue {}", user_id, style_id);
+
+        let req_data = style_data.into_inner(); // Get the raw request data
+
+        // 2. Validate incoming data from the request body
+        // Title is required for an update, just like create
+        if req_data.title.trim().is_empty() { // Trim whitespace before checking for empty
+            tracing::warn!("Attempted to update style {} with empty title.", style_id);
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Style title cannot be empty.".to_string()),
+                }));
+        }
+
+        // 3. Call the database function to update the venue
+        // The boolean return could indicate if a venue was found and updated (false if not found)
+        let update_result: AppResult<bool> = state_manager.db.update_style(
+            &style_id, // Pass the venue_id from the path
+            &req_data.title, // Pass the trimmed title
+            &req_data.description, // Pass Option<&str>
+        ).await;
+
+
+        // 4. Handle the result of the database operation
+        match update_result {
+            Ok(true) => {
+                // Database function succeeded and the venue was found and updated
+                tracing::info!("Style {} updated successfully by user {}", style_id, user_id);
+                // Return a success response
+                Ok(HttpResponse::Ok().json(GenericResponse {
+                    success: true,
+                    message: Some("Style updated successfully.".to_string()),
+                    error_message: None,
+                }))
+            },
+            Ok(false) => {
+                // Database function succeeded but the venue was NOT found with that ID
+                tracing::warn!("Attempted to update non-existent style: {}", style_id);
+                Ok(HttpResponse::Ok().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Style does not exist.".to_string()),
+                }))
+
+            }
+            Err(app_err) => {
+                // Database error occurred during update
+                tracing::error!("Database error updating style {} for user {}: {:?}", style_id, user_id, app_err);
+                // Manually convert AppError to ActixError using ErrorInternalServerError
+                Err(ErrorInternalServerError(app_err))
+            }
+        }
+    }
+
+
     // Get Style List
     #[get("/api/style/get_list")]
     pub async fn get_style_list_handler(
@@ -1443,11 +1497,63 @@ pub mod handlers {
                 // Database function succeeded, returns a Vec<ClassData> (could be empty)
                 // tracing::info!("Successfully fetched {} styles.", styles.len());
                 // Return the vector of ClassData as a JSON array with 200 OK status
-                Ok(HttpResponse::Ok().json(styles))
+                Ok(HttpResponse::Ok().json(GetStlyeListResponse{
+                    success: true,
+                    error_message: None,
+                    styles: Some(styles)}))
             },
             Err(app_err) => {
                 // A database error (AppError) occurred
                 tracing::error!("Database error fetching style list: {:?}", app_err);
+                // Convert the AppError into an ActixError representing a 500 Internal Server Error
+                Err(ErrorInternalServerError(app_err))
+            }
+        }
+    }
+
+    // --- Get Class List Handler ---
+    #[post("/api/style/get")] // Define the GET endpoint path
+    pub async fn get_style_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+        req: web::Json<GetStyleRequest>, // Extract query parameters from the URL
+    ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
+
+        let auth_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+
+        let style_id = req.style_id; // Extract class_id from query parameters
+
+        // Call the database function to get classes based on the provided filters
+        let class_result: AppResult<Option<StyleData>> = state_manager.db.get_style(&style_id).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
+
+        // Handle the result of the database operation explicitly
+        match class_result {
+            Ok(class) => {
+                // Database function succeeded, returns a Vec<ClassData> (could be empty)
+                // tracing::info!("Successfully fetched {} classes.", classes.len());
+                // Return the vector of ClassData as a JSON array with 200 OK status
+                match class {
+                    Some(class_data) => {
+                        Ok(HttpResponse::Ok().json(GetStyleResponse {
+                            success: true,
+                            style: Some(class_data),
+                            error_message: None,
+                        }))
+                    },
+                    None => {
+                        Ok(HttpResponse::Ok().json(GetStyleResponse {
+                            success: false,
+                            style: None,
+                            error_message: Some("Style does not exist".to_string()),
+                        }))
+                    }
+                }
+
+            },
+            Err(app_err) => {
+                // A database error (AppError) occurred
+                tracing::error!("Database error fetching style {:?}", app_err);
                 // Convert the AppError into an ActixError representing a 500 Internal Server Error
                 Err(ErrorInternalServerError(app_err))
             }
