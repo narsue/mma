@@ -160,12 +160,20 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.club \
-        (club_id uuid, school_id uuid, title text, description text, PRIMARY KEY (club_id))",
+        (club_id uuid, school_id uuid, title text, description text, deleted_ts timestamp, PRIMARY KEY (school_id, club_id))",
         &[],
     )
     .await?;
     println!("Club table created");
     
+
+    session
+    .query_unpaged(
+        "CREATE INDEX IF NOT EXISTS club_deleted_index ON mma.club (deleted_ts)",
+        &[],
+    )
+    .await?;
+    println!("club_deleted_index created");
 
     session
     .query_unpaged(
@@ -206,8 +214,8 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
         .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.waiver \
-            (waiver_id uuid, title text, waiver text, created_ts timestamp, creator_user_id uuid, \
-             PRIMARY KEY (waiver_id))",
+            (school_id uuid, waiver_id uuid, title text, waiver text, created_ts timestamp, creator_user_id uuid, \
+             PRIMARY KEY (school_id, waiver_id))",
             &[],
         )
         .await?;
@@ -216,8 +224,8 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
         .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.latest_waiver \
-            (waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, created_ts timestamp, \
-             PRIMARY KEY (style_id, class_id, club_id))",
+            (school_id uuid, waiver_id uuid, style_id uuid, class_id uuid, club_id uuid, created_ts timestamp, \
+             PRIMARY KEY (school_id, style_id, class_id, club_id))",
             &[],
         )
         .await?;
@@ -237,8 +245,8 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.class \
-        (class_id uuid, venue_id uuid, waiver_id uuid, capacity int, publish_mode int, price decimal, notify_booking boolean, title text, description text, created_ts timestamp, end_ts timestamp, creator_user_id uuid, styles SET<uuid>, grades SET<uuid>, gender_req text, deleted_ts timestamp, \
-            PRIMARY KEY (class_id))",
+        (school_id uuid, class_id uuid, venue_id uuid, waiver_id uuid, capacity int, publish_mode int, price decimal, notify_booking boolean, title text, description text, created_ts timestamp, end_ts timestamp, creator_user_id uuid, styles SET<uuid>, grades SET<uuid>, gender_req text, deleted_ts timestamp, \
+            PRIMARY KEY (school_id, class_id))",
         &[],
     )
     .await?;
@@ -305,8 +313,8 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.style \
-        (style_id uuid, title text, description text, created_ts timestamp, creator_user_id uuid, deleted_ts timestamp, \
-            PRIMARY KEY (style_id))",
+        (school_id uuid, style_id uuid, title text, description text, created_ts timestamp, creator_user_id uuid, deleted_ts timestamp, \
+            PRIMARY KEY (school_id, style_id))",
         &[],
     )
     .await?;
@@ -324,8 +332,8 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.grade \
-        (grading_id uuid, title text, description text, attendance_req int, rank int, \
-            PRIMARY KEY (grading_id))",
+        (school_id uuid, grading_id uuid, title text, description text, attendance_req int, rank int, deleted_ts timestamp,  \
+            PRIMARY KEY (school_id, grading_id))",
         &[],
     )
     .await?;
@@ -335,8 +343,8 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.grading_requirement \
-        (grading_requirement_id uuid, title text, description text, requirement int, \
-            PRIMARY KEY (grading_requirement_id))",
+        (school_id uuid, grading_requirement_id uuid, title text, description text, requirement int, deleted_ts timestamp, \
+            PRIMARY KEY (school_id, grading_requirement_id))",
         &[],
     )
     .await?;
@@ -787,15 +795,15 @@ impl ScyllaConnector {
         Ok(())
     }
 
-    pub async fn get_latest_waiver(&self, club_id: Option<Uuid>, class_id: Option<Uuid>, style_id: Option<Uuid>) -> AppResult<Option<(Uuid, String, String)>> {
+    pub async fn get_latest_waiver(&self, school_id: &Uuid, club_id: Option<Uuid>, class_id: Option<Uuid>, style_id: Option<Uuid>) -> AppResult<Option<(Uuid, String, String)>> {
         let zero_guuid = Uuid::nil();
         let _club_id = club_id.unwrap_or(zero_guuid);
         let _class_id = class_id.unwrap_or(zero_guuid);
         let _style_id = style_id.unwrap_or(zero_guuid);
         let result = self.session
             .query_unpaged(
-                "SELECT waiver_id FROM mma.latest_waiver",
-                ()
+                "SELECT waiver_id FROM mma.latest_waiver where school_id = ?",
+                (school_id, )
             )
             .await?            
             .into_rows_result()?;
@@ -803,7 +811,7 @@ impl ScyllaConnector {
         for row in result.rows()?
         {
             let (waiver_id,): (Uuid,) = row?;
-            let waiver_tuple = self.get_waiver(waiver_id).await?;
+            let waiver_tuple = self.get_waiver(&school_id, &waiver_id).await?;
             if waiver_tuple.is_none() {
                 // println!("No waiver found with ID: {}", waiver_id);
                 return Ok(None);
@@ -816,12 +824,12 @@ impl ScyllaConnector {
     }
 
 
-    pub async fn get_waiver(&self, waiver_id: Uuid) -> AppResult<Option<(String, String)>> {
+    pub async fn get_waiver(&self, school_id: &Uuid, waiver_id: &Uuid) -> AppResult<Option<(String, String)>> {
         // println!("Getting waiver with ID: {}", waiver_id);
         let result = self.session
             .query_unpaged(
-                "SELECT title, waiver FROM mma.waiver WHERE waiver_id = ?",
-                (waiver_id,),
+                "SELECT title, waiver FROM mma.waiver WHERE waiver_id = ? and school_id = ?",
+                (waiver_id, school_id),
             )
             .await?
             .into_rows_result()?;          
@@ -863,7 +871,7 @@ impl ScyllaConnector {
 
 
     // Function to create a new waiver and make it current
-    pub async fn create_new_waiver(&self, creator_user_id: Uuid, id: Uuid, title: String, content: String) -> AppResult<()> {
+    pub async fn create_new_waiver(&self, school_id: &Uuid, creator_user_id: &Uuid, id: &Uuid, title: &String, content: &String) -> AppResult<()> {
         // Get current timestamp
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -873,14 +881,14 @@ impl ScyllaConnector {
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.waiver (waiver_id, title, waiver, creator_user_id, created_ts) VALUES (?, ?, ?, ?, ?)",
-                (id, title, content, creator_user_id, now), // Include other fields as per your schema
+                "INSERT INTO mma.waiver (school_id, waiver_id, title, waiver, creator_user_id, created_ts) VALUES (?, ?, ?, ?, ?, ?)",
+                (school_id, id, title, content, creator_user_id, now), // Include other fields as per your schema
             )
             .await?;
 
         let zero_guuid = Uuid::nil();
-        self.session.query_unpaged("Insert into mma.latest_waiver (waiver_id, created_ts, club_id, class_id, style_id) VALUES (?, ?, ?, ?, ?)", 
-            (id, now, zero_guuid, zero_guuid, zero_guuid)
+        self.session.query_unpaged("Insert into mma.latest_waiver (school_id, waiver_id, created_ts, club_id, class_id, style_id) VALUES (?, ?, ?, ?, ?, ?)", 
+            (school_id, id, now, zero_guuid, zero_guuid, zero_guuid)
         ).await?;
 
 
@@ -889,7 +897,7 @@ impl ScyllaConnector {
 
 
     // Function to create a new waiver and make it current
-    pub async fn create_new_class(&self, creator_user_id: &Uuid, class_id: &Uuid, title: &String, description: &String, venue_id: &Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequency>, notify_booking: bool, waiver_id: Option<Uuid>) -> AppResult<()> {
+    pub async fn create_new_class(&self, school_id: &Uuid, creator_user_id: &Uuid, class_id: &Uuid, title: &String, description: &String, venue_id: &Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequency>, notify_booking: bool, waiver_id: Option<Uuid>) -> AppResult<()> {
         // Get current timestamp
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -901,8 +909,8 @@ impl ScyllaConnector {
         let zero_ts = scylla::value::CqlTimestamp(0);
         self.session
             .query_unpaged(
-                "INSERT INTO mma.class (creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades, deleted_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids, zero_ts), 
+                "INSERT INTO mma.class (school_id, creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades, deleted_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (school_id, creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids, zero_ts), 
             )
             .await?;
 
@@ -941,7 +949,7 @@ impl ScyllaConnector {
 
 
     // Function to create a new waiver and make it current
-    pub async fn update_class(&self, _creator_user_id: &Uuid, class_id: &Uuid, title: &String, description: &String, venue_id: &Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequencyId>, notify_booking: bool, waiver_id: Option<Uuid>) -> AppResult<()> {
+    pub async fn update_class(&self, school_id: &Uuid, _creator_user_id: &Uuid, class_id: &Uuid, title: &String, description: &String, venue_id: &Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequencyId>, notify_booking: bool, waiver_id: Option<Uuid>) -> AppResult<()> {
         // Get current timestamp
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -953,8 +961,8 @@ impl ScyllaConnector {
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.class (class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids), 
+                "INSERT INTO mma.class (school_id, class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (school_id, class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids), 
             )
             .await?;
 
@@ -1025,12 +1033,13 @@ impl ScyllaConnector {
     // Returns Ok(Vec<ClassData>) - an empty vector if no classes match filters or no classes exist
     pub async fn get_classes(
         &self,
+        school_id: &Uuid,
         _only_future: bool,
         publish_mode_filter: Option<i32>,
     ) -> AppResult<Vec<ClassData>> {
 
         let result = self.session
-            .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts FROM mma.class", ()) // Pass the query string and bound values
+            .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts FROM mma.class where school_id = ?", (school_id, )) // Pass the query string and bound values
             .await?
             .into_rows_result()?;
 
@@ -1108,9 +1117,9 @@ impl ScyllaConnector {
         return Ok(None); // Venue_id not found
     }
 
-    pub async fn get_class(&self, venue_id: &Uuid) -> AppResult<Option<ClassData>> {
+    pub async fn get_class(&self, class_id: &Uuid, school_id: &Uuid) -> AppResult<Option<ClassData>> {
         let result = self.session
-        .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts FROM mma.class where class_id = ?", (venue_id, )) // Pass the query string and bound values
+        .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts FROM mma.class where class_id = ? and school_id = ?", (class_id, school_id)) // Pass the query string and bound values
         .await?
         .into_rows_result()?;
 
@@ -1232,13 +1241,13 @@ impl ScyllaConnector {
     }
     
 
-    pub async fn update_style(&self, style_id: &Uuid, title: &String, description: &Option<String>) -> AppResult<bool> {
+    pub async fn update_style(&self, school_id: &Uuid, style_id: &Uuid, title: &String, description: &Option<String>) -> AppResult<bool> {
         // Get current timestamp
 
         self.session
             .query_unpaged(
-                "UPDATE mma.style SET title = ?, description = ? WHERE style_id = ?",
-                (title, description, style_id), // Include other fields as per your schema
+                "UPDATE mma.style SET title = ?, description = ? WHERE style_id = ? and school_id = ?",
+                (title, description, style_id, school_id), // Include other fields as per your schema
             )
             .await?;
 
@@ -1248,9 +1257,9 @@ impl ScyllaConnector {
     
 
 
-    pub async fn get_style(&self, style_id: &Uuid) -> AppResult<Option<StyleData>> {
+    pub async fn get_style(&self, style_id: &Uuid, school_id: &Uuid) -> AppResult<Option<StyleData>> {
         let result = self.session
-        .query_unpaged("SELECT style_id, title, description FROM mma.style where style_id = ?", (style_id, )) // Pass the query string and bound values
+        .query_unpaged("SELECT style_id, title, description FROM mma.style where style_id = ? and school_id = ?", (style_id, school_id)) // Pass the query string and bound values
         .await?
         .into_rows_result()?;
 
@@ -1286,7 +1295,7 @@ impl ScyllaConnector {
     }
 
     // create style
-    pub async fn create_style(&self, creator_user_id: &Uuid, style_id: &Uuid, title: &String, description: &Option<String>) -> AppResult<()> {
+    pub async fn create_style(&self, school_id: &Uuid, creator_user_id: &Uuid, style_id: &Uuid, title: &String, description: &Option<String>) -> AppResult<()> {
         // Get current timestamp
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -1297,8 +1306,8 @@ impl ScyllaConnector {
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.style (style_id, title, description, created_ts, creator_user_id, deleted_ts) VALUES (?, ?, ?, ?, ?, ?)",
-                (style_id, title, description, now, creator_user_id, zero_ts), // Include other fields as per your schema
+                "INSERT INTO mma.style (school_id, style_id, title, description, created_ts, creator_user_id, deleted_ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (school_id, style_id, title, description, now, creator_user_id, zero_ts), // Include other fields as per your schema
             )
             .await?;
 
@@ -1306,16 +1315,16 @@ impl ScyllaConnector {
     }
 
     // list styles
-    pub async fn get_styles(&self) -> AppResult<Vec<StyleData>> {
+    pub async fn get_styles(&self, school_id: &Uuid) -> AppResult<Vec<StyleData>> {
         let mut statement = Statement::new( 
-            "SELECT style_id, title, description FROM mma.style where deleted_ts = 0",
+            "SELECT style_id, title, description FROM mma.style where deleted_ts = 0 and school_id = ?",
         );
         statement.set_consistency(Consistency::LocalQuorum);
 
         let result = self.session
             .query_unpaged(
                 statement,
-                ()
+                (school_id, )
             )
             .await?            
             .into_rows_result()?;

@@ -494,8 +494,21 @@ pub mod handlers {
         // Validate the session
         let user_id = user.validate(&state_manager).await?;
         
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
+                    success: false,
+                    venue_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
+
+
         // Fetch the latest waiver for the user
-        match state_manager.db.get_latest_waiver(None, None, None).await {
+        match state_manager.db.get_latest_waiver(&school_id, None, None, None).await {
             Ok(Some(waiver)) => {
                 Ok(HttpResponse::Ok().json(GetWaiverResponse {
                     success: true,
@@ -536,13 +549,25 @@ pub mod handlers {
         // Validate the session and get the user_id
         let user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
+                    success: false,
+                    venue_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
 
         let req_data = waiver_data.into_inner();
         let accepted_waiver_id = req_data.waiver_id;
 
         // Optional: Verify the accepted_waiver_id against the current latest waiver ID
         // This prevents a user from accepting an outdated waiver if a new one has been published
-        let latest_waiver_check: AppResult<Option<(Uuid, String, String)>> = state_manager.db.get_latest_waiver(None, None, None).await;
+        let latest_waiver_check: AppResult<Option<(Uuid, String, String)>> = state_manager.db.get_latest_waiver(&school_id, None, None, None).await;
 
         let latest_waiver_id = match latest_waiver_check {
             Ok(Some((id, _, _))) => id,
@@ -604,6 +629,17 @@ pub mod handlers {
         let user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?;
 
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
+                    success: false,
+                    venue_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
         // *** Optional: Check user role here to ensure only authorized users can create waivers ***
         // If user.role is not "admin", return HttpResponse::Forbidden()
 
@@ -634,7 +670,7 @@ pub mod handlers {
 
         // Example DB interaction (you'll need to implement this in your db.rs)
         // pub async fn create_new_waiver(&self, id: Uuid, content: &str) -> AppResult<()> { ... }
-        let create_result: AppResult<()> = state_manager.db.create_new_waiver(user_id, new_waiver_id, waiver_title.to_string(), waiver_content.to_string()).await;
+        let create_result: AppResult<()> = state_manager.db.create_new_waiver(&school_id, &user_id, &new_waiver_id, &waiver_title.to_string(), &waiver_content.to_string()).await;
 
 
         match create_result {
@@ -666,6 +702,18 @@ pub mod handlers {
         // 1. Validate the session and get the creator user_id
         let creator_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
+                    success: false,
+                    venue_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
 
         let req_data = class_data.into_inner(); // Get the raw request data
 
@@ -771,6 +819,7 @@ pub mod handlers {
 
         // 3. Call the database function to create the class and related entries
         let create_result: AppResult<()> = state_manager.db.create_new_class(
+            &school_id,
             &creator_user_id,
             &class_id, // Pass the generated class_id
             &req_data.title,
@@ -820,6 +869,19 @@ pub mod handlers {
         // 1. Validate the session and get the creator user_id
         let creator_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
+                    success: false,
+                    venue_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
+
 
         let req_data = class_data.into_inner(); // Get the raw request data
         let class_id = req_data.class_id; // Use the class_id from the request
@@ -932,6 +994,7 @@ pub mod handlers {
 
         // 3. Call the database function to create the class and related entries
         let create_result: AppResult<()> = state_manager.db.update_class(
+            &school_id,
             &creator_user_id,
             &class_id, // Pass the generated class_id
             &req_data.title,
@@ -981,8 +1044,22 @@ pub mod handlers {
         let auth_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
 
+
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
+                    success: false,
+                    venue_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
+
         // Call the database function to get classes based on the provided filters
         let classes_result: AppResult<Vec<ClassData>> = state_manager.db.get_classes(
+            &school_id,
             true,
             None,
         ).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
@@ -1017,9 +1094,21 @@ pub mod handlers {
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
 
         let class_id = req.class_id; // Extract class_id from query parameters
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
+                    success: false,
+                    venue_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
+
 
         // Call the database function to get classes based on the provided filters
-        let class_result: AppResult<Option<ClassData>> = state_manager.db.get_class(&class_id).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
+        let class_result: AppResult<Option<ClassData>> = state_manager.db.get_class(&class_id, &school_id).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
 
         // Handle the result of the database operation explicitly
         match class_result {
@@ -1407,7 +1496,20 @@ pub mod handlers {
         let creator_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
 
+
+        
         let req_data = style_data.into_inner(); // Get the raw request data
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateStyleResponse {
+                    success: false,
+                    style_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
 
         // 1. Validate and parse incoming data
         if req_data.title.is_empty() {
@@ -1432,6 +1534,7 @@ pub mod handlers {
 
         // 2. Call the database function to create the style
         let create_result: AppResult<()> = state_manager.db.create_style(
+            &school_id,
             &creator_user_id,
             &style_id, // Pass the generated style_id
             &req_data.title,
@@ -1479,6 +1582,18 @@ pub mod handlers {
 
         let req_data = style_data.into_inner(); // Get the raw request data
 
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateStyleResponse {
+                    success: false,
+                    style_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
+
         // 2. Validate incoming data from the request body
         // Title is required for an update, just like create
         if req_data.title.trim().is_empty() { // Trim whitespace before checking for empty
@@ -1493,6 +1608,7 @@ pub mod handlers {
         // 3. Call the database function to update the venue
         // The boolean return could indicate if a venue was found and updated (false if not found)
         let update_result: AppResult<bool> = state_manager.db.update_style(
+            &school_id,
             &style_id, // Pass the venue_id from the path
             &req_data.title, // Pass the trimmed title
             &req_data.description, // Pass Option<&str>
@@ -1535,15 +1651,35 @@ pub mod handlers {
     #[get("/api/style/get_list")]
     pub async fn get_style_list_handler(
         state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
-        _user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
         // The LoggedUser extractor handles the authentication check.
         // If authentication fails, Actix Web will return an Unauthorized error
         // before the handler body executes. The _user variable is unused
         // if the user_id isn't needed for filtering *this* specific list endpoint.
 
+        // 1. Authenticate and authorize the user
+        let user_id = user.validate(&state_manager).await
+            .map_err(|e| {
+                tracing::error!("Authentication error during style get_list: {:?}", e);
+                // Consider mapping specific AppErrors to different ActixErrors (e.g., Unauthorized)
+                ErrorInternalServerError("Authentication failed") // Generic error for now
+            })?;
+
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateStyleResponse {
+                    success: false,
+                    style_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
+
         // Call the database function to get styles based on the provided filters
-        let styles_result: AppResult<Vec<StyleData>> = state_manager.db.get_styles().await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
+        let styles_result: AppResult<Vec<StyleData>> = state_manager.db.get_styles(&school_id).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
 
         // Handle the result of the database operation explicitly
         match styles_result {
@@ -1576,10 +1712,24 @@ pub mod handlers {
         let auth_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
 
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateStyleResponse {
+                    success: false,
+                    style_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
+    
+
+
         let style_id = req.style_id; // Extract class_id from query parameters
 
         // Call the database function to get classes based on the provided filters
-        let class_result: AppResult<Option<StyleData>> = state_manager.db.get_style(&style_id).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
+        let class_result: AppResult<Option<StyleData>> = state_manager.db.get_style(&style_id, &school_id).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
 
         // Handle the result of the database operation explicitly
         match class_result {
