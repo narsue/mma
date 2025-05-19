@@ -321,7 +321,7 @@ pub mod handlers {
                 user_id: None,
             });
         }
-        
+        let school_id =  Uuid::new_v4(); // Generate a new UUID for the school_id
         // Create the user using our database connector
         let result = state_manager.db.create_user(
             &req.email,
@@ -329,16 +329,9 @@ pub mod handlers {
             None,
             &req.first_name,
             &req.surname,
-            req.gender.as_deref(),
-            req.phone.as_deref(),
-            req.dob.as_deref(),
-            req.address.as_deref(),
-            req.suburb.as_deref(),
-            req.emergency_name.as_deref(),
-            req.emergency_relationship.as_deref(),
-            req.emergency_phone.as_deref(),
-            req.emergency_medical.as_deref(),
-            false
+            false,
+            &Some(school_id),
+            &None
         ).await;
         
         match result {
@@ -1125,6 +1118,17 @@ pub mod handlers {
 
         // Generate a unique ID for the new venue
         let venue_id = Uuid::new_v4();
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
+                    success: false,
+                    venue_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
 
         // 2. Call the database function to create the venue
         let create_result: AppResult<()> = state_manager.db.create_new_venue(
@@ -1140,6 +1144,7 @@ pub mod handlers {
             &req_data.latitude, // Pass Option<&Decimal>
             &req_data.longitude, // Pass Option<&Decimal>
             &req_data.contact_phone,
+            &school_id,
          ).await;
         // Handle the result of the database operation
         match create_result {
@@ -1183,7 +1188,17 @@ pub mod handlers {
         tracing::info!("User {} is attempting to update venue {}", user_id, venue_id);
 
         let req_data = venue_data.into_inner(); // Get the raw request data
-
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
+                    success: false,
+                    venue_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
         // 2. Validate incoming data from the request body
         // Title is required for an update, just like create
         if req_data.title.trim().is_empty() { // Trim whitespace before checking for empty
@@ -1200,6 +1215,7 @@ pub mod handlers {
         // pub async fn update_venue(&self, venue_id: &Uuid, title: &str, description: Option<&str>, ...) -> AppResult<bool>;
         // The boolean return could indicate if a venue was found and updated (false if not found)
         let update_result: AppResult<bool> = state_manager.db.update_venue(
+            &school_id,
             &venue_id, // Pass the venue_id from the path
             &req_data.title, // Pass the trimmed title
             &req_data.description, // Pass Option<&str>
@@ -1253,15 +1269,36 @@ pub mod handlers {
     #[get("/api/venue/get_list")]
     pub async fn get_venue_list_handler(
         state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
-        _user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
         // The LoggedUser extractor handles the authentication check.
         // If authentication fails, Actix Web will return an Unauthorized error
         // before the handler body executes. The _user variable is unused
         // if the user_id isn't needed for filtering *this* specific list endpoint.
 
+        // 1. Authenticate and authorize the user
+        let user_id = user.validate(&state_manager).await
+            .map_err(|e| {
+                tracing::error!("Authentication error during venue update: {:?}", e);
+                // Consider mapping specific AppErrors to different ActixErrors (e.g., Unauthorized)
+                ErrorInternalServerError("Authentication failed") // Generic error for now
+            })?;
+
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
+                    success: false,
+                    venue_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
+
+
         // Call the database function to get venues based on the provided filters
-        let venues_result: AppResult<Vec<VenueData>> = state_manager.db.get_venues().await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
+        let venues_result: AppResult<Vec<VenueData>> = state_manager.db.get_venues(&school_id).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
 
         // Handle the result of the database operation explicitly
         match venues_result {
@@ -1296,15 +1333,32 @@ pub mod handlers {
         // If authentication fails, Actix Web will return an Unauthorized error (401)
         // before the handler body executes.
 
-        let creator_user_id = user.validate(&state_manager).await
-            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        // 1. Authenticate and authorize the user
+        let user_id = user.validate(&state_manager).await
+            .map_err(|e| {
+                tracing::error!("Authentication error during venue update: {:?}", e);
+                // Consider mapping specific AppErrors to different ActixErrors (e.g., Unauthorized)
+                ErrorInternalServerError("Authentication failed") // Generic error for now
+            })?;
+
+        let school_id = match user.school_id {
+            Some(school_id) => school_id,
+            None => {
+                // Handle the case where the user does not have a school ID
+                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
+                    success: false,
+                    venue_id: None,
+                    error_message: Some("User does not have a valid school ID.".to_string()),
+                }));
+            }
+        };
 
         let venue_id = req.venue_id; // Extract the UUID from the path
 
         // tracing::info!("Fetching venue with ID: {}", venue_id);
 
         // Call the database function to get the venue by ID
-        let venue_result: AppResult<Option<VenueData>> = state_manager.db.get_venue(&venue_id).await;
+        let venue_result: AppResult<Option<VenueData>> = state_manager.db.get_venue(&venue_id, &school_id).await;
 
         // Handle the result of the database operation
         match venue_result {
@@ -1580,7 +1634,7 @@ pub mod handlers {
         };
         
         // If the user exists, send them a password reset email
-        if let Some((user_id, _)) = user_opt {
+        if let Some((user_id, _, _)) = user_opt {
             // Generate a reset code
             let reset_code = uuid::Uuid::new_v4().to_string();
             
@@ -1701,7 +1755,7 @@ pub mod handlers {
         
         // Check if the code is valid and mark it as used
         match state_manager.db.check_and_use_forgotten_password_code(email, code).await {
-            Ok(Some(user_id)) => {
+            Ok(Some((user_id, school_id))) => {
                 // Hash the new password
                 let new_password_hash = match hash_password(new_password) {
                     Ok(hash) => hash,
@@ -1720,7 +1774,6 @@ pub mod handlers {
                     Ok(_) => {
                         tracing::info!("Password successfully reset for user ID: {}", user_id);
                         
-    
                         // Create a session for the user (auto-login)
                         // Get the request info for session tracking
                         // let ip = "0.0.0.0".to_string(); // In a real app, get this from the request
@@ -1731,7 +1784,8 @@ pub mod handlers {
                             &user_id,
                             ip,
                             user_agent,
-                            24
+                            24,
+                            &school_id
                         ).await  {
 
 
@@ -1885,8 +1939,12 @@ pub mod handlers {
             }
         };
 
+        let school_id = uuid::Uuid::new_v4();
+        let new_school = true;
+        let user_id = None;
+
         // Store the verification code in the database with a 24-hour expiry
-        match state_manager.db.add_sign_up_invite_code(&email, &verification_code, 24, &first_name, &surname, &password_hash).await {
+        match state_manager.db.add_sign_up_invite_code(&email, &verification_code, 24, &first_name, &surname, &password_hash, &Some(school_id), new_school, &user_id).await {
             Ok(_) => {
                 tracing::info!("Added verification code for new user: {}", email);
                 
@@ -1978,7 +2036,7 @@ pub mod handlers {
     
         // Validate the verification code and retrieve user info
         match state_manager.db.check_and_use_sign_up_invite_code(&email, &code).await {
-            Ok((valid,first_name, surname, password_hash)) => {
+            Ok((valid,first_name, surname, password_hash, school_id, user_id, new_school)) => {
                 if !valid {
                     // Invalid or expired code
                     tracing::warn!("Invalid or expired verification code for email: {}", email);
@@ -2009,6 +2067,14 @@ pub mod handlers {
                 // Code is valid, and we have the user's info
                 tracing::info!("Verification code is valid for email: {}", email);
     
+                let school_id = match school_id {
+                    Some(id) => id,
+                    None => {
+                        tracing::error!("No school ID found for email: {}", email);
+                        return Ok(HttpResponse::InternalServerError().body("An error occurred while processing your request. Please try again later."));
+                    }
+                };
+
                 // Create the user
                 let result = state_manager.db.create_user(
                     &email,
@@ -2016,16 +2082,9 @@ pub mod handlers {
                     Some(&password_hash), // Use the stored password hash
                     &first_name,
                     &surname,
-                    None, // gender
-                    None, // phone
-                    None, // dob
-                    None, // address
-                    None, // suburb
-                    None, // emergency_name
-                    None, // emergency_relationship
-                    None, // emergency_phone
-                    None, // emergency_medical
-                    true
+                    true,
+                    &Some(school_id), // Use the school_id from the invite code
+                    &None, // user_id
                 ).await;
     
                 match result {
@@ -2040,7 +2099,8 @@ pub mod handlers {
                             &user_id,
                             ip,
                             user_agent,
-                            24 // Session expiry in hours
+                            24, // Session expiry in hours
+                            &school_id
                         ).await {
                             Ok(session_token) => {
                                 // Set session cookies
@@ -2140,8 +2200,19 @@ pub mod handlers {
             // Call the database function to issue a new session token
             // You need a db function that handles renewing an *existing* session
             // Let's refine the `refresh_session` function in db.rs
+            let school_id = match user.school_id {
+                Some(id) => id,
+                None => {
+                    tracing::error!("No school ID found for user: {}", user_id);
+                    return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                        success: false,
+                        message: None,
+                        error_message: Some("An error occurred while processing your request.".to_string()),
+                    }));
+                }
+            };
 
-            match state_manager.db.create_session(&user_id, None, None, 24).await { // Renew for 8 hours
+            match state_manager.db.create_session(&user_id, None, None, 24, &school_id).await { // Renew for 8 hours
                 Ok(new_token) => {
                     tracing::info!("Session renewed successfully for user {}.", user_id);
                     // let new_expiry_ts_millis = new_expiry_ts_cql;

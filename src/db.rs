@@ -123,7 +123,7 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
         .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.school \
-            (super_user_id uuid, school_id uuid, stripe_id text, title text, description text, created_ts timestamp, PRIMARY KEY (school_id))",
+            (super_user_id uuid, school_id uuid, stripe_id text, title text, description text, created_ts timestamp, deleted_ts timestamp, PRIMARY KEY (school_id))",
             &[],
         )
         .await?;
@@ -132,7 +132,7 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
         .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.venue \
-            (venue_id uuid, creator_user_id uuid, title text, description text, longitude decimal, latitude decimal, address text, postcode text, suburb text, street_no text, state text, country text, street_name text, google_maps_link text, contact_phone text, created_ts timestamp, deleted_ts timestamp, PRIMARY KEY (venue_id))",
+            (venue_id uuid, school_id uuid, creator_user_id uuid, title text, description text, longitude decimal, latitude decimal, address text, postcode text, suburb text, street_no text, state text, country text, street_name text, google_maps_link text, contact_phone text, created_ts timestamp, deleted_ts timestamp, PRIMARY KEY (school_id, venue_id))",
             &[],
         )
         .await?;
@@ -146,10 +146,11 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     .await?;
     println!("venue_deleted_index created");
 
+
     session
         .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.user \
-            (user_id uuid, email text, password_hash text, first_name text, surname text, gender text, phone text, dob text, stripe_payment_method_id text, created_ts timestamp, email_verified boolean, photo_id text, address text, suburb text, emergency_name text, emergency_relationship text, emergency_phone text, emergency_medical text, belt_size text, uniform_size text, member_number text, contracted_until date, PRIMARY KEY (user_id))",
+            (user_id uuid, school_id uuid, email text, password_hash text, first_name text, surname text, gender text, phone text, dob text, stripe_payment_method_id text, created_ts timestamp, email_verified boolean, photo_id text, address text, suburb text, emergency_name text, emergency_relationship text, emergency_phone text, emergency_medical text, belt_size text, uniform_size text, member_number text, contracted_until date, PRIMARY KEY (user_id))",
             &[],
         )
         .await?;
@@ -356,7 +357,7 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.session \
         (session_token text, user_id uuid, created_ts timestamp, expires_ts timestamp, \
-         ip_address text, user_agent text, is_active boolean, \
+         ip_address text, user_agent text, is_active boolean, school_id uuid, \
          PRIMARY KEY (session_token, user_id))",
         &[],
     )
@@ -388,7 +389,7 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.sign_up_invite \
         (email text, code text, expires_ts timestamp, first_name text, surname text, password_hash text, \
-         created_ts timestamp, is_used boolean, \
+         created_ts timestamp, is_used boolean, new_school boolean, school_id uuid, user_id uuid, \
          PRIMARY KEY (email, code))",
         &[],
     )
@@ -410,7 +411,7 @@ impl ScyllaConnector {
             .map_err(|e| AppError::Internal(format!("Failed to connect to Scylla: {}", e)))?;
         println!("DB Connected");
         init_schema(&session).await?;
-        let select_user_by_email_stmt = create_prepared_statement(&session, "SELECT user_id, password_hash FROM mma.user WHERE email = ?").await?;
+        let select_user_by_email_stmt = create_prepared_statement(&session, "SELECT user_id, password_hash, school_id FROM mma.user WHERE email = ?").await?;
 
         Ok(Self {
             session: Arc::new(session),
@@ -418,7 +419,7 @@ impl ScyllaConnector {
         })
     }
 
-    pub async fn get_user_by_email(&self, email: &str) -> Result<Option<(Uuid, String)>> {
+    pub async fn get_user_by_email(&self, email: &str) -> Result<Option<(Uuid, String, Uuid)>> {
         // First, get the user_id from the email lookup table
         let email_result = self.session
             .execute_unpaged(
@@ -439,8 +440,8 @@ impl ScyllaConnector {
 
         for row in email_result.rows()?
         {
-            let (user_id, password_hash): (Uuid, String) = row?;
-            return Ok(Some((user_id, password_hash)));
+            let (user_id, password_hash, school_id): (Uuid, String, Uuid) = row?;
+            return Ok(Some((user_id, password_hash, school_id)));
         }
 
         return Ok(None);
@@ -452,6 +453,7 @@ impl ScyllaConnector {
         ip_address: Option<String>,
         user_agent: Option<String>,
         duration_hours: i64,
+        school_id: &Uuid
     ) -> Result<String> {
         // Generate a secure random session token
         let session_token: String = rand::thread_rng()
@@ -475,8 +477,8 @@ impl ScyllaConnector {
         // Store the session in the database
         self.session
             .query_unpaged(
-                "INSERT INTO mma.session (session_token, user_id, created_ts, expires_ts, ip_address, user_agent, is_active) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO mma.session (session_token, user_id, created_ts, expires_ts, ip_address, user_agent, is_active, school_id) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     &session_token,
                     user_id,
@@ -485,6 +487,7 @@ impl ScyllaConnector {
                     ip_address.unwrap_or_default(),
                     user_agent.unwrap_or_default(),
                     true,
+                    school_id,
                 ),
             )
             .await?;
@@ -497,11 +500,11 @@ impl ScyllaConnector {
 
 
     // Verify a session token and return the user ID if valid
-    pub async fn verify_session(&self, user_id: Uuid, session_token: &str) -> Result<(bool, i64)> {
+    pub async fn verify_session(&self, user_id: Uuid, session_token: &str) -> Result<(bool, i64, Option<Uuid>)> {
         // println!("Verifying session: {}", session_token);
         let result = self.session
             .query_unpaged(
-                "SELECT expires_ts, is_active FROM mma.session WHERE session_token = ? and user_id = ?",
+                "SELECT expires_ts, is_active, school_id FROM mma.session WHERE session_token = ? and user_id = ?",
                 (session_token, user_id),
             )
             .await?
@@ -509,21 +512,22 @@ impl ScyllaConnector {
 
         for row in result.rows()?
         {
-            let (expires_ts, is_active): (CqlTimestamp, bool, ) = row?;
+            let (expires_ts, is_active, school_id): (CqlTimestamp, bool, Option<Uuid>) = row?;
             let now = Utc::now().timestamp();
+
             // Check if session is valid (not expired and is active)
             if now <= expires_ts.0 && is_active {
-                return Ok((true, expires_ts.0));
+                return Ok((true, expires_ts.0, school_id));
             } else {
                 // Optionally invalidate expired sessions
                 if now > expires_ts.0 {
                     self.invalidate_session(user_id, session_token).await?;
                 }
-                return Ok((false, 0));
+                return Ok((false, 0, None)); // Session expired or inactive
             }
         }
 
-        return Ok((false, 0));
+        return Ok((false, 0, None));
 
     }
     
@@ -559,33 +563,11 @@ impl ScyllaConnector {
         password_hash: Option<&str>,
         first_name: &str,
         surname: &str,
-        gender: Option<&str>,
-        phone: Option<&str>,
-        dob: Option<&str>,
-        address: Option<&str>,
-        suburb: Option<&str>,
-        emergency_name: Option<&str>,
-        emergency_relationship: Option<&str>,
-        emergency_phone: Option<&str>,
-        emergency_medical: Option<&str>,
         email_verified: bool,
+        school_id: &Option<Uuid>,
+        _user_id: &Option<Uuid>
     ) -> Result<Uuid> {
-        // Check if email already exists using the email lookup table
-        let result = self.session
-            .query_unpaged(
-                "SELECT user_id FROM mma.user WHERE email = ?",
-                (email,),
-            )
-            .await?
-            .into_rows_result()?;
 
-        
-        for row in result.rows()?
-        {
-            let (user_id,): (Uuid,) = row?;
-            println!("User already exists ID: {}", user_id);
-            return Err(AppError::Internal(format!("Email {} is already registered", email)));
-        }
 
         // if let Ok(_) = email_check.first_row() {
         //     return Err(AppError::Internal(format!("Email {} is already registered", email)));
@@ -602,7 +584,12 @@ impl ScyllaConnector {
         // let password_hash = hash_password(password)?;
         
         // Generate a new user ID
-        let user_id = Uuid::new_v4();
+        let user_id = if let Some(id) = _user_id {
+            *id
+        } else {
+            Uuid::new_v4()
+        };
+        // let user_id = Uuid::new_v4();
         
         // Get current timestamp
         let now = SystemTime::now()
@@ -610,34 +597,74 @@ impl ScyllaConnector {
             .unwrap_or_default()
             .as_millis() as i64;
         let now = scylla::value::CqlTimestamp(now);
-        
+        let school_id = match school_id {
+            Some(school_id) => *school_id,
+            None => Uuid::new_v4(), // Default to a new UUID if school_id is None
+        };
+
+
         // Insert main user record
-        self.session
-            .query_unpaged(
-                "INSERT INTO mma.user (user_id, email, password_hash, first_name, surname, gender, phone, dob, \
-                 address, suburb, emergency_name, emergency_relationship, emergency_phone, emergency_medical, \
-                 created_ts, email_verified) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    user_id,
-                    email,
-                    &password_hash,
-                    first_name,
-                    surname,
-                    gender.unwrap_or(""),
-                    phone.unwrap_or(""),
-                    dob.unwrap_or(""),
-                    address.unwrap_or(""),
-                    suburb.unwrap_or(""),
-                    emergency_name.unwrap_or(""),
-                    emergency_relationship.unwrap_or(""),
-                    emergency_phone.unwrap_or(""),
-                    emergency_medical.unwrap_or(""),
-                    now,
-                    email_verified,
-                ),
-            )
-            .await?;
+        match (_user_id ) 
+            { Some(_user_id) => {
+                self.session
+                .query_unpaged(
+                    "update mma.user (password_hash, email_verified, school_id) \
+                     VALUES (?, ?, ?) where user_id = ?",
+                    (
+                        &password_hash,
+                        email_verified,
+                        school_id,
+                        user_id,
+                    ),
+                )
+                .await?;
+            },
+            None => {
+                // Check if email already exists using the email lookup table
+                let result = self.session
+                    .query_unpaged(
+                        "SELECT user_id FROM mma.user WHERE email = ?",
+                        (email,),
+                    )
+                    .await?
+                    .into_rows_result()?;
+
+                
+                for row in result.rows()?
+                {
+                    let (user_id,): (Uuid,) = row?;
+                    println!("User already exists ID: {}", user_id);
+                    return Err(AppError::Internal(format!("Email {} is already registered", email)));
+                }
+
+
+                self.session
+                .query_unpaged(
+                    "INSERT INTO mma.user (user_id, email, password_hash, first_name, surname, \
+                     created_ts, email_verified, school_id) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        user_id,
+                        email,
+                        &password_hash,
+                        first_name,
+                        surname,
+                        now,
+                        email_verified,
+                        school_id
+                    ),
+                )
+                .await?;
+
+
+                self.create_school(&user_id, &school_id, &None, &None).await?;
+            }
+        }
+
+        
+
+
+        
         
         // Insert into email lookup table
         // self.session
@@ -1061,11 +1088,11 @@ impl ScyllaConnector {
         return Ok(classes);
     }
 
-    pub async fn get_venue(&self, venue_id: &Uuid) -> AppResult<Option<VenueData>> {
+    pub async fn get_venue(&self, venue_id: &Uuid, school_id: &Uuid) -> AppResult<Option<VenueData>> {
         let result = self.session
             .query_unpaged(
-                "SELECT venue_id, title, description, address, suburb, postcode, state, country, latitude, longitude, contact_phone FROM mma.venue WHERE venue_id = ?",
-                (venue_id,),
+                "SELECT venue_id, title, description, address, suburb, postcode, state, country, latitude, longitude, contact_phone FROM mma.venue WHERE venue_id = ? and school_id = ?",
+                (venue_id, school_id),
             )
             .await?
             .into_rows_result()?;
@@ -1151,7 +1178,8 @@ impl ScyllaConnector {
         return Ok(None);
     }
 
-    pub async fn create_new_venue(&self, creator_user_id: &Uuid, venue_id: &Uuid, title: &String, description: &Option<String>, address: &Option<String>, suburb: &Option<String>, state: &Option<String>, country: &Option<String>, postcode: &Option<String>, latitude: &Option<BigDecimal>, longitude: &Option<BigDecimal>, contact_phone: &Option<String>) -> AppResult<()> {
+
+    pub async fn create_school(&self, super_user_id: &Uuid, school_id: &Uuid, title: &Option<String>, description: &Option<String>) -> AppResult<()> {
         // Get current timestamp
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -1162,21 +1190,41 @@ impl ScyllaConnector {
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.venue (venue_id, creator_user_id, title, description, created_ts, address, suburb, state, country, postcode, latitude, longitude, contact_phone, deleted_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (venue_id, creator_user_id, title, description, now, address, suburb, state, country, postcode, latitude, longitude, contact_phone, zero_ts), // Include other fields as per your schema
+                "INSERT INTO mma.school (super_user_id, school_id, title, description, created_ts, deleted_ts) VALUES (?, ?, ?, ?, ?, ?)",
+                (super_user_id, school_id, title, description, now, zero_ts), // Include other fields as per your schema
             )
             .await?;
 
         Ok(())
     }
 
-    pub async fn update_venue(&self, venue_id: &Uuid, title: &String, description: &Option<String>, address: &Option<String>, suburb: &Option<String>, state: &Option<String>, country: &Option<String>,  postcode: &Option<String>, latitude: &Option<BigDecimal>, longitude: &Option<BigDecimal>, contact_phone: &Option<String>) -> AppResult<bool> {
+
+    pub async fn create_new_venue(&self, creator_user_id: &Uuid, venue_id: &Uuid, title: &String, description: &Option<String>, address: &Option<String>, suburb: &Option<String>, state: &Option<String>, country: &Option<String>, postcode: &Option<String>, latitude: &Option<BigDecimal>, longitude: &Option<BigDecimal>, contact_phone: &Option<String>, school_id: &Uuid) -> AppResult<()> {
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let now = scylla::value::CqlTimestamp(now);
+        let zero_ts = scylla::value::CqlTimestamp(0);
+
+        self.session
+            .query_unpaged(
+                "INSERT INTO mma.venue (venue_id, creator_user_id, title, description, created_ts, address, suburb, state, country, postcode, latitude, longitude, contact_phone, deleted_ts, school_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (venue_id, creator_user_id, title, description, now, address, suburb, state, country, postcode, latitude, longitude, contact_phone, zero_ts, school_id), // Include other fields as per your schema
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn update_venue(&self, school_id: &Uuid, venue_id: &Uuid, title: &String, description: &Option<String>, address: &Option<String>, suburb: &Option<String>, state: &Option<String>, country: &Option<String>,  postcode: &Option<String>, latitude: &Option<BigDecimal>, longitude: &Option<BigDecimal>, contact_phone: &Option<String>) -> AppResult<bool> {
         // Get current timestamp
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.venue (venue_id, title, description, address, suburb, state, country, postcode, latitude, longitude, contact_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (venue_id, title, description, address, suburb, state, country, postcode, latitude, longitude, contact_phone), // Include other fields as per your schema
+                "INSERT INTO mma.venue (school_id, venue_id, title, description, address, suburb, state, country, postcode, latitude, longitude, contact_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (school_id, venue_id, title, description, address, suburb, state, country, postcode, latitude, longitude, contact_phone), // Include other fields as per your schema
             )
             .await?;
 
@@ -1218,11 +1266,11 @@ impl ScyllaConnector {
 
 
     // get_venues
-    pub async fn get_venues(&self) -> AppResult<Vec<VenueData>> {
+    pub async fn get_venues(&self, school_id: &Uuid) -> AppResult<Vec<VenueData>> {
         let result = self.session
             .query_unpaged(
-                "SELECT venue_id, title, description, address, suburb, postcode, state, country, latitude, longitude, contact_phone FROM mma.venue",
-                ()
+                "SELECT venue_id, title, description, address, suburb, postcode, state, country, latitude, longitude, contact_phone FROM mma.venue where school_id = ? and deleted_ts = 0",
+                (school_id, )
             )
             .await?            
             .into_rows_result()?;
@@ -1316,7 +1364,7 @@ impl ScyllaConnector {
 
 
     // Check if a code is valid for an email and mark it as used if it is
-    pub async fn check_and_use_forgotten_password_code(&self, email: &str, code: &str) -> Result<Option<Uuid>> {
+    pub async fn check_and_use_forgotten_password_code(&self, email: &str, code: &str) -> Result<Option<(Uuid, Uuid)>> {
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
@@ -1358,7 +1406,28 @@ impl ScyllaConnector {
                     )
                     .await?;
                 
-                return Ok(Some(id));
+
+                let result = self.session
+                .query_unpaged(
+                    "SELECT school_id FROM mma.user WHERE user_id = ?",
+                    (user_id,),
+                )
+                .await?
+                .into_rows_result()?;
+
+                let mut school_id: Option<Uuid> = None;
+                for row in result.rows()? {
+                    let (id,): (Uuid,) = row?;
+                    school_id = Some(id);
+                }
+                match school_id {
+                    Some(id) => {
+                        return Ok(Some((id, id)));
+                    },
+                    None => {
+                        return Ok(None);
+                    }
+                }
             }
         }
         
@@ -1369,7 +1438,7 @@ impl ScyllaConnector {
 
 
     // Add a sign-up invite code for an email
-    pub async fn add_sign_up_invite_code(&self, email: &str, code: &str, expiry_hours: i64, first_name: &str, surname: &str, password_hash: &String) -> Result<()> {
+    pub async fn add_sign_up_invite_code(&self, email: &str, code: &str, expiry_hours: i64, first_name: &str, surname: &str, password_hash: &String, school_id: &Option<Uuid>, new_school: bool, user_id: &Option<Uuid>) -> Result<()> {
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
@@ -1381,8 +1450,8 @@ impl ScyllaConnector {
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.sign_up_invite (email, code, expires_ts, created_ts, is_used, first_name, surname, password_hash) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO mma.sign_up_invite (email, code, expires_ts, created_ts, is_used, first_name, surname, password_hash, school_id, new_school, user_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     email, 
                     code, 
@@ -1392,6 +1461,9 @@ impl ScyllaConnector {
                     first_name,
                     surname,
                     password_hash,
+                    school_id,
+                    new_school,
+                    user_id
                 ),
             )
             .await?;
@@ -1400,7 +1472,7 @@ impl ScyllaConnector {
     }
 
     // Check if an invite code is valid for an email and mark it as used if it is
-    pub async fn check_and_use_sign_up_invite_code(&self, email: &str, code: &str) -> Result<(bool, Option<String>, Option<String>, Option<String>)> {
+    pub async fn check_and_use_sign_up_invite_code(&self, email: &str, code: &str) -> Result<(bool, Option<String>, Option<String>, Option<String>, Option<Uuid>, Option<Uuid>, bool)> {
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
@@ -1410,7 +1482,7 @@ impl ScyllaConnector {
 
         let result = self.session
             .query_unpaged(
-                "SELECT expires_ts, is_used, first_name, surname, password_hash FROM mma.sign_up_invite 
+                "SELECT expires_ts, is_used, first_name, surname, password_hash, school_id, new_school, user_id FROM mma.sign_up_invite 
                 WHERE email = ? AND code = ?",
                 (email, code),
             )
@@ -1422,11 +1494,17 @@ impl ScyllaConnector {
         let mut first_name: Option<String> = None;
         let mut surname: Option<String> = None;
         let mut password_hash: Option<String> = None;
+        let mut school_id: Option<Uuid> = None;
+        let mut new_school: bool = false;
+        let mut user_id: Option<Uuid> = None;
         for row in result.rows()? {
-            let (expires_ts, is_used, _first_name, _surname, _password_hash): (CqlTimestamp, bool, String, String, String) = row?;
-            first_name = Some(_first_name);
-            surname = Some(_surname);
+            let (expires_ts, is_used, _first_name, _surname, _password_hash, _school_id, _new_school, _user_id): (CqlTimestamp, bool, Option<String>, Option<String>, String, Option<Uuid>, bool, Option<Uuid>) = row?;
+            first_name = _first_name;
+            surname = _surname;
             password_hash = Some(_password_hash);
+            school_id = _school_id;
+            new_school = _new_school;
+            user_id = _user_id;
             // Check if code is not expired and not used
             if !is_used && expires_ts.0 > now_i64 {
                 is_valid = true;
@@ -1443,11 +1521,11 @@ impl ScyllaConnector {
                 )
                 .await?;
             
-            return Ok((true, first_name, surname, password_hash));
+            return Ok((true, first_name, surname, password_hash, school_id, user_id, new_school));
         }
         
         // Return false if no valid code was found
-        Ok((false, None, None, None))
+        Ok((false, None, None, None, None, None, false))
     }
 
 

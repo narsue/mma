@@ -12,6 +12,7 @@ pub struct LoggedUser {
     pub user_id: Uuid,
     pub session_token: String,     // Added session_token field
     pub expire_ts: i64,
+    pub school_id: Option<Uuid>, // Added school_id field
     // pub state: Arc<StoreStateManager>, // Added state field
 }
 
@@ -40,7 +41,8 @@ impl FromRequest for LoggedUser {
                         ready(Ok(LoggedUser {
                             user_id, // Store the parsed Uuid
                             session_token: session_cookie.value().to_owned(),
-                            expire_ts: 0
+                            expire_ts: 0,
+                            school_id: None, // Initialize with None, to be set later
                         }))
                     },
                     Err(e) => {
@@ -65,13 +67,21 @@ impl LoggedUser {
         let verification_result = state.db.verify_session(self.user_id, &self.session_token).await;
         
         match verification_result {
-            Ok((true, expires_ts_millis)) => {
+            Ok((true, expires_ts_millis, school_id)) => {
                 // Session is valid and matches the user_id, and we got the expiry timestamp in milliseconds
                 tracing::debug!("Session valid for user_id: {}, expires at (millis): {}", self.user_id, expires_ts_millis);
                 self.expire_ts = expires_ts_millis; // Store the fetched expiry timestamp (convert i64 to CqlTimestamp)
+                self.school_id = match school_id {
+                    Some(school_id) => Some(school_id),
+                    None => {
+                        tracing::warn!("No school_id found for user_id: {}", self.user_id);
+                        return Err(ErrorInternalServerError("No school_id found for user"))
+                    },
+                };
+                // self.school_id = Some(school_id); // Store the fetched school_id
                 Ok(self.user_id) // Return the successfully validated user_id
             }
-            Ok((false, _)) => {
+            Ok((false, _, _)) => {
                 // Database call succeeded, but the session verification failed (invalid token for user, etc.)
                 tracing::debug!("Session verification failed for user_id: {}", self.user_id);
                 Err(ErrorUnauthorized("Invalid or expired session"))
