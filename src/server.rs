@@ -1,23 +1,23 @@
 pub mod handlers {
     use actix_web::{post, get, put, web, http::header::{LOCATION, CONTENT_TYPE}, HttpRequest, HttpResponse, cookie::{Cookie, SameSite}};
-    use argon2::password_hash;
+    // use argon2::password_hash;
     // use mma::api::GenericResponse;
     use std::sync::Arc;
     use uuid::Uuid;
-    use crate::{api::{GetClassRequest, GetClassResponse}, state::StoreStateManager};
+    use crate::{api::{GetClassRequest, GetClassResponse}, auth, state::StoreStateManager};
     // use crate::error::AppError;
     use crate::api::{
         LoginRequest, LoginResponse, CreateUserRequest, CreateUserResponse, ContactForm,
         GetUserProfileResponse, UpdateUserProfileRequest, UpdateUserProfileResponse,
         ChangePasswordRequest, ChangePasswordResponse, GetWaiverResponse,
         AcceptWaiverRequest, AcceptWaiverResponse, CreateWaiverResponse, CreateWaiverRequest,  // Re-using or adjusting generic response
-        CreateClassRequest, CreateClassResponse, ClassFrequency, ClassFrequencyRequest, 
+        CreateClassRequest, CreateClassResponse, ClassFrequency, //ClassFrequencyRequest, 
         ClassData, CreateVenueRequest, CreateVenueResponse, VenueData, CreateStyleRequest, CreateStyleResponse, StyleData,
         ForgottenPasswordRequest, ForgottenPasswordResponse, ResetPasswordQuery, ResetPasswordResponse, ResetPasswordRequest,
         SignupResponse, SignupRequest, VerifyAccountQuery, GetVenueRequest, GetVenueResponse, UpdateClassRequest, ClassFrequencyId,
         GetVenueListResponse, GenericResponse, GetStlyeListResponse, GetStyleRequest, GetStyleResponse,
     };
-    use chrono::{NaiveDate, NaiveTime, Utc};
+    use chrono::{NaiveDate, NaiveTime};
     use bigdecimal::BigDecimal;
     use crate::auth::LoggedUser;
     use crate::db::{verify_password, hash_password};
@@ -36,11 +36,23 @@ pub mod handlers {
         state_manager: web::Data<Arc<StoreStateManager>>,
         mut user: LoggedUser, // Authenticate the request
     ) -> Result<HttpResponse, actix_web::Error> {
-        // Validate the session and get the user_id
-        let user_id = user.validate(&state_manager).await?;
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
         // Fetch the user profile from the database
-        match state_manager.db.get_user_profile(user_id).await {
+        match state_manager.db.get_user_profile(auth_user_id).await {
             Ok(Some(profile)) => {
                 Ok(HttpResponse::Ok().json(GetUserProfileResponse {
                     success: true,
@@ -50,7 +62,7 @@ pub mod handlers {
             },
             Ok(None) => {
                 // This case should ideally not happen if LoggedUser validation passed
-                tracing::error!("Authenticated user ID {} not found in profile data!", user_id);
+                tracing::error!("Authenticated user ID {} not found in profile data!", auth_user_id);
                 Ok(HttpResponse::InternalServerError().json(GetUserProfileResponse {
                     success: false,
                     error_message: Some("User profile not found.".to_string()),
@@ -58,7 +70,7 @@ pub mod handlers {
                 }))
             },
             Err(e) => {
-                tracing::error!("Database error fetching profile for {}: {:?}", user_id, e);
+                tracing::error!("Database error fetching profile for {}: {:?}", auth_user_id, e);
                 Ok(HttpResponse::InternalServerError().json(GetUserProfileResponse {
                     success: false,
                     error_message: Some("Failed to retrieve user profile.".to_string()),
@@ -76,12 +88,26 @@ pub mod handlers {
         mut user: LoggedUser, // Authenticate the request
         update_data: web::Json<UpdateUserProfileRequest>,
     ) -> Result<HttpResponse, actix_web::Error> {
-        // Validate the session and get the user_id
-        let user_id = user.validate(&state_manager).await?;
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
+
+
         let req_data = update_data.into_inner();
 
         // Perform the update
-        match state_manager.db.update_user_profile(user_id, &req_data).await {
+        match state_manager.db.update_user_profile(auth_user_id, &req_data).await {
             Ok(_) => {
                 Ok(HttpResponse::Ok().json(UpdateUserProfileResponse {
                     success: true,
@@ -89,7 +115,7 @@ pub mod handlers {
                 }))
             },
             Err(e) => {
-                tracing::error!("Database error updating profile for {}: {:?}", user_id, e);
+                tracing::error!("Database error updating profile for {}: {:?}", auth_user_id, e);
                 Ok(HttpResponse::InternalServerError().json(UpdateUserProfileResponse {
                     success: false,
                     error_message: Some("Failed to update user profile.".to_string()),
@@ -109,13 +135,13 @@ pub mod handlers {
         // Validate the session and get the user_id
         // Assuming user.validate returns Result<Uuid, ActixError>.
         // Remove the .map_err call.
-        let user_id = user.validate(&state_manager).await?; // This should now compile
+        let logged_user_id = user.validate(&state_manager).await?; // This should now compile
     
         let req_data = password_data.into_inner();
     
         // 1. Get the stored password hash
         // Call the function and store the AppResult WITHOUT using ?.
-        let get_hash_result = state_manager.db.get_password_hash(user_id).await;
+        let get_hash_result = state_manager.db.get_password_hash(logged_user_id).await;
     
         // Use a match statement to handle the AppResult<Option<String>, AppError>
         let stored_hash = match get_hash_result {
@@ -126,7 +152,7 @@ pub mod handlers {
             Ok(None) => {
                 // get_password_hash returned Ok(None) (user not found by ID in DB)
                 // This is an application-level condition, return an HTTP response indicating the error
-                tracing::error!("Authenticated user ID {} not found in DB after auth!", user_id);
+                tracing::error!("Authenticated user ID {} not found in DB after auth!", logged_user_id);
                 // Return an HTTP error response wrapped in Ok() because the handler's
                 // success type is HttpResponse.
                 return Ok(HttpResponse::InternalServerError().json(ChangePasswordResponse {
@@ -138,7 +164,7 @@ pub mod handlers {
                 // get_password_hash returned Err(AppError)
                 // Manually convert the AppError into the handler's error type (ActixError)
                 // This works because AppError derives Error via thiserror and ActixError has From<Error + Send + Sync + 'static>.
-                tracing::error!("Error fetching password hash for user {}: {:?}", user_id, app_err); // Log the original error
+                tracing::error!("Error fetching password hash for user {}: {:?}", logged_user_id, app_err); // Log the original error
                 // This is the line that should now work correctly because we are
                 // calling ActixError::from directly on the AppError in a non-propagation context.
                 return Err(actix_web::error::ErrorInternalServerError(app_err))
@@ -156,7 +182,7 @@ pub mod handlers {
                 }
             },
             Err(e) => {
-                tracing::error!("Password verification error for user {}: {:?}", user_id, e);
+                tracing::error!("Password verification error for user {}: {:?}", logged_user_id, e);
                 return Ok(HttpResponse::InternalServerError().json(ChangePasswordResponse {
                     success: false,
                     error_message: Some("Password verification failed.".to_string()),
@@ -168,7 +194,7 @@ pub mod handlers {
         let new_password_hash = match hash_password(&req_data.new_password) {
             Ok(hash) => hash,
             Err(e) => {
-                tracing::error!("Error hashing new password for user {}: {:?}", user_id, e);
+                tracing::error!("Error hashing new password for user {}: {:?}", logged_user_id, e);
                 return Ok(HttpResponse::InternalServerError().json(ChangePasswordResponse {
                     success: false,
                     error_message: Some("Failed to process new password.".to_string()),
@@ -177,13 +203,13 @@ pub mod handlers {
         };
 
         // 4. Update the password hash in the database
-        match state_manager.db.update_password_hash(user_id, new_password_hash).await {
+        match state_manager.db.update_password_hash(logged_user_id, new_password_hash).await {
             Ok(_) => {
                 // --- Security Enhancement: Invalidate other sessions ---
                 // Forces user to re-login on other devices after password change
-                if let Err(e) = state_manager.db.invalidate_all_user_sessions(user_id).await {
+                if let Err(e) = state_manager.db.invalidate_all_user_sessions(logged_user_id).await {
                     // Log the error but don't necessarily fail the password change itself
-                    tracing::warn!("Failed to invalidate other sessions for user {} after password change: {:?}", user_id, e);
+                    tracing::warn!("Failed to invalidate other sessions for user {} after password change: {:?}", logged_user_id, e);
                 }
                 // Note: The current session cookie will still be valid until it expires or they explicitly log out THIS session.
 
@@ -193,7 +219,7 @@ pub mod handlers {
                 }))
             },
             Err(e) => {
-                tracing::error!("Database error updating password for {}: {:?}", user_id, e);
+                tracing::error!("Database error updating password for {}: {:?}", logged_user_id, e);
                 Ok(HttpResponse::InternalServerError().json(ChangePasswordResponse {
                     success: false,
                     error_message: Some("Failed to change password in database.".to_string()),
@@ -267,7 +293,8 @@ pub mod handlers {
         cache: web::Data<TemplateCache> // Needed to serve the template
     ) -> Result<HttpResponse, actix_web::Error> {
         // Validate the user's session. If invalid, it returns Unauthorized.
-        let _user_id = user.validate(&state_manager).await?;
+        let _logged_user_id = user.validate(&state_manager).await?;
+
 
         // If validation succeeds, serve the portal HTML
         match get_template_content(&cache, "portal.html") {
@@ -386,7 +413,7 @@ pub mod handlers {
             ip,
             user_agent
         ).await {
-            Ok((user_id, session_token)) => {
+            Ok((logged_user_id, session_token)) => {
                 // Set the session token as a cookie
                 let cookie = Cookie::build("session", session_token.clone())
                     .path("/")
@@ -397,7 +424,7 @@ pub mod handlers {
                     .finish();
                 
                 // Build the user_id cookie
-                let user_id_cookie = Cookie::build("user_id", user_id.to_string()) // Store user_id as a string
+                let logged_user_id_cookie = Cookie::build("logged_user_id", logged_user_id.to_string()) // Store logged_user_id as a string
                     .path("/") // Accessible from the root path
                     .secure(true)  // Only send over HTTPS
                     .http_only(false)  // *** Set this FALSE if frontend JS needs to read it ***
@@ -408,12 +435,12 @@ pub mod handlers {
 
                 HttpResponse::Ok()
                     .cookie(cookie)
-                    .cookie(user_id_cookie)
+                    .cookie(logged_user_id_cookie)
                     .json(LoginResponse {
                         success: true,
                         error_message: None,
                         token: Some(session_token),
-                        user_id: Some(user_id),
+                        logged_user_id: Some(logged_user_id),
                     })
             },
             Err(e) => {
@@ -422,7 +449,7 @@ pub mod handlers {
                     success: false,
                     error_message: Some(e.to_string()),
                     token: None,
-                    user_id: None,
+                    logged_user_id: None,
                 })
             }
         }
@@ -491,21 +518,21 @@ pub mod handlers {
         state_manager: web::Data<Arc<StoreStateManager>>,
         mut user: LoggedUser,
     ) -> Result<HttpResponse, actix_web::Error> {
-        // Validate the session
-        let user_id = user.validate(&state_manager).await?;
-        
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
-                    success: false,
-                    venue_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
 
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
         // Fetch the latest waiver for the user
         match state_manager.db.get_latest_waiver(&school_id, None, None, None).await {
@@ -526,7 +553,7 @@ pub mod handlers {
                 }))
             },
             Err(e) => {
-                tracing::error!("Database error fetching waiver for {}: {:?}", user_id, e);
+                tracing::error!("Database error fetching waiver for {}: {:?}", logged_user_id, e);
                 Ok(HttpResponse::InternalServerError().json(GetWaiverResponse {
                     success: false,
                     error_message: Some("Failed to retrieve waiver.".to_string()),
@@ -546,21 +573,20 @@ pub mod handlers {
         mut user: LoggedUser, // Require user to be logged in
         waiver_data: web::Json<AcceptWaiverRequest>,
     ) -> Result<HttpResponse, ActixError> {
-        // Validate the session and get the user_id
-        let user_id = user.validate(&state_manager).await
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
-        
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
-                    success: false,
-                    venue_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
         let req_data = waiver_data.into_inner();
         let accepted_waiver_id = req_data.waiver_id;
@@ -574,7 +600,7 @@ pub mod handlers {
             Ok(None) => {
                 // No current waiver exists, but user tried to accept one.
                 // This is a client issue or timing issue.
-                tracing::warn!("User {} attempted to accept waiver ID {} but no current waiver exists.", user_id, accepted_waiver_id);
+                tracing::warn!("User {} attempted to accept waiver ID {} but no current waiver exists.", logged_user_id, accepted_waiver_id);
                 return Ok(HttpResponse::BadRequest().json(AcceptWaiverResponse {
                     success: false,
                     error_message: Some("No active waiver is available to accept.".to_string()),
@@ -582,14 +608,14 @@ pub mod handlers {
             },
             Err(app_err) => {
                 // DB error during latest waiver check
-                tracing::error!("Database error checking latest waiver during acceptance for user {}: {:?}", user_id, app_err);
+                tracing::error!("Database error checking latest waiver during acceptance for user {}: {:?}", logged_user_id, app_err);
                 return Err(ErrorInternalServerError(app_err)); // Propagate DB error
             }
         };
 
         if accepted_waiver_id != latest_waiver_id {
             // The ID the user accepted does not match the current latest ID
-            tracing::warn!("User {} attempted to accept outdated waiver ID {}. Current is {}.", user_id, accepted_waiver_id, latest_waiver_id);
+            tracing::warn!("User {} attempted to accept outdated waiver ID {}. Current is {}.", logged_user_id, accepted_waiver_id, latest_waiver_id);
             return Ok(HttpResponse::Conflict().json(AcceptWaiverResponse { // 409 Conflict
                 success: false,
                 error_message: Some("The waiver version you accepted is outdated. Please refresh and accept the current version.".to_string()),
@@ -597,12 +623,12 @@ pub mod handlers {
         }
 
         // If verification passed, update the user's waiver_id
-        let update_result: AppResult<()> = state_manager.db.insert_user_accept_waiver_id(user_id, accepted_waiver_id).await;
+        let update_result: AppResult<()> = state_manager.db.insert_user_accept_waiver_id(logged_user_id, accepted_waiver_id).await;
 
         match update_result {
             Ok(_) => {
                 // Update successful
-                tracing::info!("User {} successfully accepted waiver ID {}", user_id, accepted_waiver_id);
+                tracing::info!("User {} successfully accepted waiver ID {}", logged_user_id, accepted_waiver_id);
                 Ok(HttpResponse::Ok().json(AcceptWaiverResponse {
                     success: true,
                     error_message: None,
@@ -610,7 +636,7 @@ pub mod handlers {
             }
             Err(app_err) => {
                 // Database error during update
-                tracing::error!("Database error updating waiver_id for user {}: {:?}", user_id, app_err);
+                tracing::error!("Database error updating waiver_id for user {}: {:?}", logged_user_id, app_err);
                 Err(ErrorInternalServerError(app_err)) // Manually convert AppError to ActixError
             }
         }
@@ -625,21 +651,21 @@ pub mod handlers {
         mut user: LoggedUser, // Protect the endpoint (consider checking for admin role)
         waiver_data: web::Json<CreateWaiverRequest>,
     ) -> Result<HttpResponse, ActixError> {
-        // Validate the session and get the user_id
-        let user_id = user.validate(&state_manager).await
-            .map_err(|app_err| ErrorInternalServerError(app_err))?;
 
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
-                    success: false,
-                    venue_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
         // *** Optional: Check user role here to ensure only authorized users can create waivers ***
         // If user.role is not "admin", return HttpResponse::Forbidden()
 
@@ -670,7 +696,7 @@ pub mod handlers {
 
         // Example DB interaction (you'll need to implement this in your db.rs)
         // pub async fn create_new_waiver(&self, id: Uuid, content: &str) -> AppResult<()> { ... }
-        let create_result: AppResult<()> = state_manager.db.create_new_waiver(&school_id, &user_id, &new_waiver_id, &waiver_title.to_string(), &waiver_content.to_string()).await;
+        let create_result: AppResult<()> = state_manager.db.create_new_waiver(&school_id, &creator_user_id, &new_waiver_id, &waiver_title.to_string(), &waiver_content.to_string()).await;
 
 
         match create_result {
@@ -700,20 +726,20 @@ pub mod handlers {
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
 
         // 1. Validate the session and get the creator user_id
-        let creator_user_id = user.validate(&state_manager).await
+        let logged_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
 
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
-                    success: false,
-                    venue_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
         let req_data = class_data.into_inner(); // Get the raw request data
 
@@ -783,7 +809,7 @@ pub mod handlers {
                 tracing::warn!("End date/time must be after start date/time");
                 return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                     success: false,
-                    class_id: None,
+                    class_id: None,        // 1. Validate the session and get the creator user_id
                     error_message: Some("End date/time must be after start date/time".to_string()),
                 }));
             }
@@ -867,20 +893,20 @@ pub mod handlers {
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
 
         // 1. Validate the session and get the creator user_id
-        let creator_user_id = user.validate(&state_manager).await
+        let logged_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
 
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
-                    success: false,
-                    venue_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
 
         let req_data = class_data.into_inner(); // Get the raw request data
@@ -1041,21 +1067,18 @@ pub mod handlers {
         // query_params: Query<GetClassesQueryParams>, // Extract query parameters from the URL
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
 
-        let auth_user_id = user.validate(&state_manager).await
+        let auth_logged_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
-
-
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
-                    success: false,
-                    venue_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
 
         // Call the database function to get classes based on the provided filters
         let classes_result: AppResult<Vec<ClassData>> = state_manager.db.get_classes(
@@ -1079,10 +1102,9 @@ pub mod handlers {
                 Err(ErrorInternalServerError(app_err))
             }
         }
-    }
+    }       
     
-
-    // --- Get Class List Handler ---
+    
     #[post("/api/class/get")] // Define the GET endpoint path
     pub async fn get_class_handler(
         state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
@@ -1094,17 +1116,16 @@ pub mod handlers {
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
 
         let class_id = req.class_id; // Extract class_id from query parameters
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
-                    success: false,
-                    venue_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
 
 
         // Call the database function to get classes based on the provided filters
@@ -1155,9 +1176,21 @@ pub mod handlers {
         venue_data: web::Json<CreateVenueRequest>, // Extract JSON request body
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
         // Validate the session and get the creator user_id
-        let creator_user_id = user.validate(&state_manager).await
+        let logged_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
+            
         let req_data = venue_data.into_inner(); // Get the raw request data
 
         // 1. Validate and parse incoming data
@@ -1207,17 +1240,7 @@ pub mod handlers {
 
         // Generate a unique ID for the new venue
         let venue_id = Uuid::new_v4();
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
-                    success: false,
-                    venue_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+
 
         // 2. Call the database function to create the venue
         let create_result: AppResult<()> = state_manager.db.create_new_venue(
@@ -1266,28 +1289,25 @@ pub mod handlers {
     ) -> Result<HttpResponse, ActixError> { // Handler returns ActixResult<HttpResponse>
         let venue_id = venue_data.venue_id; // Extract the UUID from the path
 
-        // 1. Authenticate and authorize the user
-        let user_id = user.validate(&state_manager).await
-            .map_err(|e| {
-                tracing::error!("Authentication error during venue update: {:?}", e);
-                // Consider mapping specific AppErrors to different ActixErrors (e.g., Unauthorized)
-                ErrorInternalServerError("Authentication failed") // Generic error for now
-            })?;
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
-        tracing::info!("User {} is attempting to update venue {}", user_id, venue_id);
+        tracing::info!("User {} is attempting to update venue {}", logged_user_id, venue_id);
 
         let req_data = venue_data.into_inner(); // Get the raw request data
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
-                    success: false,
-                    venue_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+
         // 2. Validate incoming data from the request body
         // Title is required for an update, just like create
         if req_data.title.trim().is_empty() { // Trim whitespace before checking for empty
@@ -1324,7 +1344,7 @@ pub mod handlers {
         match update_result {
             Ok(true) => {
                 // Database function succeeded and the venue was found and updated
-                tracing::info!("Venue {} updated successfully by user {}", venue_id, user_id);
+                tracing::info!("Venue {} updated successfully by user {}", venue_id, logged_user_id);
                 // Return a success response
                 Ok(HttpResponse::Ok().json(GenericResponse {
                     success: true,
@@ -1345,7 +1365,7 @@ pub mod handlers {
             }
             Err(app_err) => {
                 // Database error occurred during update
-                tracing::error!("Database error updating venue {} for user {}: {:?}", venue_id, user_id, app_err);
+                tracing::error!("Database error updating venue {} for user {}: {:?}", venue_id, logged_user_id, app_err);
                 // Manually convert AppError to ActixError using ErrorInternalServerError
                 Err(ErrorInternalServerError(app_err))
             }
@@ -1365,25 +1385,20 @@ pub mod handlers {
         // before the handler body executes. The _user variable is unused
         // if the user_id isn't needed for filtering *this* specific list endpoint.
 
-        // 1. Authenticate and authorize the user
-        let user_id = user.validate(&state_manager).await
-            .map_err(|e| {
-                tracing::error!("Authentication error during venue update: {:?}", e);
-                // Consider mapping specific AppErrors to different ActixErrors (e.g., Unauthorized)
-                ErrorInternalServerError("Authentication failed") // Generic error for now
-            })?;
-
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
-                    success: false,
-                    venue_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
 
         // Call the database function to get venues based on the provided filters
@@ -1422,25 +1437,20 @@ pub mod handlers {
         // If authentication fails, Actix Web will return an Unauthorized error (401)
         // before the handler body executes.
 
-        // 1. Authenticate and authorize the user
-        let user_id = user.validate(&state_manager).await
-            .map_err(|e| {
-                tracing::error!("Authentication error during venue update: {:?}", e);
-                // Consider mapping specific AppErrors to different ActixErrors (e.g., Unauthorized)
-                ErrorInternalServerError("Authentication failed") // Generic error for now
-            })?;
-
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateVenueResponse {
-                    success: false,
-                    venue_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
         let venue_id = req.venue_id; // Extract the UUID from the path
 
@@ -1493,23 +1503,23 @@ pub mod handlers {
         style_data: web::Json<CreateStyleRequest>, // Extract JSON request body
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
         // Validate the session and get the creator user_id
-        let creator_user_id = user.validate(&state_manager).await
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
-
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
         
         let req_data = style_data.into_inner(); // Get the raw request data
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateStyleResponse {
-                    success: false,
-                    style_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
 
         // 1. Validate and parse incoming data
         if req_data.title.is_empty() {
@@ -1570,29 +1580,24 @@ pub mod handlers {
     ) -> Result<HttpResponse, ActixError> { // Handler returns ActixResult<HttpResponse>
         let style_id = style_data.style_id; // Extract the UUID from the path
 
-        // 1. Authenticate and authorize the user
-        let user_id = user.validate(&state_manager).await
-            .map_err(|e| {
-                tracing::error!("Authentication error during style update: {:?}", e);
-                // Consider mapping specific AppErrors to different ActixErrors (e.g., Unauthorized)
-                ErrorInternalServerError("Authentication failed") // Generic error for now
-            })?;
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
-        tracing::info!("User {} is attempting to style venue {}", user_id, style_id);
+        tracing::info!("User {} is attempting to style venue {}", logged_user_id, style_id);
 
         let req_data = style_data.into_inner(); // Get the raw request data
-
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateStyleResponse {
-                    success: false,
-                    style_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
 
         // 2. Validate incoming data from the request body
         // Title is required for an update, just like create
@@ -1619,7 +1624,7 @@ pub mod handlers {
         match update_result {
             Ok(true) => {
                 // Database function succeeded and the venue was found and updated
-                tracing::info!("Style {} updated successfully by user {}", style_id, user_id);
+                tracing::info!("Style {} updated successfully by user {}", style_id, logged_user_id);
                 // Return a success response
                 Ok(HttpResponse::Ok().json(GenericResponse {
                     success: true,
@@ -1639,7 +1644,7 @@ pub mod handlers {
             }
             Err(app_err) => {
                 // Database error occurred during update
-                tracing::error!("Database error updating style {} for user {}: {:?}", style_id, user_id, app_err);
+                tracing::error!("Database error updating style {} for user {}: {:?}", style_id, logged_user_id, app_err);
                 // Manually convert AppError to ActixError using ErrorInternalServerError
                 Err(ErrorInternalServerError(app_err))
             }
@@ -1658,25 +1663,20 @@ pub mod handlers {
         // before the handler body executes. The _user variable is unused
         // if the user_id isn't needed for filtering *this* specific list endpoint.
 
-        // 1. Authenticate and authorize the user
-        let user_id = user.validate(&state_manager).await
-            .map_err(|e| {
-                tracing::error!("Authentication error during style get_list: {:?}", e);
-                // Consider mapping specific AppErrors to different ActixErrors (e.g., Unauthorized)
-                ErrorInternalServerError("Authentication failed") // Generic error for now
-            })?;
-
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateStyleResponse {
-                    success: false,
-                    style_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
         // Call the database function to get styles based on the provided filters
         let styles_result: AppResult<Vec<StyleData>> = state_manager.db.get_styles(&school_id).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
@@ -1709,22 +1709,21 @@ pub mod handlers {
         req: web::Json<GetStyleRequest>, // Extract query parameters from the URL
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
 
-        let auth_user_id = user.validate(&state_manager).await
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
-
-        let school_id = match user.school_id {
-            Some(school_id) => school_id,
-            None => {
-                // Handle the case where the user does not have a school ID
-                return Ok(HttpResponse::BadRequest().json(CreateStyleResponse {
-                    success: false,
-                    style_id: None,
-                    error_message: Some("User does not have a valid school ID.".to_string()),
-                }));
-            }
-        };
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
     
-
 
         let style_id = req.style_id; // Extract class_id from query parameters
 
@@ -1774,7 +1773,7 @@ pub mod handlers {
         
         // Check if the email exists in the database
         // We need to get the full user object to get the user_id
-        let user_opt = match state_manager.db.get_user_by_email(&email).await {
+        let user_opt = match state_manager.db.get_logged_user_by_email(&email).await {
             Ok(user) => user,
             Err(e) => {
                 tracing::error!("Database error when looking up user by email: {}", e);
@@ -1784,14 +1783,14 @@ pub mod handlers {
         };
         
         // If the user exists, send them a password reset email
-        if let Some((user_id, _, _)) = user_opt {
+        if let Some((logged_user_id_, _)) = user_opt {
             // Generate a reset code
             let reset_code = uuid::Uuid::new_v4().to_string();
             
             // Store the code in the database with a 4-hour expiry
-            match state_manager.db.add_forgotten_password_code(&email, user_id, &reset_code, 4).await {
+            match state_manager.db.add_forgotten_password_code(&email, logged_user_id_, &reset_code, 4).await {
                 Ok(_) => {
-                    tracing::info!("Added password reset code for user: {}", user_id);
+                    tracing::info!("Added password reset code for user: {}", logged_user_id_);
                     
                     // Generate the reset URL with email and code
                     let reset_url = format!(
@@ -1934,8 +1933,7 @@ pub mod handlers {
                             &user_id,
                             ip,
                             user_agent,
-                            24,
-                            &school_id
+                            24
                         ).await  {
 
 
@@ -2019,7 +2017,7 @@ pub mod handlers {
         let surname = req.surname.clone();
         
         // Check if the email exists in the database
-        let user_exists = match state_manager.db.get_user_by_email(&email).await {
+        let user_exists = match state_manager.db.get_logged_user_by_email(&email).await {
             Ok(Some(_)) => true,
             Ok(None) => false,
             Err(e) => {
@@ -2205,8 +2203,8 @@ pub mod handlers {
                         tracing::error!("No first name found for email: {}", email);
                         return Ok(HttpResponse::InternalServerError().body("An error occurred while processing your request. Please try again later."));
                     }
-                };
-                let surname = match surname {
+                };// Handler to refresh a user's session
+                    let surname = match surname {
                     Some(name) => name,
                     None => {
                         tracing::error!("No surname found for email: {}", email);
@@ -2249,8 +2247,7 @@ pub mod handlers {
                             &user_id,
                             ip,
                             user_agent,
-                            24, // Session expiry in hours
-                            &school_id
+                            24 // Session expiry in hours
                         ).await {
                             Ok(session_token) => {
                                 // Set session cookies
@@ -2305,18 +2302,8 @@ pub mod handlers {
     }
 
 
-    #[get("/signup-success")]
-    pub async fn signup_success(cache: web::Data<TemplateCache>) -> HttpResponse {
-         match get_template_content(&cache, "signup-success.html") {
-            Ok(content) => HttpResponse::Ok()
-                .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
-                .body(content),
-            Err(resp) => resp,
-        }
-    }
 
 
-    // Handler to refresh a user's session
     #[post("/api/user/refresh_session")]
     pub async fn refresh_session_handler(
         state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
@@ -2325,7 +2312,7 @@ pub mod handlers {
         // The LoggedUser extractor validates the current session cookie.
         // If authentication fails, Actix Web returns a 401 Unauthorized.
 
-        let user_id = user.user_id;
+        // let logged_user_id = user.logged_user_id;
 
 
         let current_time_millis = SystemTime::now()
@@ -2334,8 +2321,22 @@ pub mod handlers {
             .as_millis() as i64;
 
 
-        let creator_user_id = user.validate(&state_manager).await
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
+
+
         let current_expires_ts = user.expire_ts; // Get the expiry timestamp (millis)
         // let current_session_token = user.session_token; // Get the token from the extractor
 
@@ -2345,26 +2346,26 @@ pub mod handlers {
         // Check if the current session is within the refresh window
         // We also check that the current session hasn't expired *before* the refresh window
         if current_expires_ts > current_time_millis && (current_expires_ts - current_time_millis) < refresh_window_millis {
-            tracing::info!("Session for user {} is within the refresh window.", user_id);
+            tracing::info!("Session for logged_user {} is within the refresh window.", logged_user_id);
 
             // Call the database function to issue a new session token
             // You need a db function that handles renewing an *existing* session
             // Let's refine the `refresh_session` function in db.rs
-            let school_id = match user.school_id {
-                Some(id) => id,
-                None => {
-                    tracing::error!("No school ID found for user: {}", user_id);
-                    return Ok(HttpResponse::InternalServerError().json(GenericResponse {
-                        success: false,
-                        message: None,
-                        error_message: Some("An error occurred while processing your request.".to_string()),
-                    }));
-                }
-            };
+            // let school_id = match user.school_id {
+            //     Some(id) => id,
+            //     None => {
+            //         tracing::error!("No school ID found for logged_user: {}", logged_user_id);
+            //         return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+            //             success: false,
+            //             message: None,
+            //             error_message: Some("An error occurred while processing your request.".to_string()),
+            //         }));
+            //     }
+            // };
 
-            match state_manager.db.create_session(&user_id, None, None, 24, &school_id).await { // Renew for 8 hours
+            match state_manager.db.create_session(&logged_user_id, None, None, 24).await { // Renew for 8 hours
                 Ok(new_token) => {
-                    tracing::info!("Session renewed successfully for user {}.", user_id);
+                    tracing::info!("Session renewed successfully for user {}.", logged_user_id);
                     // let new_expiry_ts_millis = new_expiry_ts_cql;
 
                     // Set the new cookies in the response
@@ -2378,7 +2379,7 @@ pub mod handlers {
                         .max_age(new_expires_duration)
                         .finish();
 
-                    let user_id_cookie = Cookie::build("user_id", user_id.to_string())
+                    let logged_user_id_cookie = Cookie::build("logged_user_id", logged_user_id.to_string())
                         .path("/")
                         .secure(true)
                         .http_only(false)
@@ -2389,7 +2390,7 @@ pub mod handlers {
                     // Return success response with new token and expiry, and set cookies
                     Ok(HttpResponse::Ok()
                         .cookie(session_cookie)
-                        .cookie(user_id_cookie)
+                        .cookie(logged_user_id_cookie)
                         .json(GenericResponse {
                             success: true,
                             message: Some("Session refreshed.".to_string()),
@@ -2398,14 +2399,14 @@ pub mod handlers {
 
                 },
                 Err(e) => {
-                    tracing::error!("Database error renewing session for user {}: {:?}", user_id, e);
+                    tracing::error!("Database error renewing session for user {}: {:?}", logged_user_id, e);
                     // Return an internal server error if renewing fails
                     Err(ErrorInternalServerError(e))
                 }
             }
 
         } else {
-            tracing::info!("Session for user {} not within refresh window or already expired.", user_id);
+            tracing::info!("Session for user {} not within refresh window or already expired.", logged_user_id);
             // Return success, but indicate no refresh was needed/performed
             Ok(HttpResponse::Ok().json(GenericResponse {
                 success: true,
@@ -2414,6 +2415,118 @@ pub mod handlers {
             }))
         }
     }
+                
+
+
+    #[get("/signup-success")]
+    pub async fn signup_success(cache: web::Data<TemplateCache>) -> HttpResponse {
+         match get_template_content(&cache, "signup-success.html") {
+            Ok(content) => HttpResponse::Ok()
+                .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
+                .body(content),
+            Err(resp) => resp,
+        }
+    }
+
+
+    // Handler to refresh a user's session
+    // #[post("/api/user/refresh_session")]
+    // pub async fn refresh_session_handler(
+    //     state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+    //     mut user: LoggedUser, // Authenticate the request and get user/session info
+    // ) -> Result<HttpResponse, ActixError> { // Handler returns ActixResult<HttpResponse>
+    //     // The LoggedUser extractor validates the current session cookie.
+    //     // If authentication fails, Actix Web returns a 401 Unauthorized.
+
+    //     let logged_user_id = user.logged_user_id;
+
+
+    //     let current_time_millis = SystemTime::now()
+    //         .duration_since(SystemTime::UNIX_EPOCH)
+    //         .unwrap_or_default()
+    //         .as_millis() as i64;
+
+
+    //     let creator_logged_user_id = user.validate(&state_manager).await
+    //         .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+    //     let current_expires_ts = user.expire_ts; // Get the expiry timestamp (millis)
+    //     // let current_session_token = user.session_token; // Get the token from the extractor
+
+    //     // Define the refresh window (2 hours in milliseconds)
+    //     let refresh_window_millis: i64 = 2 * 60 * 60 * 1000;
+
+    //     // Check if the current session is within the refresh window
+    //     // We also check that the current session hasn't expired *before* the refresh window
+    //     if current_expires_ts > current_time_millis && (current_expires_ts - current_time_millis) < refresh_window_millis {
+    //         tracing::info!("Session for logged_user {} is within the refresh window.", logged_user_id);
+
+    //         // Call the database function to issue a new session token
+    //         // You need a db function that handles renewing an *existing* session
+    //         // Let's refine the `refresh_session` function in db.rs
+    //         // let school_id = match user.school_id {
+    //         //     Some(id) => id,
+    //         //     None => {
+    //         //         tracing::error!("No school ID found for logged_user: {}", logged_user_id);
+    //         //         return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+    //         //             success: false,
+    //         //             message: None,
+    //         //             error_message: Some("An error occurred while processing your request.".to_string()),
+    //         //         }));
+    //         //     }
+    //         // };
+
+    //         match state_manager.db.create_session(&logged_user_id, None, None, 24).await { // Renew for 8 hours
+    //             Ok(new_token) => {
+    //                 tracing::info!("Session renewed successfully for user {}.", logged_user_id);
+    //                 // let new_expiry_ts_millis = new_expiry_ts_cql;
+
+    //                 // Set the new cookies in the response
+    //                 let new_expires_duration = time::Duration::hours(8); // Match DB expiry
+
+    //                 let session_cookie = Cookie::build("session", new_token.clone())
+    //                     .path("/")
+    //                     .secure(true)
+    //                     .http_only(true)
+    //                     .same_site(SameSite::Strict)
+    //                     .max_age(new_expires_duration)
+    //                     .finish();
+
+    //                 let logged_user_id_cookie = Cookie::build("logged_user_id", logged_user_id.to_string())
+    //                     .path("/")
+    //                     .secure(true)
+    //                     .http_only(false)
+    //                     .same_site(SameSite::Strict)
+    //                     .max_age(new_expires_duration)
+    //                     .finish();
+
+    //                 // Return success response with new token and expiry, and set cookies
+    //                 Ok(HttpResponse::Ok()
+    //                     .cookie(session_cookie)
+    //                     .cookie(logged_user_id_cookie)
+    //                     .json(GenericResponse {
+    //                         success: true,
+    //                         message: Some("Session refreshed.".to_string()),
+    //                         error_message: None,
+    //                     }))
+
+    //             },
+    //             Err(e) => {
+    //                 tracing::error!("Database error renewing session for user {}: {:?}", logged_user_id, e);
+    //                 // Return an internal server error if renewing fails
+    //                 Err(ErrorInternalServerError(e))
+    //             }
+    //         }
+
+    //     } else {
+    //         tracing::info!("Session for user {} not within refresh window or already expired.", logged_user_id);
+    //         // Return success, but indicate no refresh was needed/performed
+    //         Ok(HttpResponse::Ok().json(GenericResponse {
+    //             success: true,
+    //             message: Some("Session does not require immediate refresh.".to_string()),
+    //             error_message: None,
+    //         }))
+    //     }
+    // }
 
 
 

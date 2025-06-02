@@ -30,3 +30,25 @@ lettre = { version = "0.10", features = ["tokio1", "tokio1-native-tls", "builder
 native-tls = "0.2"
 mail-builder = "0.2.5"
 urlencoding = "2.1.3"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports", "plotters", "cargo_bench_support"] }
+actix-web-test = "0.0.1"
+actix-rt = "2.8"
+
+[[bench]]
+name = "my_benchmark_suite" # You can name this anything, e.g., "db_benchmarks"
+harness = false
+
+
+# These are the default settings (you don't need to add this unless customizing)
+[profile.release]
+opt-level = 3        # Maximum optimizations
+debug = false        # No debug info
+lto = false         # Link-time optimization (can be enabled for even more optimization)
+
+[profile.bench]
+opt-level = 3
+lto = true          # Enable link-time optimization for maximum performance
+debug = false
+codegen-units = 1   # Better optimization at the cost of compile time

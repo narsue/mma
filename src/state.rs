@@ -28,17 +28,17 @@ impl StoreStateManager {
         user_agent: Option<String>
     ) -> Result<(Uuid, String)> {
         // Query the database for the user with the provided email
-        let user_result = self.db.get_user_by_email(&email).await?;
+        let user_result = self.db.get_logged_user_by_email(&email).await?;
         
         match user_result {
-            Some((user_id, stored_hash, school_id)) => {
+            Some((user_id, stored_hash)) => {
                 // Verify password using Argon2
                 if !verify_password(password, &stored_hash)? {
                     return Err(AppError::Internal(String::from("Invalid credentials")));
                 }
                 
                 // Create a new session (24-hour duration)
-                let session_token = self.db.create_session(&user_id, ip_address, user_agent, 24, &school_id).await?;
+                let session_token = self.db.create_session(&user_id, ip_address, user_agent, 24).await?;
                 
                 Ok((user_id, session_token))
             },

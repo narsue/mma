@@ -24,18 +24,18 @@ pub struct UpdateClassStatusRequest {
     pub transaction_id: Uuid,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LoginResponse {
     pub success: bool,
     pub error_message: Option<String>,
     pub token: Option<String>,
-    pub user_id: Option<Uuid>,
+    pub logged_user_id: Option<Uuid>,
 }
 
 
@@ -480,4 +480,10 @@ pub struct GetStyleResponse {
     pub success: bool,
     pub error_message: Option<String>,
     pub style: Option<StyleData>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SchoolUserId {
+    pub school_id: Uuid, // School ID
+    pub user_id: Uuid,   // User ID
 }

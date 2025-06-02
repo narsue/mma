@@ -4,7 +4,7 @@ use lettre::{
     transport::smtp::authentication::Credentials,
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
-use std::env;
+// use std::env;
 use std::error::Error;
 use tracing::{error, info};
 

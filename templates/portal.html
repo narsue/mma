@@ -249,6 +249,132 @@
              background-color: #d1fae5; /* Tailwind bg-green-100 */
          }
 
+        /* POS Section Styles -- START */
+        #calendar-grid {
+            position: relative;
+        }
+
+        .time-slot {
+            display: flex;
+            align-items: flex-start;
+            height: 60px;
+            border-bottom: 1px solid #e5e7eb;
+            position: relative;
+        }
+
+        .time-slot:hover {
+            background-color: #f9fafb;
+        }
+
+        .time-label {
+            width: 80px;
+            font-size: 14px;
+            color: #6b7280;
+            font-weight: 500;
+            padding: 4px 12px;
+            text-align: right;
+        }
+
+        .time-content {
+            flex: 1;
+            height: 100%;
+            border-left: 2px solid #e5e7eb;
+            margin-left: 8px;
+        }
+
+        .event {
+            position: absolute;
+            left: 100px;
+            right: 16px;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+            border: 2px solid transparent;
+            z-index: 10;
+            overflow: hidden;
+        }
+
+        .event-title {
+            font-weight: 600;
+            line-height: 1.2;
+        }
+
+        .event-time {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-top: 2px;
+        }
+
+        .event-description {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 4px;
+            line-height: 1.3;
+        }
+
+        .event-highlight {
+            animation: eventPulse 2.5s ease-in-out infinite;
+            border-color: #fbbf24;
+            box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.4), 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+
+        @keyframes eventPulse {
+            0% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7), 0 4px 12px rgba(59, 130, 246, 0.4);
+            }
+            50% {
+            transform: scale(1.02);
+            box-shadow: 0 0 0 8px rgba(251, 191, 36, 0.2), 0 6px 16px rgba(59, 130, 246, 0.6);
+            }
+            100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7), 0 4px 12px rgba(59, 130, 246, 0.4);
+            }
+        }
+
+        .current-time-indicator {
+            position: absolute;
+            left: 88px;
+            right: 16px;
+            height: 3px;
+            background: linear-gradient(90deg, #ef4444, #dc2626);
+            z-index: 20;
+            border-radius: 2px;
+            box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+        }
+
+        .current-time-indicator::before {
+            content: "";
+            position: absolute;
+            left: -8px;
+            top: -5px;
+            width: 12px;
+            height: 12px;
+            background: #ef4444;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 4px rgba(239, 68, 68, 0.8);
+        }
+
+        .current-time-label {
+            position: absolute;
+            right: -70px;
+            top: -12px;
+            background: #ef4444;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+        }
+        /* POS Section Styles -- END */
+
 
     </style>
 
@@ -263,6 +389,7 @@
             <li><a href="#" data-section="styles" class="nav-link">Styles</a></li>
             <li><a href="#" data-section="waivers" class="nav-link">Waivers</a></li>
             <li><a href="#" data-section="locations" class="nav-link">Locations</a></li>
+            <li><a href="#" data-section="pos" class="nav-link">POS</a></li>
             <li id="users-nav" class="nav-item" style="display: none;"><a href="#" data-section="users" class="nav-link">Users</a></li>
             <li><a href="#" data-section="account" class="nav-link">Account</a></li>
             <!-- Logout is a different action -->
@@ -830,6 +957,23 @@
             </div>
         </div>
 
+
+        <!-- Section: POS -->
+        <div id="posSection" class="portal-section">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Today's Schedule</h2>
+            <div id="calendar-container" class="bg-white rounded-lg shadow-sm border">
+                <div id="calendar-header" class="bg-gray-50 px-4 py-3 border-b">
+                <h3 id="current-date" class="text-lg font-semibold text-gray-900"></h3>
+                </div>
+                <div id="calendar-body" class="p-4">
+                <div id="calendar-grid" class="relative">
+                    <div id="time-slots"></div>
+                    <div id="events-container" class="absolute top-0 left-0 w-full"></div>
+                </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Section: Users -->
         <div id="usersSection" class="portal-section">
             <h2 class="text-2xl font-bold text-gray-900 mb-4">Users</h2>
@@ -1125,10 +1269,6 @@
             try {
                 const response = await fetch('/api/waiver/get_latest_waiver', {
                     method: 'GET',
-                    // headers: {
-                    //     'Authorization': `Bearer ${token}`
-                    //     // Add other headers like Content-Type if needed, but not for GET body
-                    // }
                 });
 
                 if (response.ok) { // Status 200-299
@@ -1434,7 +1574,9 @@
                 if (sectionId === 'styles') {
                     fetchAndDisplayStyles();
                 }
-
+                if (sectionId === 'POS') {
+                    fetchAndDisplayPOS();
+                }
                  // --- Load profile data when Account section is shown ---
                  if (sectionId === 'account') {
                      loadUserProfile();
@@ -2344,6 +2486,13 @@
                       submitCreateStyleButton.disabled = false;
                   }
              });
+
+
+            async function fetchAndDisplayPOS() {
+
+            }
+
+
 
             // Function to fetch and display the list of styles as cards
             async function fetchAndDisplayStyles() {
@@ -4006,6 +4155,317 @@
         }
 
         const sessionRefreshInterval = setInterval(refreshSession, 30 * 60 * 1000);
+
+        // Calendar and events management
+
+        class DailyCalendar {
+            constructor() {
+            this.events = [];
+            this.highlightInterval = null;
+            this.SLOT_HEIGHT = 60; // Exact height of each hour slot
+            this.START_HOUR = 6; // Calendar starts at 6 AM
+            this.END_HOUR = 23; // Calendar ends at 11 PM
+            this.init();
+            }
+
+            init() {
+            this.renderCalendar();
+            this.startHighlightUpdater();
+            }
+
+            renderCalendar() {
+            // Set current date
+            const today = new Date();
+            const dateStr = today.toLocaleDateString("en-US", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+            });
+            document.getElementById("current-date").textContent = dateStr;
+
+            // Generate time slots
+            const timeSlotsContainer = document.getElementById("time-slots");
+            timeSlotsContainer.innerHTML = "";
+
+            for (let hour = this.START_HOUR; hour <= this.END_HOUR; hour++) {
+                const timeSlot = document.createElement("div");
+                timeSlot.className = "time-slot";
+                timeSlot.dataset.hour = hour;
+
+                const timeLabel = document.createElement("div");
+                timeLabel.className = "time-label";
+                timeLabel.textContent = this.formatTime(hour);
+
+                const timeContent = document.createElement("div");
+                timeContent.className = "time-content";
+
+                timeSlot.appendChild(timeLabel);
+                timeSlot.appendChild(timeContent);
+                timeSlotsContainer.appendChild(timeSlot);
+            }
+
+            // Add current time indicator
+            this.updateCurrentTimeIndicator();
+            }
+
+            formatTime(hour) {
+            const period = hour >= 12 ? "PM" : "AM";
+            const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+            return `${displayHour}:00 ${period}`;
+            }
+
+            addEvent(startTime, endTime, title, description = "") {
+            const event = {
+                id: Date.now() + Math.random(),
+                startTime: new Date(startTime),
+                endTime: new Date(endTime),
+                title,
+                description,
+            };
+            this.events.push(event);
+            this.renderEvents();
+            return event.id;
+            }
+
+            removeEvent(eventId) {
+            this.events = this.events.filter((event) => event.id !== eventId);
+            this.renderEvents();
+            }
+
+            calculateEventPosition(startTime, endTime) {
+            const startHour = startTime.getHours();
+            const startMinutes = startTime.getMinutes();
+            const endHour = endTime.getHours();
+            const endMinutes = endTime.getMinutes();
+
+            // Calculate top position
+            const hoursFromStart = startHour - this.START_HOUR;
+            const minutesOffset = startMinutes / 60;
+            const topPosition = (hoursFromStart + minutesOffset) * this.SLOT_HEIGHT;
+
+            // Calculate height
+            const durationMs = endTime.getTime() - startTime.getTime();
+            const durationHours = durationMs / (1000 * 60 * 60);
+            const height = Math.max(durationHours * this.SLOT_HEIGHT, 24); // Minimum height
+
+            return { top: topPosition, height };
+            }
+
+            renderEvents() {
+            // Clear existing events
+            const eventsContainer = document.getElementById("events-container");
+            eventsContainer.innerHTML = "";
+
+            // Sort events by start time
+            const sortedEvents = [...this.events].sort(
+                (a, b) => a.startTime - b.startTime
+            );
+
+            // Render each event
+            sortedEvents.forEach((event) => {
+                // Only render events within our time range
+                if (
+                event.startTime.getHours() >= this.START_HOUR &&
+                event.startTime.getHours() <= this.END_HOUR
+                ) {
+                this.renderEvent(event);
+                }
+            });
+
+            this.updateHighlights();
+            }
+
+            renderEvent(event) {
+            const position = this.calculateEventPosition(
+                event.startTime,
+                event.endTime
+            );
+
+            const eventElement = document.createElement("div");
+            eventElement.className = "event";
+            eventElement.id = `event-${event.id}`;
+            eventElement.style.top = `${position.top}px`;
+            eventElement.style.height = `${position.height}px`;
+
+            const startTimeStr = event.startTime.toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+            });
+            const endTimeStr = event.endTime.toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+            });
+
+            eventElement.innerHTML = `
+                <div class="event-title">${event.title}</div>
+                <div class="event-time">${startTimeStr} - ${endTimeStr}</div>
+                ${
+                event.description
+                    ? `<div class="event-description">${event.description}</div>`
+                    : ""
+                }
+            `;
+
+            const eventsContainer = document.getElementById("events-container");
+            eventsContainer.appendChild(eventElement);
+            }
+
+            updateCurrentTimeIndicator() {
+                // Remove existing indicator
+                const existingIndicator = document.getElementById(
+                    "current-time-indicator"
+                );
+                if (existingIndicator) {
+                    existingIndicator.remove();
+                }
+
+                const now = new Date();
+                const currentHour = now.getHours();
+                const currentMinutes = now.getMinutes();
+
+                // Only show indicator if current time is within calendar range
+                if (currentHour >= this.START_HOUR && currentHour <= this.END_HOUR) {
+                    const indicator = document.createElement("div");
+                    indicator.className = "current-time-indicator";
+                    indicator.id = "current-time-indicator";
+
+                    const timeLabel = document.createElement("div");
+                    timeLabel.className = "current-time-label";
+                    timeLabel.textContent = now.toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                    });
+                    indicator.appendChild(timeLabel);
+
+                    // Calculate exact position
+                    const hoursFromStart = currentHour - this.START_HOUR;
+                    const minutesOffset = currentMinutes / 60;
+                    const topPosition = (hoursFromStart + minutesOffset) * this.SLOT_HEIGHT;
+
+                    indicator.style.top = `${topPosition}px`;
+
+                    const eventsContainer = document.getElementById("events-container");
+                    eventsContainer.appendChild(indicator);
+                }
+            }
+
+            updateHighlights() {
+                // Remove existing highlights
+                document.querySelectorAll(".event-highlight").forEach((el) => {
+                    el.classList.remove("event-highlight");
+                });
+
+                const now = new Date();
+                let currentEvent = null;
+                let nextEvent = null;
+
+                console.log("Current time:", this.events);
+                // Find current event
+                this.events.forEach((event) => {
+                    // console.log("Checking event:", event);
+                    if (now >= event.startTime && now <= event.endTime) {
+                        currentEvent = event;
+                    }
+                });
+                // If no current event, find next event within 30 minutes
+                if (!currentEvent) {
+                    const thirtyMinutesFromNow = new Date(now.getTime() + 30 * 60 * 1000);
+
+                    this.events.forEach((event) => {
+                    if (
+                        event.startTime > now &&
+                        event.startTime <= thirtyMinutesFromNow
+                    ) {
+                        if (!nextEvent || event.startTime < nextEvent.startTime) {
+                            nextEvent = event;
+                        }
+                    }
+                    });
+                }
+                // console.log("Current event:", currentEvent);
+                // console.log("Next event:", nextEvent);
+                // Apply highlight with pulsing animation
+                const eventToHighlight = currentEvent || nextEvent;
+                if (eventToHighlight) {
+                    const eventElement = document.getElementById(
+                        `event-${eventToHighlight.id}`
+                    );
+                    if (eventElement) {
+                        eventElement.classList.add("event-highlight");
+                    }
+                }
+            }
+
+            startHighlightUpdater() {
+            // Update every 30 seconds for more responsive highlighting
+            this.highlightInterval = setInterval(() => {
+                this.updateHighlights();
+                this.updateCurrentTimeIndicator();
+            }, 30000);
+            }
+
+            destroy() {
+            if (this.highlightInterval) {
+                clearInterval(this.highlightInterval);
+            }
+            }
+        }
+
+        // Initialize calendar
+        const calendar = new DailyCalendar();
+
+        // Example usage - you can call these functions to add events
+        window.addCalendarEvent = function (startTime, endTime, title, description) {
+            return calendar.addEvent(startTime, endTime, title, description);
+        };
+
+        window.removeCalendarEvent = function (eventId) {
+            calendar.removeEvent(eventId);
+        };
+
+        // Example events for testing
+        const today = new Date();
+        const todayStr = today.toISOString().split("T")[0];
+
+        // Test event from 6:00 AM to 10:30 AM
+        // calendar.addEvent(
+        //     new Date(`${todayStr}T06:00:00`),
+        //     new Date(`${todayStr}T10:30:00`),
+        //     "Extended Morning Meeting",
+        //     "Long planning and strategy session"
+        // );
+
+        // Current time event (adjust these times to test highlighting)
+        const now = new Date();
+        const currentEventStart = new Date(now.getTime() - 15 * 60 * 1000); // Started 15 minutes ago
+        const currentEventEnd = new Date(now.getTime() + 45 * 60 * 1000); // Ends in 45 minutes
+
+        calendar.addEvent(
+            currentEventStart,
+            currentEventEnd,
+            "Current Meeting",
+            "This should be pulsating"
+        );
+
+        // Upcoming event
+        calendar.addEvent(
+            new Date(`${todayStr}T21:00:00`),
+            new Date(`${todayStr}T24:00:00`),
+            "Afternoon Sync",
+            "Quick team update"
+        );
+
+
+
+
+
+
+
+
 
     </script>
 </body>
