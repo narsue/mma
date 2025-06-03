@@ -487,3 +487,32 @@ pub struct SchoolUserId {
     pub school_id: Uuid, // School ID
     pub user_id: Uuid,   // User ID
 }
+
+#[derive(Deserialize)]
+pub struct GetClassStudentsRequest {
+    pub class_id: Uuid,
+    pub class_start_ts: i64,
+}
+
+#[derive(Serialize)]
+pub struct StudentClassAttendance {
+    pub user_id: Uuid,
+    pub first_name: String,
+    pub surname: String,
+    pub img: Option<String>,
+    pub attended: bool
+}
+
+#[derive(Serialize)]
+pub struct GetClassStudentsResponse {
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub students: Option<Vec<StudentClassAttendance>>,
+}
+
+#[derive(Deserialize)]
+pub struct SetClassStudentsAttendanceRequest {
+    pub class_id: Uuid,
+    pub class_start_ts: i64,
+    pub user_ids: Vec<Uuid>,
+}

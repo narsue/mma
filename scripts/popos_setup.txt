@@ -1,0 +1,18 @@
+mkdir ~/bin/
+cp mma_workspace.sh ~/bin/open_mma_dev_env.sh
+chmod +x ~/bin/open_mma_dev_env.sh
+nano ~/.local/share/applications/open_mma_dev_env.desktop
+
+
+[Desktop Entry]
+Name=Open MMA Dev Environment
+Comment=Opens VS Code and terminals for MMA development
+Exec=/home/jason/bin/open_mma_dev_env.sh
+Icon=code
+Terminal=false
+Type=Application
+Categories=Development;Utility;
+
+
+chmod +x ~/.local/share/applications/open_mma_dev_env.desktop
+

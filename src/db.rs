@@ -10,11 +10,11 @@ use std::sync::Arc;
 use uuid::Uuid;
 use std::time::SystemTime;
 use rand::{distributions::Alphanumeric, Rng};
-use chrono::{NaiveDate, NaiveTime, Utc};
+use chrono::{Datelike, NaiveDate, NaiveTime, Utc, NaiveDateTime, Weekday};
 use scylla::value::CqlTimestamp;
 use bigdecimal::BigDecimal;
 use crate::error::{AppError, Result, Result as AppResult};
-use crate::api::{UserProfileData, UpdateUserProfileRequest, ClassData, ClassFrequency, VenueData, StyleData, ClassFrequencyId, SchoolUserId}; 
+use crate::api::{UserProfileData, UpdateUserProfileRequest, ClassData, ClassFrequency, VenueData, StyleData, ClassFrequencyId, SchoolUserId, StudentClassAttendance}; 
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -150,7 +150,7 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
         .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.user \
-            (user_id uuid, school_id uuid, email text, first_name text, surname text, gender text, phone text, dob text, stripe_payment_method_id text, created_ts timestamp, email_verified boolean, photo_id text, address text, suburb text, emergency_name text, emergency_relationship text, emergency_phone text, emergency_medical text, belt_size text, uniform_size text, member_number text, contracted_until date, PRIMARY KEY (user_id))",
+            (user_id uuid, school_id uuid, email text, first_name text, surname text, gender text, phone text, dob text, image text, stripe_payment_method_id text, created_ts timestamp, email_verified boolean, photo_id text, address text, suburb text, emergency_name text, emergency_relationship text, emergency_phone text, emergency_medical text, belt_size text, uniform_size text, member_number text, contracted_until date, PRIMARY KEY (user_id))",
             &[],
         )
         .await?;
@@ -208,6 +208,14 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     )
     .await?;
     println!("user_email_index created");
+
+    session
+    .query_unpaged(
+        "CREATE INDEX IF NOT EXISTS user_school_index ON mma.user (school_id)",
+        &[],
+    )
+    .await?;
+    println!("user_school_index created");
 
     session
     .query_unpaged(
@@ -320,8 +328,8 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.attendance \
-        (user_id uuid, class_id uuid, is_instructor boolean, checkin_ts timestamp, \
-            PRIMARY KEY (user_id, class_id))",
+        (user_id uuid, class_id uuid, is_instructor boolean, class_start_ts timestamp, checkin_ts timestamp, \
+            PRIMARY KEY (class_id, class_start_ts, user_id))",
         &[],
     )
     .await?;
@@ -1194,6 +1202,288 @@ impl ScyllaConnector {
         }
         return Ok(None); // Venue_id not found
     }
+
+
+    pub async fn set_class_attendance(
+        &self,
+        class_id: &Uuid,
+        school_id: &Uuid,
+        user_ids: &Vec<Uuid>,
+        class_start_ts: i64,
+    ) -> AppResult<bool> {
+
+        // SetClassStudentsAttendanceRequest
+        let class_valid_ts = self.is_valid_class_start(&class_id, &school_id, class_start_ts).await
+            .map_err(|app_err| AppError::Internal(app_err.to_string()) )?; // Convert potential AppError from validate
+        
+        if !class_valid_ts {
+            return Err(AppError::Internal("Invalid class start timestamp".to_string()));
+        }
+
+
+        let class_start_ts: CqlTimestamp = scylla::value::CqlTimestamp(class_start_ts);
+
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let now = scylla::value::CqlTimestamp(now);
+
+
+
+
+
+        // Prepare the statement once
+        let prepared = self
+            .session
+            .prepare(
+                "INSERT INTO mma.attendance (class_id, user_id, class_start_ts, is_instructor, checkin_ts) VALUES (?, ?, ?, ?, ?)"
+            )
+            .await?;
+
+        // Create batch
+        let mut batch = scylla::statement::batch::Batch::default();
+        
+        // Add each user_id as a separate statement in the batch
+        for user_id in user_ids {
+            batch.append_statement(prepared.clone());
+        }
+
+        // Prepare batch values
+        let batch_values: Vec<_> = user_ids
+            .iter()
+            .map(|user_id| {
+                (class_id, user_id, class_start_ts, false, now)
+            })
+            .collect();
+
+        // Execute batch
+        self.session.batch(&batch, batch_values).await?;
+
+        println!("Attendance set for class {}: {:?}", class_id, user_ids);
+        Ok(true)
+    }
+
+
+    pub async fn is_valid_class_start(
+        &self,
+        class_id: &Uuid,
+        school_id: &Uuid,
+        class_start_ts: i64,
+    ) -> AppResult<bool> {
+        let class_start_ts_cql: CqlTimestamp = scylla::value::CqlTimestamp(class_start_ts);
+        
+        // Convert timestamp to NaiveDateTime for comparison
+        let class_datetime = NaiveDateTime::from_timestamp_millis(class_start_ts)
+            .ok_or_else(|| AppError::Internal("Invalid timestamp".to_string()))?;
+
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        let now_cql = scylla::value::CqlTimestamp(now);
+        
+        // Check if the class exists
+        let result = self.session
+            .query_unpaged(
+                "SELECT class_frequency_id, frequency, start_date, end_date, start_time, end_time FROM mma.class_frequency WHERE class_id = ?",
+                (class_id,),
+            )
+            .await?
+            .into_rows_result()?;
+            
+        if result.rows_num() == 0 {
+            println!("Class with ID {} does not exist", class_id);
+            return Ok(false);
+        }
+        
+        // Check if the class is valid based on frequency rules
+        for row in result.rows()? {
+            let (class_frequency_id, frequency, start_date, end_date, start_time, end_time): 
+                (Uuid, i32, NaiveDate, Option<NaiveDate>, NaiveTime, NaiveTime) = row?;
+            
+            let class_start_datetime = start_date.and_time(start_time);
+            
+            // Check date bounds if end_date exists
+            if let Some(end_date) = end_date {
+                let class_end_datetime = end_date.and_time(end_time);
+                
+                if class_datetime < class_start_datetime || class_datetime > class_end_datetime {
+                    continue; // This frequency rule doesn't apply to this timestamp
+                }
+            } else {
+                // No end date bounds check, but still check if after start date
+                if class_datetime < class_start_datetime {
+                    continue;
+                }
+            }
+            
+            // Check time bounds (must be within start_time and end_time on the day)
+            let class_time = class_datetime.time();
+
+            if class_time != start_time  { // || class_time > end_time
+                continue;
+            }
+            
+            // Check frequency pattern
+            match frequency {
+                1 => { // Every Monday
+                    if class_datetime.weekday() == Weekday::Mon {
+                        return Ok(true);
+                    }
+                },
+                2 => { // Every Tuesday
+                    if class_datetime.weekday() == Weekday::Tue {
+                        return Ok(true);
+                    }
+                },
+                3 => { // Every Wednesday
+                    if class_datetime.weekday() == Weekday::Wed {
+                        return Ok(true);
+                    }
+                },
+                4 => { // Every Thursday
+                    if class_datetime.weekday() == Weekday::Thu {
+                        return Ok(true);
+                    }
+                },
+                5 => { // Every Friday
+                    if class_datetime.weekday() == Weekday::Fri {
+                        return Ok(true);
+                    }
+                },
+                6 => { // Every Saturday
+                    if class_datetime.weekday() == Weekday::Sat {
+                        return Ok(true);
+                    }
+                },
+                7 => { // Every Sunday
+                    if class_datetime.weekday() == Weekday::Sun {
+                        return Ok(true);
+                    }
+                },
+                8 => { // Every Weekday
+                    match class_datetime.weekday() {
+                        Weekday::Mon | Weekday::Tue | Weekday::Wed | Weekday::Thu | Weekday::Fri => {
+                            return Ok(true);
+                        },
+                        _ => {}
+                    }
+                },
+                9 => { // Every Weekend
+                    match class_datetime.weekday() {
+                        Weekday::Sat | Weekday::Sun => {
+                            return Ok(true);
+                        },
+                        _ => {}
+                    }
+                },
+                10 => { // Every Day
+                    return Ok(true);
+                },
+                11 => { // Public Holidays - would need external holiday calendar
+                    // For now, return false as we don't have holiday data
+                    // In production, you'd check against a holiday calendar service
+                    continue;
+                },
+                12 | 16 => { // One off
+                    // For one-off classes, check if the datetime exactly matches the scheduled time
+                    if class_datetime.date() == start_date && 
+                    class_time >= start_time && class_time <= end_time {
+                        return Ok(true);
+                    }
+                },
+                13 => { // Every week - same as every day within time bounds
+                    return Ok(true);
+                },
+                14 => { // Every fortnight
+                    let weeks_diff = (class_datetime.date() - start_date).num_weeks();
+                    if weeks_diff % 2 == 0 && weeks_diff >= 0 {
+                        return Ok(true);
+                    }
+                },
+                15 => { // Every month
+                    // Check if it's the same day of month and time
+                    if class_datetime.day() == class_start_datetime.day() {
+                        return Ok(true);
+                    }
+                },
+                _ => {
+                    println!("Unknown frequency code: {}", frequency);
+                    continue;
+                }
+            }
+        }
+        
+        println!("Class {} is not valid for timestamp {}", class_id, class_start_ts);
+        Ok(false)
+    }
+
+
+
+
+    pub async fn get_class_attendance(
+        &self,
+        class_id: &Uuid,
+        school_id: &Uuid,
+        class_start_ts: i64,
+    ) -> AppResult<Option<Vec<StudentClassAttendance>>> {
+        let class_start_ts: CqlTimestamp = scylla::value::CqlTimestamp(class_start_ts);
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT user_id FROM mma.attendance WHERE class_id = ? and class_start_ts = ?",
+                (class_id, class_start_ts),
+            )
+            .await?
+            .into_rows_result()?;
+
+        println!("Attendance query result: {:?}", result);
+        let mut attending_students: Vec<Uuid> = Vec::new();
+        for row in result.rows()?
+        {
+            let (id, ): (Uuid, ) = row?;
+            attending_students.push(id);
+        }
+        println!("Attendance user list result: school:{:?} {:?}", school_id, attending_students);
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT user_id, first_name, surname, image, school_id FROM mma.user WHERE school_id = ? ",
+                (&school_id, ),
+            )
+            .await?
+            .into_rows_result()?;
+
+        println!("Attendance query result: {:?}", result);
+
+        let mut attendance: Vec<StudentClassAttendance> = Vec::new();
+        for row in result.rows::<(Uuid, String, String, Option<String>, Uuid), >()?
+        {
+            let (user_id, first_name, surname, img, user_school_id): (Uuid, String, String, Option<String>, Uuid) = row?;
+            if school_id != &user_school_id {
+                println!("Skipping student {} not in school {}", user_id, school_id);
+                // Skip students not in the same school
+                continue;
+            }
+            let attended = attending_students.contains(&user_id);
+            // Successfully retrieved a row. Now extract the columns.
+            let student_attendance = StudentClassAttendance {
+                user_id,
+                first_name,
+                surname,
+                img,
+                attended
+            };
+            attendance.push(student_attendance);
+        }
+
+
+        return Ok(Some(attendance));
+    }
+
 
     pub async fn get_class(&self, class_id: &Uuid, school_id: &Uuid) -> AppResult<Option<ClassData>> {
         let result = self.session

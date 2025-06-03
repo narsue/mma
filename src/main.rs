@@ -100,6 +100,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::get_user_profile_data)
             .service(handlers::update_user_profile)
             .service(handlers::change_password)
+
+            // Waiver routes
             .service(handlers::get_latest_waiver)
             .service(handlers::accept_waiver_handler)
             .service(handlers::create_waiver_handler)
@@ -109,6 +111,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::get_class_list_handler)
             .service(handlers::get_class_handler)
             .service(handlers::update_class_handler)
+            .service(handlers::get_class_students_handler)
+            .service(handlers::set_class_student_attendance_handler)
 
             // Venue routes
             .service(handlers::create_venue_handler)

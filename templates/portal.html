@@ -295,6 +295,13 @@
             border: 2px solid transparent;
             z-index: 10;
             overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .event:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
         }
 
         .event-title {
@@ -372,6 +379,77 @@
             font-weight: 600;
             white-space: nowrap;
             box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+        }
+
+        /* Modal specific styles */
+        .student-search-item {
+            display: flex;
+            items-center: space-x-3;
+            padding: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .student-search-item:hover {
+            background-color: #f3f4f6;
+        }
+
+        .student-list-item {
+            display: flex;
+            items-center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .student-list-item:hover {
+            background-color: #f9fafb;
+        }
+
+        .student-list-item.attending {
+            background-color: #dbeafe;
+            border-color: #3b82f6;
+        }
+
+        .student-grid-item {
+            background-color: white;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .student-grid-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .student-grid-item.attending {
+            background-color: #dbeafe;
+            border-color: #3b82f6;
+        }
+
+        .student-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            background-color: #e5e7eb;
+        }
+
+        .student-grid-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            background-color: #e5e7eb;
+            margin: 0 auto 12px;
         }
         /* POS Section Styles -- END */
 
@@ -974,6 +1052,83 @@
             </div>
         </div>
 
+        <!-- Attendance Modal -->
+        <div id="attendanceModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+            <div class="flex items-center justify-center min-h-screen p-4">
+                <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+                <!-- Modal Header -->
+                <div class="bg-gray-50 px-6 py-4 border-b">
+                    <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <h3 id="modal-event-title" class="text-xl font-bold text-gray-900"></h3>
+                        <p id="modal-event-description" class="text-gray-600 mt-1"></p>
+                        <div class="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                        <span id="modal-event-location"></span>
+                        <span id="modal-event-time"></span>
+                        </div>
+                    </div>
+                    <button id="closeModal" class="text-gray-400 hover:text-gray-600 text-2xl">
+                        ×
+                    </button>
+                    </div>
+                </div>
+
+                <!-- Modal Body -->
+                <div class="p-6 overflow-auto max-h-[calc(90vh-120px)]">
+                    <!-- Search Section -->
+                    <div class="mb-6">
+                    <div class="relative">
+                        <input
+                        type="text"
+                        id="student-search"
+                        placeholder="Search for a student..."
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <div class="absolute right-3 top-3 text-gray-400">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                        </div>
+                    </div>
+                    
+                    <!-- Search Results -->
+                    <div id="search-results" class="hidden mt-3 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    </div>
+                    </div>
+
+                    <!-- View Toggle -->
+                    <div class="flex items-center justify-between mb-4">
+                    <h4 class="text-lg font-semibold text-gray-900">Class Students</h4>
+                    <div class="flex bg-gray-100 rounded-lg p-1">
+                        <button id="list-view-btn" class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-900 shadow-sm">
+                        List
+                        </button>
+                        <button id="grid-view-btn" class="px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:text-gray-900">
+                        Grid
+                        </button>
+                    </div>
+                    </div>
+
+                    <!-- Students Display -->
+                    <div id="students-container">
+                    <div id="students-list-view" class="space-y-2">
+                        <!-- List view students will be populated here -->
+                    </div>
+                    <div id="students-grid-view" class="hidden grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        <!-- Grid view students will be populated here -->
+                    </div>
+                    </div>
+
+                    <!-- Loading Indicator -->
+                    <div id="loading-indicator" class="text-center py-8 text-gray-500">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    <p class="mt-2">Loading students...</p>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Section: Users -->
         <div id="usersSection" class="portal-section">
             <h2 class="text-2xl font-bold text-gray-900 mb-4">Users</h2>
@@ -1565,16 +1720,15 @@
 
                 if (sectionId === 'classes') {
                     fetchAndDisplayClasses(); // Fetch and display classes when this section is shown
-                    // fetchClasses();
                 }
                 if (sectionId === 'venues') {
-                    // getVenues();
                     fetchAndDisplayVenues(); // Fetch and display venues when this section is shown
                 }
                 if (sectionId === 'styles') {
                     fetchAndDisplayStyles();
                 }
-                if (sectionId === 'POS') {
+                if (sectionId === 'pos') {
+                    fetchAndDisplayClasses();
                     fetchAndDisplayPOS();
                 }
                  // --- Load profile data when Account section is shown ---
@@ -2896,6 +3050,75 @@
              }
 
 
+            // Function to check if a frequency should run today
+            function shouldFrequencyRunToday(frequency, startDate, endDate) {
+                console.log("Checking frequency:", frequency, "Start Date:", startDate, "End Date:", endDate);
+                let today = new Date(); // local
+                today.setHours(0, 0, 0, 0);
+                // let today = new Date(today + today.getTimezoneOffset() * 60000); // Normalize to UTC date
+                // const todayDateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format // UTC
+                // const todayDate = new Date(todayDateStr); // Normalize to date only // UTC
+                
+                let startDateObj = new Date(startDate);
+                startDateObj.setHours(0, 0, 0, 0); // Normalize to date only
+                
+                // Check if today is within the date bounds
+                if (today < startDateObj) {
+                    return false;
+                }
+                
+                if (endDate) {
+                    const endDateObj = new Date(endDate);
+                    if (today > endDateObj) {
+                        return false;
+                    }
+                }
+                
+                const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+                
+                switch (frequency) {
+                    case 1: // Every Monday
+                        return dayOfWeek === 1;
+                    case 2: // Every Tuesday
+                        return dayOfWeek === 2;
+                    case 3: // Every Wednesday
+                        return dayOfWeek === 3;
+                    case 4: // Every Thursday
+                        return dayOfWeek === 4;
+                    case 5: // Every Friday
+                        return dayOfWeek === 5;
+                    case 6: // Every Saturday
+                        return dayOfWeek === 6;
+                    case 7: // Every Sunday
+                        return dayOfWeek === 0;
+                    case 8: // Every Weekday
+                        return dayOfWeek >= 1 && dayOfWeek <= 5;
+                    case 9: // Every Weekend
+                        return dayOfWeek === 0 || dayOfWeek === 6;
+                    case 10: // Every Day
+                        return true;
+                    case 11: // Public Holidays
+                        // Would need holiday calendar integration
+                        return false;
+                    case 12: // One off
+                    case 16: // One off
+                        // For one-off, check if today matches the start date exactly
+                        return today.toDateString() === startDateObj.toDateString();
+                    case 13: // Every week (same as every day within bounds)
+                        return true;
+                    case 14: // Every fortnight
+                        const daysDiff = Math.floor((today - startDateObj) / (1000 * 60 * 60 * 24));
+                        const weeksDiff = Math.floor(daysDiff / 7);
+                        return weeksDiff >= 0 && weeksDiff % 2 === 0;
+                    case 15: // Every month
+                        return today.getDate() === startDateObj.getDate();
+                    default:
+                        console.warn(`Unknown frequency code: ${frequency}`);
+                        return false;
+                }
+            }
+
+
             // --- API Fetch Functions ---
 
             // Function to fetch and display classes as cards
@@ -2951,11 +3174,46 @@
                                 let venue_name = '';
                                 let venue_data = get_cached_value('venue', cls.venue_id);
 
-                                if (venue_data) {
+                                if (venue_data != null) {
                                     venue_name = venue_data.title;
                                 } else {
-                                    venue_name = cls.venue_name || 'N/A';
+                                    venue_name = 'N/A'; 
                                 }
+                                
+                                // Updated calendar event addition code
+                                const today = new Date();
+                                const todayStr = today.toLocaleDateString(); //.split('T')[0]; // Get today's date in YYYY-MM-DD format
+                                const year = todayStr.split('/')[2];
+                                const month = todayStr.split('/')[1].padStart(2, '0'); // Ensure two digits
+                                const day = todayStr.split('/')[0].padStart(2, '0'); // Ensure two digits
+
+                                cls.frequency.forEach(class_frequency => {
+                                    // Check if this frequency should run today
+                                    if (shouldFrequencyRunToday(
+                                        class_frequency.frequency, 
+                                        class_frequency.start_date, 
+                                        class_frequency.end_date
+                                    )) {
+                                        // let starta = new Date(`${todayStr}T${class_frequency.start_time}`); // Adjust for timezone offset
+                                        // let startb = today.getTimezoneOffset() * 1000; // Adjust for timezone offset
+                                        
+                                        let start = new Date( new Date(`${year}-${month}-${day}T${class_frequency.start_time}`)); // Adjust for timezone offset
+                                        let end = new Date( new Date(`${year}-${month}-${day}T${class_frequency.end_time}`)); // Adjust for timezone offset
+                                        // start.setMinutes(start.getMinutes() - start.getTimezoneOffset()); // Adjust for timezone offset
+                                        // end.setMinutes(end.getMinutes() - end.getTimezoneOffset()); // Adjust for timezone offset
+
+                                        // Add the calendar event only if it should run today
+                                        calendar.addEvent(
+                                            start,
+                                            end,
+                                            cls.title,
+                                            cls.description,
+                                            venue_name,
+                                            cls.class_id
+                                        );
+                                    }
+                                });
+
 
                                  html += `
                                      <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
@@ -3829,209 +4087,6 @@
 
         // }
 
-        async function fetchClasses() {
-             const classListDiv = document.getElementById('class-list');
-             classListDiv.innerHTML = '<p>Loading classes...</p>';
-
-             try {
-                 const response = await fetch('/api/class/get_list', {
-                     method: 'GET',
-                    //  headers: {
-                    //      'Authorization': `Bearer ${token}`
-                    //  }
-                 });
-
-                 if (response.ok) {
-                     const classes = await response.json();
-                     if (classes.length > 0) {
-                         let html = '<ul>';
-                         // Assuming each class object has properties like id, title, etc.
-                         classes.forEach(cls => {
-                             html += `<li><strong>${cls.title}</strong> ${cls.description}</li>`;
-                              // Add more details here
-                         });
-                         html += '</ul>';
-                         classListDiv.innerHTML = html;
-                     } else {
-                         classListDiv.innerHTML = '<p>No classes found.</p>';
-                     }
-                 } else {
-                     const errorText = await response.text();
-                     classListDiv.innerHTML = `<p style="color: red;">Error loading classes: ${response.status} - ${errorText.substring(0, 100)}...</p>`;
-                     console.error("Error fetching classes:", response.status, errorText);
-                 }
-             } catch (error) {
-                 classListDiv.innerHTML = `<p style="color: red;">Network error loading classes.</p>`;
-                 console.error("Fetch error for class list:", error);
-             }
-        }
-
-        async function getVenues(targetSelectId = 'venue-list') { // Optional argument to specify target
-         const targetElement = document.getElementById(targetSelectId);
-         if (!targetElement) {
-             console.error("Target element for venues not found:", targetSelectId);
-             return;
-         }
-
-         // Check if the target is a select or a div for the list
-         const isSelect = targetElement.tagName === 'SELECT';
-
-         if (isSelect) {
-             targetElement.innerHTML = '<option value="">Loading venues...</option>'; // Loading state for select
-             targetElement.disabled = true; // Disable select while loading
-         } else {
-             targetElement.innerHTML = '<p>Loading venues...</p>'; // Loading state for div
-         }
-
-         try {
-             // *** You need a backend endpoint like GET /api/venue/get_list that returns Vec<VenueData> ***
-             const response = await fetch('/api/venue/get_list', {
-                 method: 'GET',
-             });
-
-             if (response.ok) {
-                 const venues = await response.json(); // Assuming the backend returns Vec<VenueData> as JSON array
-                 if (isSelect) {
-                     targetElement.innerHTML = '<option value="">-- Select Venue --</option>'; // Default option
-                     targetElement.disabled = false; // Re-enable select
-                     if (venues.length > 0) {
-                         venues.forEach(venue => {
-                             const option = document.createElement('option');
-                             // Ensure backend returns 'venue_id' and 'title' matching VenueData struct
-                             option.value = venue.venue_id; // Use venue_id from backend
-                             option.textContent = `${venue.title}`; // Display title
-                              // Optional: add venue_id to text for debugging: `${venue.title} (${venue.venue_id.substring(0, 8)}...)`
-                             targetElement.appendChild(option);
-                             add_cached_value("venue", venue.venue_id, venue); // Cache the venue ID and title
-                         });
-
-                     } else {
-                         targetElement.innerHTML = '<option value="">No venues found</option>';
-                         targetElement.disabled = true; // Disable if no options
-                     }
-                 } else { // Handle displaying as a list in the Venues tab
-                      if (venues.length > 0) {
-                          let html = '<ul>';
-                          venues.forEach(venue => {
-                              // Display logic for list view (similar to previous snippet)
-                               html += `<li>
-                                    <strong>${venue.title}</strong><br>
-                                    Description: ${venue.description || 'N/A'}<br>
-                                    Address: ${venue.address || 'N/A'}, ${venue.suburb || 'N/A'}, ${venue.state || 'N/A'} ${venue.postcode || 'N/A'}, ${venue.country || 'N/A'}<br>
-                                    Location: ${venue.latitude !== null ? venue.latitude : 'N/A'}, ${venue.longitude !== null ? venue.longitude : 'N/A'}<br>
-                                    Phone: ${venue.contact_phone || 'N/A'}
-                                </li>`;
-                          });
-                          html += '</ul>';
-                          targetElement.innerHTML = html;
-                      } else {
-                          targetElement.innerHTML = '<p>No venues found.</p>';
-                      }
-                 }
-
-
-             } else if (response.status === 401 || response.status === 403) {
-                  const errorMessage = '<option value="">Error: Not authorized</option>'; // For select
-                  const errorHtml = '<p style="color: red;">Error: You are not authorized to view venues.</p>'; // For div
-                 if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
-                 console.error("Authorization error fetching venues:", response.status);
-             }
-             else {
-                  const errorText = await response.text();
-                   const errorMessage = `<option value="">Error: ${response.status} - ${errorText.substring(0, 50)}...</option>`; // For select
-                   const errorHtml = `<p style="color: red;">Error loading venues: ${response.status} - ${errorText.substring(0, 100)}...</p>`; // For div
-                  if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
-                  console.error("Error fetching venues:", response.status, errorText);
-             }
-         } catch (error) {
-              const errorMessage = '<option value="">Network Error</option>'; // For select
-              const errorHtml = `<p style="color: red;">Network error loading venues.</p>`; // For div
-              if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
-              console.error("Fetch error for venue list:", error);
-         }
-    }
-
-    async function getStyles( targetSelectId = 'style-list') { // Optional argument to specify target
-         const targetElement = document.getElementById(targetSelectId);
-         if (!targetElement) {
-             console.error("Target element for styles not found:", targetSelectId);
-             return;
-         }
-
-         // Check if the target is a select or a div for the list
-         const isSelect = targetElement.tagName === 'SELECT';
-
-         if (isSelect) {
-             targetElement.innerHTML = '<option value="">Loading styles...</option>'; // Loading state for select
-             targetElement.disabled = true; // Disable select while loading
-         } else {
-             targetElement.innerHTML = '<p>Loading styles...</p>'; // Loading state for div
-         }
-
-         try {
-             // *** You need a backend endpoint like GET /api/style/get_list that returns Vec<StyleData> ***
-             const response = await fetch('/api/style/get_list', {
-                 method: 'GET',
-             });
-
-             if (response.ok) {
-                 const styles = await response.json(); // Assuming the backend returns Vec<StyleData> as JSON array
-                 if (isSelect) {
-                     targetElement.innerHTML = '<option value="">-- Select Style --</option>'; // Default option
-                     targetElement.disabled = false; // Re-enable select
-                     if (styles.length > 0) {
-                         styles.forEach(style => {
-                             const option = document.createElement('option');
-                             // Ensure backend returns 'style_id' and 'title' matching StyleData struct
-                             option.value = style.style_id; // Use style_id from backend
-                             option.textContent = `${style.title}`; // Display title
-                              // Optional: add style_id to text for debugging: `${style.title} (${style.style_id.substring(0, 8)}...)`
-                             targetElement.appendChild(option);
-                         });
-
-                     } else {
-                         targetElement.innerHTML = '<option value="">No styles found</option>';
-                         targetElement.disabled = true; // Disable if no options
-                     }
-                 } else { // Handle displaying as a list in the Styles tab
-                      if (styles.length > 0) {
-                          let html = '<ul>';
-                          styles.forEach(style => {
-                              // Display logic for list view (similar to previous snippet)
-                               html += `<li>
-                                    <strong>${style.title}</strong><br>
-                                    Description: ${style.description || 'N/A'}<br>
-                                </li>`;
-                          });
-                            html += '</ul>';
-                            targetElement.innerHTML = html;
-                        } else {
-                            targetElement.innerHTML = '<p>No styles found.</p>';
-                        }
-                    }
-                } else if (response.status === 401 || response.status === 403) {
-                        const errorMessage = '<option value="">Error: Not authorized</option>'; // For select
-                        const errorHtml = '<p style="color: red;">Error: You are not authorized to view styles.</p>'; // For div
-                        if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
-                        console.error("Authorization error fetching styles:", response.status);
-                    }
-                    else {
-                        const errorText = await response.text();
-                        const errorMessage = `<option value="">Error: ${response.status} - ${errorText.substring(0, 50)}...</option>`; // For select
-                        const errorHtml = `<p style="color: red;">Error loading styles: ${response.status} - ${errorText.substring(0, 100)}...</p>`; // For div
-                        if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
-                        console.error("Error fetching styles:", response.status, errorText);
-                    }
-            } catch (error) {
-                const errorMessage = '<option value="">Network Error</option>'; // For select
-                const errorHtml = `<p style="color: red;">Network error loading styles.</p>`; // For div
-                if (isSelect) { targetElement.innerHTML = errorMessage; targetElement.disabled = true; } else { targetElement.innerHTML = errorHtml; }
-                console.error("Fetch error for style list:", error);
-            }
-        }
-
-
-
 
         // Function to fetch and display venue info in the modal
         async function fetchAndDisplayVenueInfo(venueId) {
@@ -4160,111 +4215,137 @@
 
         class DailyCalendar {
             constructor() {
-            this.events = [];
-            this.highlightInterval = null;
-            this.SLOT_HEIGHT = 60; // Exact height of each hour slot
-            this.START_HOUR = 6; // Calendar starts at 6 AM
-            this.END_HOUR = 23; // Calendar ends at 11 PM
-            this.init();
+                this.events = [];
+                this.highlightInterval = null;
+                this.currentEvent = null;
+                this.currentStudents = [];
+                this.currentViewMode = 'list'; // 'list' or 'grid'
+                this.SLOT_HEIGHT = 60;
+                this.START_HOUR = 6;
+                this.END_HOUR = 23;
+                this.init();
             }
 
             init() {
-            this.renderCalendar();
-            this.startHighlightUpdater();
+                this.renderCalendar();
+                this.startHighlightUpdater();
+                this.setupModalEventListeners();
+            }
+
+            setupModalEventListeners() {
+            // Close modal
+            document.getElementById('closeModal').addEventListener('click', () => {
+                this.closeModal();
+            });
+
+            // Close modal on backdrop click
+            document.getElementById('attendanceModal').addEventListener('click', (e) => {
+                if (e.target.id === 'attendanceModal') {
+                this.closeModal();
+                }
+            });
+
+            // Search functionality
+            const searchInput = document.getElementById('student-search');
+            let searchTimeout;
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                this.searchStudents(e.target.value);
+                }, 300);
+            });
+
+            // View toggle buttons
+            document.getElementById('list-view-btn').addEventListener('click', () => {
+                this.switchView('list');
+            });
+
+            document.getElementById('grid-view-btn').addEventListener('click', () => {
+                this.switchView('grid');
+            });
             }
 
             renderCalendar() {
-            // Set current date
-            const today = new Date();
-            const dateStr = today.toLocaleDateString("en-US", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-            });
-            document.getElementById("current-date").textContent = dateStr;
+                const today = new Date();
+                const dateStr = today.toLocaleDateString("en-US", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                });
+                document.getElementById("current-date").textContent = dateStr;
 
-            // Generate time slots
-            const timeSlotsContainer = document.getElementById("time-slots");
-            timeSlotsContainer.innerHTML = "";
+                const timeSlotsContainer = document.getElementById("time-slots");
+                timeSlotsContainer.innerHTML = "";
 
-            for (let hour = this.START_HOUR; hour <= this.END_HOUR; hour++) {
-                const timeSlot = document.createElement("div");
-                timeSlot.className = "time-slot";
-                timeSlot.dataset.hour = hour;
+                for (let hour = this.START_HOUR; hour <= this.END_HOUR; hour++) {
+                    const timeSlot = document.createElement("div");
+                    timeSlot.className = "time-slot";
+                    timeSlot.dataset.hour = hour;
 
-                const timeLabel = document.createElement("div");
-                timeLabel.className = "time-label";
-                timeLabel.textContent = this.formatTime(hour);
+                    const timeLabel = document.createElement("div");
+                    timeLabel.className = "time-label";
+                    timeLabel.textContent = this.formatTime(hour);
 
-                const timeContent = document.createElement("div");
-                timeContent.className = "time-content";
+                    const timeContent = document.createElement("div");
+                    timeContent.className = "time-content";
 
-                timeSlot.appendChild(timeLabel);
-                timeSlot.appendChild(timeContent);
-                timeSlotsContainer.appendChild(timeSlot);
-            }
+                    timeSlot.appendChild(timeLabel);
+                    timeSlot.appendChild(timeContent);
+                    timeSlotsContainer.appendChild(timeSlot);
+                }
 
-            // Add current time indicator
-            this.updateCurrentTimeIndicator();
+                this.updateCurrentTimeIndicator();
             }
 
             formatTime(hour) {
-            const period = hour >= 12 ? "PM" : "AM";
-            const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-            return `${displayHour}:00 ${period}`;
+                const period = hour >= 12 ? "PM" : "AM";
+                const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+                return `${displayHour}:00 ${period}`;
             }
 
-            addEvent(startTime, endTime, title, description = "") {
-            const event = {
-                id: Date.now() + Math.random(),
-                startTime: new Date(startTime),
-                endTime: new Date(endTime),
-                title,
-                description,
-            };
-            this.events.push(event);
-            this.renderEvents();
-            return event.id;
+            addEvent(startTime, endTime, title, description = "", location = "", classId = null) {
+                const event = {
+                    id: Date.now() + Math.random(),
+                    startTime: new Date(startTime),
+                    endTime: new Date(endTime),
+                    title,
+                    description,
+                    location,
+                    classId,
+                };
+                this.events.push(event);
+                this.renderEvents();
+                return event.id;
             }
 
             removeEvent(eventId) {
-            this.events = this.events.filter((event) => event.id !== eventId);
-            this.renderEvents();
+                this.events = this.events.filter((event) => event.id !== eventId);
+                this.renderEvents();
             }
 
             calculateEventPosition(startTime, endTime) {
-            const startHour = startTime.getHours();
-            const startMinutes = startTime.getMinutes();
-            const endHour = endTime.getHours();
-            const endMinutes = endTime.getMinutes();
+                const startHour = startTime.getHours();
+                const startMinutes = startTime.getMinutes();
 
-            // Calculate top position
-            const hoursFromStart = startHour - this.START_HOUR;
-            const minutesOffset = startMinutes / 60;
-            const topPosition = (hoursFromStart + minutesOffset) * this.SLOT_HEIGHT;
+                const hoursFromStart = startHour - this.START_HOUR;
+                const minutesOffset = startMinutes / 60;
+                const topPosition = (hoursFromStart + minutesOffset) * this.SLOT_HEIGHT;
 
-            // Calculate height
-            const durationMs = endTime.getTime() - startTime.getTime();
-            const durationHours = durationMs / (1000 * 60 * 60);
-            const height = Math.max(durationHours * this.SLOT_HEIGHT, 24); // Minimum height
+                const durationMs = endTime.getTime() - startTime.getTime();
+                const durationHours = durationMs / (1000 * 60 * 60);
+                const height = Math.max(durationHours * this.SLOT_HEIGHT, 24);
 
-            return { top: topPosition, height };
+                return { top: topPosition, height };
             }
 
             renderEvents() {
-            // Clear existing events
             const eventsContainer = document.getElementById("events-container");
             eventsContainer.innerHTML = "";
 
-            // Sort events by start time
-            const sortedEvents = [...this.events].sort(
-                (a, b) => a.startTime - b.startTime
-            );
+            const sortedEvents = [...this.events].sort((a, b) => a.startTime - b.startTime);
 
-            // Render each event
             sortedEvents.forEach((event) => {
-                // Only render events within our time range
                 if (
                 event.startTime.getHours() >= this.START_HOUR &&
                 event.startTime.getHours() <= this.END_HOUR
@@ -4277,16 +4358,18 @@
             }
 
             renderEvent(event) {
-            const position = this.calculateEventPosition(
-                event.startTime,
-                event.endTime
-            );
+            const position = this.calculateEventPosition(event.startTime, event.endTime);
 
             const eventElement = document.createElement("div");
             eventElement.className = "event";
             eventElement.id = `event-${event.id}`;
             eventElement.style.top = `${position.top}px`;
             eventElement.style.height = `${position.height}px`;
+
+            // Add click handler for modal
+            eventElement.addEventListener('click', () => {
+                this.openModal(event);
+            });
 
             const startTimeStr = event.startTime.toLocaleTimeString("en-US", {
                 hour: "numeric",
@@ -4302,106 +4385,325 @@
             eventElement.innerHTML = `
                 <div class="event-title">${event.title}</div>
                 <div class="event-time">${startTimeStr} - ${endTimeStr}</div>
-                ${
-                event.description
-                    ? `<div class="event-description">${event.description}</div>`
-                    : ""
-                }
+                ${event.description ? `<div class="event-description">${event.description}</div>` : ""}
+                ${event.location ? `<div class="event-description">📍 ${event.location}</div>` : ""}
             `;
 
             const eventsContainer = document.getElementById("events-container");
             eventsContainer.appendChild(eventElement);
             }
 
+            // Modal functionality
+            async openModal(event) {
+            this.currentEvent = event;
+            
+            // Populate modal header
+            document.getElementById('modal-event-title').textContent = event.title;
+            document.getElementById('modal-event-description').textContent = event.description || '';
+            document.getElementById('modal-event-location').textContent = event.location ? `📍 ${event.location}` : '';
+            
+            const timeStr = `${event.startTime.toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+            })} - ${event.endTime.toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+            })}`;
+            document.getElementById('modal-event-time').textContent = `🕒 ${timeStr}`;
+
+            // Show modal
+            document.getElementById('attendanceModal').classList.remove('hidden');
+            
+            // Load current students
+            await this.loadCurrentStudents();
+            }
+
+            closeModal() {
+            document.getElementById('attendanceModal').classList.add('hidden');
+            document.getElementById('student-search').value = '';
+            document.getElementById('search-results').classList.add('hidden');
+            this.currentEvent = null;
+            this.currentStudents = [];
+            }
+
+            async loadCurrentStudents() {
+            try {
+                document.getElementById('loading-indicator').classList.remove('hidden');
+                
+                const timeSegment = 0; //this.getTimeSegment(this.currentEvent.startTime);
+                const response = await fetch('/api/class/get_students', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        class_id: this.currentEvent.classId,
+                        time_segment: timeSegment
+                    })
+                });
+
+                if (response.ok) {
+                const data = await response.json();
+                this.currentStudents = data.students || [];
+                this.renderStudents();
+                } else {
+                console.error('Failed to load students');
+                this.currentStudents = [];
+                this.renderStudents();
+                }
+            } catch (error) {
+                console.error('Error loading students:', error);
+                this.currentStudents = [];
+                this.renderStudents();
+            } finally {
+                document.getElementById('loading-indicator').classList.add('hidden');
+            }
+            }
+
+            async searchStudents(query) {
+            if (!query.trim()) {
+                document.getElementById('search-results').classList.add('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/school/search_student?q=${encodeURIComponent(query)}`, {
+                method: 'GET',
+                });
+
+                if (response.ok) {
+                const data = await response.json();
+                this.renderSearchResults(data.students || []);
+                }
+            } catch (error) {
+                console.error('Error searching students:', error);
+            }
+            }
+
+            renderSearchResults(students) {
+            const resultsContainer = document.getElementById('search-results');
+            
+            if (students.length === 0) {
+                resultsContainer.innerHTML = '<div class="p-4 text-gray-500 text-center">No students found</div>';
+            } else {
+                resultsContainer.innerHTML = students.map(student => `
+                <div class="student-search-item" data-student-id="${student.user_id}">
+                    <img src="${student.photo_url || '/default-avatar.png'}" alt="${student.first_name}" class="student-avatar">
+                    <div>
+                    <div class="font-medium text-gray-900">${student.first_name} ${student.last_name}</div>
+                    <div class="text-sm text-gray-500">ID: ${student.user_id}</div>
+                    </div>
+                </div>
+                `).join('');
+
+                // Add click handlers
+                resultsContainer.querySelectorAll('.student-search-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const studentId = item.dataset.studentId;
+                    this.toggleStudentAttendance(studentId);
+                });
+                });
+            }
+
+            resultsContainer.classList.remove('hidden');
+            }
+
+            switchView(mode) {
+            this.currentViewMode = mode;
+            
+            // Update button states
+            if (mode === 'list') {
+                document.getElementById('list-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-900 shadow-sm';
+                document.getElementById('grid-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:text-gray-900';
+                document.getElementById('students-list-view').classList.remove('hidden');
+                document.getElementById('students-grid-view').classList.add('hidden');
+            } else {
+                document.getElementById('grid-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-900 shadow-sm';
+                document.getElementById('list-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:text-gray-900';
+                document.getElementById('students-list-view').classList.add('hidden');
+                document.getElementById('students-grid-view').classList.remove('hidden');
+            }
+            }
+
+            renderStudents() {
+            this.renderStudentsList();
+            this.renderStudentsGrid();
+            }
+
+            renderStudentsList() {
+            const container = document.getElementById('students-list-view');
+            
+            if (this.currentStudents.length === 0) {
+                container.innerHTML = '<div class="text-center py-8 text-gray-500">No students in this class</div>';
+                return;
+            }
+
+            container.innerHTML = this.currentStudents.map(student => `
+                <div class="student-list-item ${student.attending ? 'attending' : ''}" data-student-id="${student.user_id}">
+                <div class="flex items-center space-x-3">
+                    <img src="${student.photo_url || '/default-avatar.png'}" alt="${student.first_name}" class="student-avatar">
+                    <div>
+                    <div class="font-medium text-gray-900">${student.first_name} ${student.last_name}</div>
+                    <div class="text-sm text-gray-500">ID: ${student.user_id}</div>
+                    </div>
+                </div>
+                <div class="text-sm font-medium ${student.attending ? 'text-blue-600' : 'text-gray-400'}">
+                    ${student.attending ? '✓ Present' : 'Absent'}
+                </div>
+                </div>
+            `).join('');
+
+            // Add click handlers
+            container.querySelectorAll('.student-list-item').forEach(item => {
+                item.addEventListener('click', () => {
+                const studentId = item.dataset.studentId;
+                this.toggleStudentAttendance(studentId);
+                });
+            });
+            }
+
+            renderStudentsGrid() {
+            const container = document.getElementById('students-grid-view');
+            
+            if (this.currentStudents.length === 0) {
+                container.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">No students in this class</div>';
+                return;
+            }
+
+            container.innerHTML = this.currentStudents.map(student => `
+                <div class="student-grid-item ${student.attending ? 'attending' : ''}" data-student-id="${student.user_id}">
+                <img src="${student.photo_url || '/default-avatar.png'}" alt="${student.first_name}" class="student-grid-avatar">
+                <div class="font-medium text-gray-900">${student.first_name}</div>
+                <div class="font-medium text-gray-900">${student.last_name}</div>
+                <div class="text-sm font-medium mt-2 ${student.attending ? 'text-blue-600' : 'text-gray-400'}">
+                    ${student.attending ? '✓ Present' : 'Absent'}
+                </div>
+                </div>
+            `).join('');
+
+            // Add click handlers
+            container.querySelectorAll('.student-grid-item').forEach(item => {
+                item.addEventListener('click', () => {
+                const studentId = item.dataset.studentId;
+                this.toggleStudentAttendance(studentId);
+                });
+            });
+            }
+
+            async toggleStudentAttendance(studentId) {
+            try {
+                const timeSegment = this.getTimeSegment(this.currentEvent.startTime);
+                
+                const response = await fetch('/api/class/student_attend', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    student_id: studentId,
+                    class_id: this.currentEvent.classId,
+                    time_segment: timeSegment
+                })
+                });
+
+                if (response.ok) {
+                // Reload students to get updated attendance
+                await this.loadCurrentStudents();
+                // Hide search results
+                document.getElementById('search-results').classList.add('hidden');
+                document.getElementById('student-search').value = '';
+                } else {
+                console.error('Failed to toggle attendance');
+                }
+            } catch (error) {
+                console.error('Error toggling attendance:', error);
+            }
+            }
+
+            getTimeSegment(date) {
+            // Convert date to time segment format
+            return date.toLocaleTimeString("en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false
+            });
+            }
+
+            // Keep existing methods for time indicator and highlighting...
             updateCurrentTimeIndicator() {
-                // Remove existing indicator
-                const existingIndicator = document.getElementById(
-                    "current-time-indicator"
-                );
-                if (existingIndicator) {
-                    existingIndicator.remove();
-                }
+            const existingIndicator = document.getElementById("current-time-indicator");
+            if (existingIndicator) {
+                existingIndicator.remove();
+            }
 
-                const now = new Date();
-                const currentHour = now.getHours();
-                const currentMinutes = now.getMinutes();
+            const now = new Date();
+            const currentHour = now.getHours();
+            const currentMinutes = now.getMinutes();
 
-                // Only show indicator if current time is within calendar range
-                if (currentHour >= this.START_HOUR && currentHour <= this.END_HOUR) {
-                    const indicator = document.createElement("div");
-                    indicator.className = "current-time-indicator";
-                    indicator.id = "current-time-indicator";
+            if (currentHour >= this.START_HOUR && currentHour <= this.END_HOUR) {
+                const indicator = document.createElement("div");
+                indicator.className = "current-time-indicator";
+                indicator.id = "current-time-indicator";
 
-                    const timeLabel = document.createElement("div");
-                    timeLabel.className = "current-time-label";
-                    timeLabel.textContent = now.toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    hour12: true,
-                    });
-                    indicator.appendChild(timeLabel);
+                const timeLabel = document.createElement("div");
+                timeLabel.className = "current-time-label";
+                timeLabel.textContent = now.toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+                });
+                indicator.appendChild(timeLabel);
 
-                    // Calculate exact position
-                    const hoursFromStart = currentHour - this.START_HOUR;
-                    const minutesOffset = currentMinutes / 60;
-                    const topPosition = (hoursFromStart + minutesOffset) * this.SLOT_HEIGHT;
+                const hoursFromStart = currentHour - this.START_HOUR;
+                const minutesOffset = currentMinutes / 60;
+                const topPosition = (hoursFromStart + minutesOffset) * this.SLOT_HEIGHT;
 
-                    indicator.style.top = `${topPosition}px`;
+                indicator.style.top = `${topPosition}px`;
 
-                    const eventsContainer = document.getElementById("events-container");
-                    eventsContainer.appendChild(indicator);
-                }
+                const eventsContainer = document.getElementById("events-container");
+                eventsContainer.appendChild(indicator);
+            }
             }
 
             updateHighlights() {
-                // Remove existing highlights
-                document.querySelectorAll(".event-highlight").forEach((el) => {
-                    el.classList.remove("event-highlight");
-                });
+            document.querySelectorAll(".event-highlight").forEach((el) => {
+                el.classList.remove("event-highlight");
+            });
 
-                const now = new Date();
-                let currentEvent = null;
-                let nextEvent = null;
+            const now = new Date();
+            let currentEvent = null;
+            let nextEvent = null;
 
-                console.log("Current time:", this.events);
-                // Find current event
+            this.events.forEach((event) => {
+                if (now >= event.startTime && now <= event.endTime) {
+                currentEvent = event;
+                }
+            });
+
+            if (!currentEvent) {
+                const thirtyMinutesFromNow = new Date(now.getTime() + 30 * 60 * 1000);
+
                 this.events.forEach((event) => {
-                    // console.log("Checking event:", event);
-                    if (now >= event.startTime && now <= event.endTime) {
-                        currentEvent = event;
+                if (event.startTime > now && event.startTime <= thirtyMinutesFromNow) {
+                    if (!nextEvent || event.startTime < nextEvent.startTime) {
+                    nextEvent = event;
                     }
+                }
                 });
-                // If no current event, find next event within 30 minutes
-                if (!currentEvent) {
-                    const thirtyMinutesFromNow = new Date(now.getTime() + 30 * 60 * 1000);
+            }
 
-                    this.events.forEach((event) => {
-                    if (
-                        event.startTime > now &&
-                        event.startTime <= thirtyMinutesFromNow
-                    ) {
-                        if (!nextEvent || event.startTime < nextEvent.startTime) {
-                            nextEvent = event;
-                        }
-                    }
-                    });
+            const eventToHighlight = currentEvent || nextEvent;
+            if (eventToHighlight) {
+                const eventElement = document.getElementById(`event-${eventToHighlight.id}`);
+                if (eventElement) {
+                eventElement.classList.add("event-highlight");
                 }
-                // console.log("Current event:", currentEvent);
-                // console.log("Next event:", nextEvent);
-                // Apply highlight with pulsing animation
-                const eventToHighlight = currentEvent || nextEvent;
-                if (eventToHighlight) {
-                    const eventElement = document.getElementById(
-                        `event-${eventToHighlight.id}`
-                    );
-                    if (eventElement) {
-                        eventElement.classList.add("event-highlight");
-                    }
-                }
+            }
             }
 
             startHighlightUpdater() {
-            // Update every 30 seconds for more responsive highlighting
             this.highlightInterval = setInterval(() => {
                 this.updateHighlights();
                 this.updateCurrentTimeIndicator();
@@ -4418,49 +4720,49 @@
         // Initialize calendar
         const calendar = new DailyCalendar();
 
-        // Example usage - you can call these functions to add events
-        window.addCalendarEvent = function (startTime, endTime, title, description) {
-            return calendar.addEvent(startTime, endTime, title, description);
+        // Global functions for adding/removing events
+        window.addCalendarEvent = function (startTime, endTime, title, description, location, classId) {
+            return calendar.addEvent(startTime, endTime, title, description, location, classId);
         };
 
         window.removeCalendarEvent = function (eventId) {
             calendar.removeEvent(eventId);
         };
 
-        // Example events for testing
-        const today = new Date();
-        const todayStr = today.toISOString().split("T")[0];
+        // Example events with class IDs
+        // const today = new Date();
+        // const todayStr = today.toISOString().split("T")[0];
 
-        // Test event from 6:00 AM to 10:30 AM
         // calendar.addEvent(
         //     new Date(`${todayStr}T06:00:00`),
         //     new Date(`${todayStr}T10:30:00`),
-        //     "Extended Morning Meeting",
-        //     "Long planning and strategy session"
+        //     "Mathematics Class",
+        //     "Advanced algebra and geometry",
+        //     "Room 101",
+        //     "MATH001"
         // );
 
-        // Current time event (adjust these times to test highlighting)
-        const now = new Date();
-        const currentEventStart = new Date(now.getTime() - 15 * 60 * 1000); // Started 15 minutes ago
-        const currentEventEnd = new Date(now.getTime() + 45 * 60 * 1000); // Ends in 45 minutes
+        // const now = new Date();
+        // const currentEventStart = new Date(now.getTime() - 15 * 60 * 1000);
+        // const currentEventEnd = new Date(now.getTime() + 45 * 60 * 1000);
 
-        calendar.addEvent(
-            currentEventStart,
-            currentEventEnd,
-            "Current Meeting",
-            "This should be pulsating"
-        );
+        // calendar.addEvent(
+        //     currentEventStart,
+        //     currentEventEnd,
+        //     "English Literature",
+        //     "Shakespeare and modern poetry",
+        //     "Room 205",
+        //     "ENG001"
+        // );
 
-        // Upcoming event
-        calendar.addEvent(
-            new Date(`${todayStr}T21:00:00`),
-            new Date(`${todayStr}T24:00:00`),
-            "Afternoon Sync",
-            "Quick team update"
-        );
-
-
-
+        // calendar.addEvent(
+        //     new Date(`${todayStr}T15:30:00`),
+        //     new Date(`${todayStr}T16:15:00`),
+        //     "Science Lab",
+        //     "Chemistry experiments",
+        //     "Lab 1",
+        //     "SCI001"
+        // );
 
 
 
