@@ -1728,7 +1728,6 @@
                     fetchAndDisplayStyles();
                 }
                 if (sectionId === 'pos') {
-                    fetchAndDisplayClasses();
                     fetchAndDisplayPOS();
                 }
                  // --- Load profile data when Account section is shown ---
@@ -2643,6 +2642,7 @@
 
 
             async function fetchAndDisplayPOS() {
+                await fetchAndDisplayClasses();
 
             }
 
@@ -3052,7 +3052,6 @@
 
             // Function to check if a frequency should run today
             function shouldFrequencyRunToday(frequency, startDate, endDate) {
-                console.log("Checking frequency:", frequency, "Start Date:", startDate, "End Date:", endDate);
                 let today = new Date(); // local
                 today.setHours(0, 0, 0, 0);
                 // let today = new Date(today + today.getTimezoneOffset() * 60000); // Normalize to UTC date
@@ -3138,6 +3137,9 @@
                  if (sortBy) queryParams.append('sort_by', sortBy);
                  if (searchTerm) queryParams.append('search', searchTerm);
 
+                await fetchVenuesForSelect(classFilterVenue);
+                    // fetchStylesForSelect(classFilterStyle);
+
                  const url = `/api/class/get_list`;
                  console.log("Fetching classes from:", url);
 
@@ -3186,7 +3188,7 @@
                                 const year = todayStr.split('/')[2];
                                 const month = todayStr.split('/')[1].padStart(2, '0'); // Ensure two digits
                                 const day = todayStr.split('/')[0].padStart(2, '0'); // Ensure two digits
-
+                                var all_event_ids = [];
                                 cls.frequency.forEach(class_frequency => {
                                     // Check if this frequency should run today
                                     if (shouldFrequencyRunToday(
@@ -3201,7 +3203,7 @@
                                         let end = new Date( new Date(`${year}-${month}-${day}T${class_frequency.end_time}`)); // Adjust for timezone offset
                                         // start.setMinutes(start.getMinutes() - start.getTimezoneOffset()); // Adjust for timezone offset
                                         // end.setMinutes(end.getMinutes() - end.getTimezoneOffset()); // Adjust for timezone offset
-
+                                        console.log("Frequency start time:", class_frequency);
                                         // Add the calendar event only if it should run today
                                         calendar.addEvent(
                                             start,
@@ -3209,10 +3211,13 @@
                                             cls.title,
                                             cls.description,
                                             venue_name,
-                                            cls.class_id
+                                            cls.class_id,
+                                            class_frequency.class_frequency_id
                                         );
+                                        all_event_ids.push(class_frequency.class_frequency_id);
                                     }
                                 });
+                                calendar.removeNonPresentClassIdEvents(cls.class_id, all_event_ids);
 
 
                                  html += `
@@ -3368,6 +3373,7 @@
 
             // Function to fetch venues for select dropdowns
             async function fetchVenuesForSelect(selectElement, selectedVenueId = null) {
+                 console.log("Fetching venues for select element:", selectElement.id);
                  selectElement.innerHTML = '<option value="">Loading venues...</option>';
                  selectElement.disabled = true;
                  try {
@@ -4034,7 +4040,7 @@
             // --- Initial Load / Event Attachments ---
 
             // Fetch filters (venues and styles) when the DOM is ready
-            fetchVenuesForSelect(classFilterVenue);
+            // fetchVenuesForSelect(classFilterVenue);
             fetchStylesForSelect(classFilterStyle);
 
             // Attach event listener for applying filters
@@ -4304,9 +4310,15 @@
                 return `${displayHour}:00 ${period}`;
             }
 
-            addEvent(startTime, endTime, title, description = "", location = "", classId = null) {
+            addEvent(startTime, endTime, title, description = "", location = "", classId = null, eventId = null) {
+                if (!eventId)
+                {
+                    throw new Error("Event ID is required to add an event.");
+                }
+
+            
                 const event = {
-                    id: Date.now() + Math.random(),
+                    id: eventId,
                     startTime: new Date(startTime),
                     endTime: new Date(endTime),
                     title,
@@ -4314,9 +4326,23 @@
                     location,
                     classId,
                 };
-                this.events.push(event);
+                // Check if event with event id already exists - if so override it
+                const existingIndex = this.events.findIndex(e => e.id === eventId);
+                if (existingIndex !== -1) {
+                    this.events[existingIndex] = event; // Update existing event
+                } else {
+                    this.events.push(event); // Add new event
+                }
                 this.renderEvents();
                 return event.id;
+            }
+
+            removeNonPresentClassIdEvents(classId, eventIds) {
+                // If an event has the same class id as the parameter and the event id is not in the provided list, remove it
+                this.events = this.events.filter((event) => {
+                    return !(event.classId === classId && !eventIds.includes(event.id));
+                });
+                this.renderEvents();
             }
 
             removeEvent(eventId) {
@@ -4721,13 +4747,13 @@
         const calendar = new DailyCalendar();
 
         // Global functions for adding/removing events
-        window.addCalendarEvent = function (startTime, endTime, title, description, location, classId) {
-            return calendar.addEvent(startTime, endTime, title, description, location, classId);
-        };
+        // window.addCalendarEvent = function (startTime, endTime, title, description, location, classId) {
+        //     return calendar.addEvent(startTime, endTime, title, description, location, classId);
+        // };
 
-        window.removeCalendarEvent = function (eventId) {
-            calendar.removeEvent(eventId);
-        };
+        // window.removeCalendarEvent = function (eventId) {
+        //     calendar.removeEvent(eventId);
+        // };
 
         // Example events with class IDs
         // const today = new Date();
