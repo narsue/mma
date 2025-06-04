@@ -1,9 +1,10 @@
 pub mod handlers {
-    use actix_web::{post, get, put, web, http::header::{LOCATION, CONTENT_TYPE}, HttpRequest, HttpResponse, cookie::{Cookie, SameSite}};
+    use actix_web::{post, get, put, delete, web, http::header::{LOCATION, CONTENT_TYPE}, HttpRequest, HttpResponse, cookie::{Cookie, SameSite}};
     // use argon2::password_hash;
     // use mma::api::GenericResponse;
     use std::sync::Arc;
     use uuid::Uuid;
+    use crate::{db, stripe_client::StripeClient};
     use crate::{api::{GetClassRequest, GetClassResponse}, auth, state::{self, StoreStateManager}};
     // use crate::error::AppError;
     use crate::api::{
@@ -16,7 +17,10 @@ pub mod handlers {
         ForgottenPasswordRequest, ForgottenPasswordResponse, ResetPasswordQuery, ResetPasswordResponse, ResetPasswordRequest,
         SignupResponse, SignupRequest, VerifyAccountQuery, GetVenueRequest, GetVenueResponse, UpdateClassRequest, ClassFrequencyId,
         GetVenueListResponse, GenericResponse, GetStlyeListResponse, GetStyleRequest, GetStyleResponse,
-        GetClassStudentsRequest, GetClassStudentsResponse, StudentClassAttendance, SetClassStudentsAttendanceRequest
+        GetClassStudentsRequest, GetClassStudentsResponse, StudentClassAttendance, SetClassStudentsAttendanceRequest,
+        CreateSetupIntentRequest, CreateSetupIntentResponse, GetStripeSavedPaymentMethodsResponse, DeletePaymentMethodRequest
+
+
     };
     use chrono::{NaiveDate, NaiveTime};
     use bigdecimal::BigDecimal;
@@ -2675,6 +2679,370 @@ pub mod handlers {
     //     }
     // }
 
+
+
+    // pub async fn get_style_handler(
+    //     state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+    //     req: web::Json<GetStyleRequest>, // Extract query parameters from the URL
+    // ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
+
+    //     // Validate the session and get the creator user_id
+    //     let logged_user_id = user.validate(&state_manager).await
+    //         .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+    //     if user.school_user_ids.is_empty() {
+    //         // If the user has no school_user_ids, they are not associated with any school
+    //         return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+    //             "success": false,
+    //             "error_message": "User is not associated with any school."
+    //         })));
+    //     }
+
+
+
+    // #[post("/api/stripe/create_setup_intent")]
+    // pub async fn create_setup_intent_handler(cache: web::Data<TemplateCache>) -> HttpResponse {
+    //      match get_template_content(&cache, "signup-success.html") {
+    //         Ok(content) => HttpResponse::Ok()
+    //             .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
+    //             .body(content),
+    //         Err(resp) => resp,
+    //     }
+    // }
+
+
+
+    #[post("/api/user/create_setup_intent")]
+    pub async fn create_setup_intent_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        req: web::Json<CreateSetupIntentRequest>,
+        stripe_client: web::Data<StripeClient>,
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+    ) -> Result<HttpResponse, ActixError> {
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        let school_user_ids = user.school_user_ids;
+        if school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("User is not associated with any school.".to_string()),
+            }));
+        }
+        let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        // Validate input
+        if req.customer_email.trim().is_empty() {
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("Customer email is required".to_string()),
+            }));
+        }
+
+        if req.cardholder_name.trim().is_empty() {
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("Cardholder name is required".to_string()),
+            }));
+        }
+
+        // Basic email validation
+        if !req.customer_email.contains('@') {
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("Invalid email format".to_string()),
+            }));
+        }
+
+        let mut stripe_customer_id = match state_manager.db.get_stripe_customer_id(&auth_user_id).await {
+            Ok(Some(customer_id)) => Some(customer_id),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::error!("Failed to retrieve Stripe customer ID from database: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to retrieve customer ID".to_string()),
+                }));
+            }
+        };
+
+        if stripe_customer_id.is_none()
+        {
+            // Create or get existing customer
+            let customer = match stripe_client
+                .create_customer(&req.customer_email, Some(&req.cardholder_name))
+                .await
+            {
+                Ok(customer) => customer,
+                Err(e) => {
+                    tracing::error!("Failed to create Stripe customer: {}", e);
+                    return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                        success: false,
+                        message: None,
+                        error_message: Some("Failed to create customer".to_string()),
+                    }));
+                }
+            };
+
+            let result = state_manager.db.add_stripe_customer_id(
+                &auth_user_id,
+                &customer.id,
+            );
+            if let Err(e) = result.await {
+                tracing::error!("Failed to store Stripe customer ID in database: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to store customer ID".to_string()),
+                }));
+            }
+            stripe_customer_id = Some(customer.id);
+        }
+        let stripe_customer_id = match stripe_customer_id {
+            Some(id) => id,
+            None => {
+                tracing::error!("Stripe customer ID is None after creation");
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Stripe customer ID is missing".to_string()),
+                }));
+            }
+        };
+
+        // let stripe_payment_method_id = state_manager.db.get_stripe_payment_method_id(&auth_user_id).await
+        //     .map_err(|e| {
+        //         tracing::error!("Failed to retrieve Stripe payment method ID: {}", e);
+        //         ErrorInternalServerError("Failed to retrieve payment method ID".to_string())
+        //     })?;
+
+        // let get_stripe_payment_method_id = match stripe_payment_method_id {
+        //     Some(id) => id,
+        //     None => {
+                // Create setup intent
+
+        let setup_intent = match stripe_client
+            .create_setup_intent(&stripe_customer_id)
+            .await
+        {
+            Ok(setup_intent) => setup_intent,
+            Err(e) => {
+                tracing::error!("Failed to create setup intent: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to create setup intent".to_string()),
+                }));
+            }
+        };
+        // println!("Setup intent created: {:?}", setup_intent);
+
+        // let result = match setup_intent.payment_method {
+        //     Some(payment_method) => {
+        //         // Store the payment method ID in the database
+        //         state_manager.db.add_stripe_payment_method_id(
+        //             &auth_user_id,
+        //             &payment_method,
+        //         ).await
+        //     }
+        //     None => {
+        //         tracing::warn!("Setup intent created without a payment method");
+        //         return Ok(HttpResponse::BadRequest().json(GenericResponse {
+        //             success: false,
+        //             message: None,
+        //             error_message: Some("Setup intent created without a payment method".to_string()),
+        //         }));
+        //         // Ok(())
+        //     }
+        // };
+        // if let Err(e) = result {
+        //     tracing::error!("Failed to store Stripe payment method ID in database: {}", e);
+        //     return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+        //         success: false,
+        //         message: None,
+        //         error_message: Some("Failed to store payment method ID".to_string()),
+        //     }));
+        // }
+
+        Ok(HttpResponse::Ok().json(CreateSetupIntentResponse {
+            client_secret: setup_intent.client_secret,
+            customer_id: stripe_customer_id,
+        }))
+    }
+
+    #[get("/api/user/get_stripe_saved_payment_methods")]
+    pub async fn get_stripe_saved_payment_methods_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+        stripe_client: web::Data<StripeClient>,
+    ) -> Result<HttpResponse, ActixError> {
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        let school_user_ids = user.school_user_ids;
+        if school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("User is not associated with any school.".to_string()),
+            }));
+        }
+        let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        // Retrieve Stripe customer ID from database
+        let stripe_customer_id = match state_manager.db.get_stripe_customer_id(&auth_user_id).await {
+            Ok(Some(customer_id)) => customer_id,
+            Ok(None) => {
+                tracing::warn!("No Stripe customer ID found for user {}", auth_user_id);
+                return Ok(HttpResponse::Ok().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("No Stripe customer found for this user.".to_string()),
+                }));
+            }
+            Err(e) => {
+                tracing::error!("Failed to retrieve Stripe customer ID from database: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to retrieve customer ID".to_string()),
+                }));
+            }
+        };
+
+        // List payment methods using Stripe client
+        let payment_methods = match stripe_client.list_payment_methods(&stripe_customer_id).await {
+            Ok(methods) => methods,
+            Err(e) => {
+                tracing::error!("Failed to list payment methods: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to retrieve payment methods".to_string()),
+                }));
+            }
+        };
+
+        state_manager.db.set_stripe_payment_method_ids(
+            &auth_user_id,
+            &payment_methods.iter().map(|pm| pm.id.clone()).collect::<Vec<_>>(),
+        ).await.map_err(|e| {
+            tracing::error!("Failed to store Stripe payment methods in database: {}", e);
+            ErrorInternalServerError("Failed to store payment methods".to_string())
+        })?;
+
+
+        Ok(HttpResponse::Ok().json(GetStripeSavedPaymentMethodsResponse {
+            payment_methods,
+            customer_id: stripe_customer_id,
+        }))
+    }
+
+
+    
+    // Method delete - /api/user/delete_payment_method
+    #[delete("/api/user/delete_payment_method")]
+    pub async fn delete_payment_method_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        req: web::Json<DeletePaymentMethodRequest>,
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+        stripe_client: web::Data<StripeClient>,
+    ) -> Result<HttpResponse, ActixError> {
+
+
+        let payment_method_id = req.payment_method_id.clone(); // Extract payment method ID from request
+        let payment_method_id = match payment_method_id {
+            Some(id) if id.trim().is_empty() => {
+                return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Payment method ID is required".to_string()),
+                }));
+            }
+            Some(id) => id,
+            None => {
+                return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Payment method ID is required".to_string()),
+                }));
+            }
+        };
+
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        let school_user_ids = user.school_user_ids;
+        if school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("User is not associated with any school.".to_string()),
+            }));
+        }
+        
+
+        let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        // Retrieve Stripe customer ID from database
+        let stripe_customer_id = match state_manager.db.get_stripe_customer_id(&auth_user_id).await {
+            Ok(Some(customer_id)) => customer_id,
+            Ok(None) => {
+                tracing::warn!("No Stripe customer ID found for user {}", auth_user_id);
+                return Ok(HttpResponse::NotFound().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("No Stripe customer found for this user.".to_string()),
+                }));
+            }
+            Err(e) => {
+                tracing::error!("Failed to retrieve Stripe customer ID from database: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to retrieve customer ID".to_string()),
+                }));
+            }
+        };
+
+        // Detach payment method using Stripe client
+        match stripe_client.detach_payment_method(&payment_method_id).await {
+            Ok(_) => {
+                state_manager.db.remove_stripe_payment_method_id(&auth_user_id, &payment_method_id).await.map_err(|e| {
+                    tracing::error!("Failed to remove Stripe payment method ID from database: {}", e);
+                    ErrorInternalServerError("Failed to remove payment method ID".to_string())
+                })?;
+
+                Ok(HttpResponse::Ok().json(GenericResponse {
+                    success: true,
+                    message: Some("Payment method deleted successfully.".to_string()),
+                    error_message: None,
+                }))
+            }
+            Err(e) => {
+                tracing::error!("Failed to delete payment method: {}", e);
+                Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to delete payment method".to_string()),
+                }))
+            }
+        }
+        
+    }
 
 
 }

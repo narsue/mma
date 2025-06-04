@@ -3,6 +3,7 @@ use chrono::{NaiveDate, NaiveTime};
 use scylla::DeserializeRow;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use crate::stripe_client::PaymentMethod;
 
 #[derive(Debug, Serialize)]
 pub struct SetGenericResponse {
@@ -83,7 +84,7 @@ pub struct UserProfileData {
     pub gender: Option<String>,
     pub phone: Option<String>,
     pub dob: Option<String>, // Consider using a proper Date type later
-    pub stripe_payment_method_id: Option<String>, // Could be null
+    pub stripe_payment_method_ids: Vec<String>, // Could be null
     pub email_verified: bool,
     // pub waiver_id: Option<Uuid>, // Could be null
     pub photo_id: Option<String>, // Could be null
@@ -517,4 +518,29 @@ pub struct SetClassStudentsAttendanceRequest {
     pub class_start_ts: i64,
     pub user_ids: Vec<Uuid>,
     pub present: Vec<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateSetupIntentRequest {
+    pub customer_email: String,
+    pub cardholder_name: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateSetupIntentResponse {
+    pub client_secret: String,
+    pub customer_id: String,
+}
+
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetStripeSavedPaymentMethodsResponse {
+    pub customer_id: String,
+    pub payment_methods: Vec<PaymentMethod>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+// Delete a payment method
+pub struct DeletePaymentMethodRequest{
+    pub payment_method_id: Option<String>, // ID of the deleted payment method
 }

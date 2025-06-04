@@ -8,9 +8,10 @@ mod server;
 mod auth;
 mod templates;
 mod email_sender;
+mod stripe_client;
 
 use email_sender::send_custom_email;
-
+use stripe_client::StripeClient;
 use std::sync::Arc;
 use actix_web::{
     web, App, HttpServer,
@@ -26,26 +27,30 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     tracing_subscriber::fmt::init();
     tracing::info!("Starting MMA Node");
-    
 
-    // let result = send_custom_email(
-    //     "narsue@narsue.com",
-    //     "narsue@narsue.com",
-    //     "<html><body><h1>Hello World</h1><p>This is a test email.</p></body></html>",
-    //     "Test Email"
-    // ).await;
-    
-    // match result {
-    //     Ok(true) => println!("Email sent successfully!"),
-    //     Ok(false) => println!("Failed to send email but no error was thrown"),
-    //     Err(e) => println!("Error sending email: {}", e),
-    // }
+    // Check local .env file for development mode
+    dotenv::dotenv().ok(); // Load environment variables from .env file if it exists
 
+    let dev_mode = std::env::var("DEV_MODE").is_ok();
+    if dev_mode {
+        tracing::info!("Running in development mode");
+    } else {
+        tracing::info!("Running in production mode");
+    }
 
     // Initialize database connection
-    let db = Arc::new(ScyllaConnector::new(&["127.0.0.1:9042"]).await?);
+    let db = Arc::new(ScyllaConnector::new(&["127.0.0.1:9042"], dev_mode).await?);
     // db.init_schema().await?;
-    
+    let stripe_client = StripeClient::new(dev_mode);
+    let stripe_client = match stripe_client {
+        Ok(client) => client,
+        Err(e) => {
+            tracing::error!("Failed to initialize Stripe client: {}", e);
+            return Ok(());
+        }
+    };
+    // let stripe_client = Arc::new(stripe_client);
+
     // --- Load Templates ---
     let template_cache = load_templates()?; // Load initially, panics on error here
     let template_cache_clone = template_cache.clone(); // Clone Arc for the watcher task
@@ -63,12 +68,14 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Start HTTP server
     let processor_data = web::Data::new(state_manager.clone());
     let template_data = web::Data::new(template_cache);
+    let stripe_client_data = web::Data::new(stripe_client);
     
     tracing::info!("Starting HTTP server on 127.0.0.1:1227");
     let server = HttpServer::new(move || {
         App::new()
             .app_data(processor_data.clone())
             .app_data(template_data.clone())
+            .app_data(stripe_client_data.clone())
             .wrap(Logger::default())
 
             // --- Serve CSS from Cache ---
@@ -125,6 +132,11 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::get_style_list_handler)
             .service(handlers::get_style_handler)
             .service(handlers::update_style_handler)
+
+            // Payment routes
+            .service(handlers::create_setup_intent_handler)
+            .service(handlers::get_stripe_saved_payment_methods_handler)
+            .service(handlers::delete_payment_method_handler)
             
     })
     .bind("127.0.0.1:1227")?

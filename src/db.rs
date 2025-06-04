@@ -32,7 +32,8 @@ struct UserRow {
     gender: Option<String>,  // 5: text (nullable)
     phone: Option<String>,   // 6: text (nullable)
     dob: Option<String>,     // 7: text (nullable - consider Date type if stored as such)
-    stripe_payment_method_id: Option<String>, // 8: text (nullable)
+    dev_stripe_payment_method_ids: Option<Vec<String>>, // 8: text (nullable)
+    prod_stripe_payment_method_ids: Option<Vec<String>>, // 8: text (nullable)
     email_verified: bool,    // 10: boolean (assumed non-null)
     photo_id: Option<String>,// 11: text (nullable)
     address: Option<String>, // 12: text (nullable)
@@ -100,6 +101,7 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
 pub struct ScyllaConnector {
     session: Arc<Session>,
     select_user_by_email_stmt: Arc<PreparedStatement>,
+    dev_mode: bool,
 }
 
 pub async fn create_prepared_statement(session: &Session, query: &str) -> Result<Arc<PreparedStatement>> {
@@ -152,7 +154,7 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
         .query_unpaged(
             "CREATE TABLE IF NOT EXISTS mma.user \
-            (user_id uuid, school_id uuid, email text, first_name text, surname text, gender text, phone text, dob text, image text, stripe_payment_method_id text, created_ts timestamp, email_verified boolean, photo_id text, address text, suburb text, emergency_name text, emergency_relationship text, emergency_phone text, emergency_medical text, belt_size text, uniform_size text, member_number text, contracted_until date, PRIMARY KEY (user_id))",
+            (user_id uuid, school_id uuid, email text, first_name text, surname text, gender text, phone text, dob text, image text, stripe_payment_method_id text, created_ts timestamp, email_verified boolean, photo_id text, address text, suburb text, emergency_name text, emergency_relationship text, emergency_phone text, emergency_medical text, belt_size text, uniform_size text, member_number text, contracted_until date, dev_stripe_customer_id text, prod_stripe_customer_id text, dev_stripe_payment_method_ids SET<text>, prod_stripe_payment_method_ids SET<text>, PRIMARY KEY (user_id))",
             &[],
         )
         .await?;
@@ -461,7 +463,7 @@ pub async fn init_schema(session: &Session) -> Result<()> {
 
 
 impl ScyllaConnector {
-    pub async fn new(nodes: &[&str]) -> Result<Self> {
+    pub async fn new(nodes: &[&str], dev_mode: bool) -> Result<Self> {
         let session = SessionBuilder::new()
             .known_nodes(nodes)
             .user("cassandra", "cassandra")
@@ -475,6 +477,7 @@ impl ScyllaConnector {
         Ok(Self {
             session: Arc::new(session),
             select_user_by_email_stmt,
+            dev_mode
         })
     }
 
@@ -778,7 +781,7 @@ impl ScyllaConnector {
         let result = self.session
             .query_unpaged(
                 "SELECT user_id, email, first_name, surname, gender, phone, dob, \
-                stripe_payment_method_id, email_verified, \
+                dev_stripe_payment_method_ids, prod_stripe_payment_method_ids, email_verified, \
                 photo_id, address, suburb, emergency_name, emergency_relationship, \
                 emergency_phone, emergency_medical, belt_size, uniform_size, \
                 member_number, contracted_until \
@@ -791,7 +794,17 @@ impl ScyllaConnector {
         for row in result.rows::<UserRow>()?
         {
             let row = row?;
+            let stripe_payment_method_id = if self.dev_mode {
+                row.dev_stripe_payment_method_ids
+            } else {
+                row.prod_stripe_payment_method_ids
+            };
+            let stripe_payment_method_ids = match stripe_payment_method_id {
+                Some(ids) => ids,
+                None => Vec::new(), // Default to empty vector if None
+            };
 
+            // Check if the row is empty
             // Successfully retrieved a row. Now extract the columns.
             let user_profile = UserProfileData {
                 user_id: row.user_id, // UserID is primary key
@@ -801,7 +814,7 @@ impl ScyllaConnector {
                 gender: row.gender,
                 phone: row.phone,
                 dob: row.dob,
-                stripe_payment_method_id: row.stripe_payment_method_id,
+                stripe_payment_method_ids: stripe_payment_method_ids,
                 email_verified: row.email_verified, 
                 photo_id: row.photo_id,
                 address: row.address,
@@ -1184,6 +1197,132 @@ impl ScyllaConnector {
 
         return Ok(classes);
     }
+
+
+    pub async fn add_stripe_customer_id(
+        &self,
+        user_id: &Uuid,
+        stripe_customer_id: &String,
+    ) -> AppResult<()> {
+        let stripe_customer_str = match self.dev_mode {
+            true => "dev_stripe_customer_id", // Use a dummy ID in dev mode
+            false => "prod_stripe_customer_id",
+        };
+
+        self.session
+            .query_unpaged(
+                format!("UPDATE mma.user SET {} = ? WHERE user_id = ?", stripe_customer_str).as_str(),
+                (stripe_customer_id, user_id),
+            )
+            .await?;
+        Ok(())
+    }
+
+    // pub async fn add_stripe_payment_method_id(
+    //     &self,
+    //     user_id: &Uuid,
+    //     stripe_payment_method_id: &String,
+    // ) -> AppResult<()> {
+    //     let stripe_payment_method_str = match self.dev_mode {
+    //         true => "dev_stripe_payment_method_ids", // Use a dummy ID in dev mode
+    //         false => "prod_stripe_payment_method_ids",
+    //     };
+    //     println!("Adding Stripe payment method ID: {} for user {}", stripe_payment_method_id, user_id);
+    //     self.session
+    //         .query_unpaged(
+    //             format!("UPDATE mma.user SET {} = {} + ? WHERE user_id = ?", stripe_payment_method_str, stripe_payment_method_str).as_str(),
+    //             (stripe_payment_method_id, user_id),
+    //         )
+    //         .await?;
+    //     Ok(())
+    // }
+
+    pub async fn set_stripe_payment_method_ids(
+        &self,
+        user_id: &Uuid,
+        stripe_payment_method_ids: &Vec<String>,
+    ) -> AppResult<()> {
+        let stripe_payment_method_str = match self.dev_mode {
+            true => "dev_stripe_payment_method_ids", // Use a dummy ID in dev mode
+            false => "prod_stripe_payment_method_ids",
+        };
+        self.session
+            .query_unpaged(
+                format!("UPDATE mma.user SET {} = ? WHERE user_id = ?", stripe_payment_method_str).as_str(),
+                (stripe_payment_method_ids, user_id),
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn remove_stripe_payment_method_id(
+        &self,
+        user_id: &Uuid,
+        stripe_payment_method_id: &String,
+    ) -> AppResult<()> {
+        let stripe_payment_method_str = match self.dev_mode {
+            true => "dev_stripe_payment_method_ids", // Use a dummy ID in dev mode
+            false => "prod_stripe_payment_method_ids",
+        };
+        let mut stripe_payment_method_ids: Vec<String> = Vec::new();
+        stripe_payment_method_ids.push(stripe_payment_method_id.to_string());
+        self.session
+            .query_unpaged(
+                format!("UPDATE mma.user SET {} = {} - ? WHERE user_id = ?", stripe_payment_method_str, stripe_payment_method_str).as_str(),
+                (&stripe_payment_method_ids, user_id),
+            )
+            .await?;
+        Ok(())
+    }
+
+
+    pub async fn get_stripe_customer_id(
+        &self,
+        user_id: &Uuid,
+    ) -> AppResult<Option<String>> {
+        let stripe_customer_str = match self.dev_mode {
+            true => "dev_stripe_customer_id", // Use a dummy ID in dev mode
+            false => "prod_stripe_customer_id",
+        };
+        let result = self.session
+            .query_unpaged(
+                format!("SELECT {} FROM mma.user WHERE user_id = ?", stripe_customer_str).as_str(),
+                (user_id,),
+            )
+            .await?
+            .into_rows_result()?;
+
+        for row in result.rows()? {
+            let (stripe_customer_id,): (Option<String>,) = row?;
+            return Ok(stripe_customer_id);
+        }
+        return Ok(None);
+    }
+
+    pub async fn get_stripe_payment_method_id(
+        &self,
+        user_id: &Uuid,
+    ) -> AppResult<Option<String>> {
+        let stripe_customer_str = match self.dev_mode {
+            true => "dev_stripe_payment_method_id", // Use a dummy ID in dev mode
+            false => "prod_stripe_payment_method_id",
+        };
+
+        let result = self.session
+            .query_unpaged(
+                format!("SELECT {} FROM mma.user WHERE user_id = ?", stripe_customer_str).as_str(),
+                (user_id, ),
+            )
+            .await?
+            .into_rows_result()?;
+
+        for row in result.rows()? {
+            let (stripe_customer_id,): (Option<String>,) = row?;
+            return Ok(stripe_customer_id);
+        }
+        return Ok(None);
+    }
+
 
     pub async fn get_venue(&self, venue_id: &Uuid, school_id: &Uuid) -> AppResult<Option<VenueData>> {
         let result = self.session
