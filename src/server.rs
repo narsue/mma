@@ -1202,11 +1202,27 @@ pub mod handlers {
                 // Return the vector of ClassData as a JSON array with 200 OK status
                 match class {
                     Some(class_data) => {
-                        Ok(HttpResponse::Ok().json(GetClassStudentsResponse {
-                            success: true,
-                            students: Some(class_data),
-                            error_message: None,
-                        }))
+                        match &req.q {
+                            Some(q) => {
+                                // Filter the class_data based on the query string
+                                let filtered_data: Vec<StudentClassAttendance> = class_data.into_iter()
+                                    .filter(|student| student.first_name.to_lowercase().contains(&q.to_lowercase()))
+                                    .collect();
+                                Ok(HttpResponse::Ok().json(GetClassStudentsResponse {
+                                    success: true,
+                                    students: Some(filtered_data),
+                                    error_message: None,
+                                }))
+                            },
+                            None => {
+                                // No query string provided, return all students
+                                Ok(HttpResponse::Ok().json(GetClassStudentsResponse {
+                                    success: true,
+                                    students: Some(class_data),
+                                    error_message: None,
+                                }))
+                            }
+                        }
                     },
                     None => {
                         Ok(HttpResponse::Ok().json(GetClassResponse {
@@ -1247,6 +1263,28 @@ pub mod handlers {
                 "error_message": "User is not associated with any school."
             })));
         }
+        if req.user_ids.is_empty() {
+            // If the user_ids list is empty, return an error
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User IDs list cannot be empty."
+            })));
+        }
+        if req.present.is_empty() {
+            // If the present list is empty, return an error
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "Present list cannot be empty."
+            })));
+        }  
+        if req.user_ids.len() != req.present.len() {
+            // If the user_ids and present lists are not the same length, return an error
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User IDs and Present lists must be of the same length."
+            })));
+        }
+
         let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
         let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
         let auth_user_id = school_user_id.user_id; // Use the validated user ID
@@ -1255,7 +1293,7 @@ pub mod handlers {
 
 
         // Call the database function to get classes based on the provided filters
-        let result: AppResult<bool> = state_manager.db.set_class_attendance(&class_id, &school_id, &req.user_ids, class_start_ts).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
+        let result: AppResult<bool> = state_manager.db.set_class_attendance(&class_id, &school_id, &req.user_ids, &req.present, class_start_ts).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
 
         // Handle the result of the database operation explicitly
         match result {

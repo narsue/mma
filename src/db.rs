@@ -10,9 +10,11 @@ use std::sync::Arc;
 use uuid::Uuid;
 use std::time::SystemTime;
 use rand::{distributions::Alphanumeric, Rng};
-use chrono::{Datelike, NaiveDate, NaiveTime, Utc, NaiveDateTime, Weekday};
+use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc, Weekday};
+use chrono_tz::Tz;
 use scylla::value::CqlTimestamp;
 use bigdecimal::BigDecimal;
+use crate::db;
 use crate::error::{AppError, Result, Result as AppResult};
 use crate::api::{UserProfileData, UpdateUserProfileRequest, ClassData, ClassFrequency, VenueData, StyleData, ClassFrequencyId, SchoolUserId, StudentClassAttendance}; 
 
@@ -270,7 +272,7 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.class \
-        (school_id uuid, class_id uuid, venue_id uuid, waiver_id uuid, capacity int, publish_mode int, price decimal, notify_booking boolean, title text, description text, created_ts timestamp, end_ts timestamp, creator_user_id uuid, styles SET<uuid>, grades SET<uuid>, gender_req text, deleted_ts timestamp, \
+        (school_id uuid, class_id uuid, venue_id uuid, waiver_id uuid, capacity int, publish_mode int, price decimal, timezone text, notify_booking boolean, title text, description text, created_ts timestamp, end_ts timestamp, creator_user_id uuid, styles SET<uuid>, grades SET<uuid>, gender_req text, deleted_ts timestamp, \
             PRIMARY KEY (school_id, class_id))",
         &[],
     )
@@ -995,8 +997,8 @@ impl ScyllaConnector {
         let zero_ts = scylla::value::CqlTimestamp(0);
         self.session
             .query_unpaged(
-                "INSERT INTO mma.class (school_id, creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades, deleted_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (school_id, creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids, zero_ts), 
+                "INSERT INTO mma.class (school_id, creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades, deleted_ts, timezone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (school_id, creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids, zero_ts, "Australia/Sydney"), 
             )
             .await?;
 
@@ -1209,6 +1211,7 @@ impl ScyllaConnector {
         class_id: &Uuid,
         school_id: &Uuid,
         user_ids: &Vec<Uuid>,
+        present: &Vec<bool>,
         class_start_ts: i64,
     ) -> AppResult<bool> {
 
@@ -1230,10 +1233,6 @@ impl ScyllaConnector {
             .as_millis() as i64;
         let now = scylla::value::CqlTimestamp(now);
 
-
-
-
-
         // Prepare the statement once
         let prepared = self
             .session
@@ -1245,23 +1244,53 @@ impl ScyllaConnector {
         // Create batch
         let mut batch = scylla::statement::batch::Batch::default();
         
-        // Add each user_id as a separate statement in the batch
-        for user_id in user_ids {
-            batch.append_statement(prepared.clone());
+        // Add each user_id as a separate statement in the batch if present
+        for (user_id, is_present) in user_ids.iter().zip(present.iter()) {
+            if *is_present {
+                batch.append_statement(prepared.clone());
+            }
         }
 
-        // Prepare batch values
         let batch_values: Vec<_> = user_ids
             .iter()
-            .map(|user_id| {
-                (class_id, user_id, class_start_ts, false, now)
+            .zip(present.iter())
+            .filter_map(|(user_id, is_present)| {
+                if *is_present {
+                    Some((class_id, user_id, class_start_ts, false, now))
+                } else {
+                    None // Skip users not present
+                }
             })
             .collect();
 
         // Execute batch
         self.session.batch(&batch, batch_values).await?;
 
-        println!("Attendance set for class {}: {:?}", class_id, user_ids);
+
+        // Now remove attendance for users not present
+        let not_present_user_ids: Vec<Uuid> = user_ids.iter()
+            .zip(present.iter())
+            .filter_map(|(user_id, is_present)| {
+                if !is_present {
+                    Some(user_id)
+                } else {
+                    None // Skip users who are present
+                }
+            })
+            .cloned()
+            .collect();
+
+        if !not_present_user_ids.is_empty() {
+            self.session
+                .query_unpaged(
+                    "DELETE FROM mma.attendance WHERE class_id = ? AND class_start_ts = ? and user_id IN ?",
+                    (class_id, class_start_ts, not_present_user_ids),
+                )
+                .await?;
+        }
+
+
+        // println!("Attendance set for class {}: {:?}", class_id, user_ids);
         Ok(true)
     }
 
@@ -1270,12 +1299,12 @@ impl ScyllaConnector {
         &self,
         class_id: &Uuid,
         school_id: &Uuid,
-        class_start_ts: i64,
+        query_class_start_ts: i64,
     ) -> AppResult<bool> {
-        let class_start_ts_cql: CqlTimestamp = scylla::value::CqlTimestamp(class_start_ts);
+        let query_class_start_ts_cql: CqlTimestamp = scylla::value::CqlTimestamp(query_class_start_ts);
         
         // Convert timestamp to NaiveDateTime for comparison
-        let class_datetime = NaiveDateTime::from_timestamp_millis(class_start_ts)
+        let query_class_datetime = NaiveDateTime::from_timestamp_millis(query_class_start_ts)
             .ok_or_else(|| AppError::Internal("Invalid timestamp".to_string()))?;
 
         // Get current timestamp
@@ -1285,6 +1314,40 @@ impl ScyllaConnector {
             .as_millis() as i64;
         let now_cql = scylla::value::CqlTimestamp(now);
         
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT deleted_ts, school_id, timezone FROM mma.class WHERE class_id = ?",
+                (class_id,),
+            )
+            .await?
+            .into_rows_result()?;   
+
+        // Check if the class exists and is not deleted
+        if result.rows_num() == 0 {
+            println!("Class with ID {} does not exist", class_id);
+            return Ok(false);
+        }
+        let mut timezone = String::new();
+        for row in result.rows()? {
+            let (deleted_ts, class_school_id, db_timezone): (CqlTimestamp, Uuid, String) = row?;
+            
+            // Check if the class is deleted
+            if deleted_ts != CqlTimestamp(0) {
+                println!("Class with ID {} is deleted", class_id);
+                return Ok(false);
+            }
+            
+            // Check if the class belongs to the correct school
+            if class_school_id != *school_id {
+                println!("Class with ID {} does not belong to school {}", class_id, school_id);
+                return Ok(false);
+            }
+            
+            timezone = db_timezone;
+        }
+
+
         // Check if the class exists
         let result = self.session
             .query_unpaged(
@@ -1304,68 +1367,99 @@ impl ScyllaConnector {
             let (class_frequency_id, frequency, start_date, end_date, start_time, end_time): 
                 (Uuid, i32, NaiveDate, Option<NaiveDate>, NaiveTime, NaiveTime) = row?;
             
-            let class_start_datetime = start_date.and_time(start_time);
-            
+            let db_class_start_datetime = start_date.and_time(start_time);
+            // Parse the timezone string into a Tz object
+            let timezone = match timezone.parse::<Tz>() {
+                Ok(tz) => tz,
+                Err(_) => {
+                    println!("Invalid timezone string: {}, defaulting to Australia/Sydney", timezone);
+                    Tz::Australia__Sydney // Default to Australia/Sydney if parsing fails
+                }
+            };
+
+            // Convert the naive datetime from DB to timezone-aware datetime, then to UTC timestamp
+            let db_class_start_datetime_tz = timezone.from_local_datetime(&db_class_start_datetime)
+                .single()
+                .ok_or_else(|| AppError::Internal("Invalid datetime conversion".to_string()))?;
+
+            let db_class_start_datetime_utc_ts = db_class_start_datetime_tz.timestamp_millis();
+
+            let query_class_start_datetime_tz = timezone.from_utc_datetime(&query_class_datetime);
+
+            // println!("class_start_datetime local: {}", db_class_start_datetime);
+            // println!("class_start_datetime timezone-aware: {}", db_class_start_datetime_tz);
+            // println!("class_start_datetime UTC timestamp: {}", db_class_start_datetime_utc_ts);
+            // println!("query_class_start_ts UTC timestamp: {} {} {}", query_class_start_ts, query_class_datetime, query_class_start_datetime_tz);
+
             // Check date bounds if end_date exists
             if let Some(end_date) = end_date {
-                let class_end_datetime = end_date.and_time(end_time);
+                let db_class_end_datetime = end_date.and_time(end_time);
+                // Convert the naive datetime from DB to timezone-aware datetime, then to UTC timestamp
+                let db_class_end_datetime_tz = timezone.from_local_datetime(&db_class_end_datetime)
+                    .single()
+                    .ok_or_else(|| AppError::Internal("Invalid datetime conversion".to_string()))?;
+
+                let db_class_end_datetime_utc_ts = db_class_end_datetime_tz.timestamp_millis();
                 
-                if class_datetime < class_start_datetime || class_datetime > class_end_datetime {
+                if query_class_start_ts < db_class_start_datetime_utc_ts || query_class_start_ts > db_class_end_datetime_utc_ts {
                     continue; // This frequency rule doesn't apply to this timestamp
                 }
             } else {
                 // No end date bounds check, but still check if after start date
-                if class_datetime < class_start_datetime {
+                if query_class_start_ts < db_class_start_datetime_utc_ts {
                     continue;
                 }
             }
             
             // Check time bounds (must be within start_time and end_time on the day)
-            let class_time = class_datetime.time();
+            // let class_time = class_datetime.time();
 
-            if class_time != start_time  { // || class_time > end_time
+            let db_class_start_time = db_class_start_datetime_tz.time();
+            let query_class_start_time = query_class_start_datetime_tz.time();
+
+            if db_class_start_time != query_class_start_time  { // || class_time > end_time
                 continue;
             }
             
             // Check frequency pattern
             match frequency {
                 1 => { // Every Monday
-                    if class_datetime.weekday() == Weekday::Mon {
+                    if query_class_start_datetime_tz.weekday() == Weekday::Mon {
                         return Ok(true);
                     }
                 },
                 2 => { // Every Tuesday
-                    if class_datetime.weekday() == Weekday::Tue {
+                    if query_class_start_datetime_tz.weekday() == Weekday::Tue {
                         return Ok(true);
                     }
                 },
                 3 => { // Every Wednesday
-                    if class_datetime.weekday() == Weekday::Wed {
+                    if query_class_start_datetime_tz.weekday() == Weekday::Wed {
                         return Ok(true);
                     }
                 },
                 4 => { // Every Thursday
-                    if class_datetime.weekday() == Weekday::Thu {
+                    if query_class_start_datetime_tz.weekday() == Weekday::Thu {
                         return Ok(true);
                     }
                 },
                 5 => { // Every Friday
-                    if class_datetime.weekday() == Weekday::Fri {
+                    if query_class_start_datetime_tz.weekday() == Weekday::Fri {
                         return Ok(true);
                     }
                 },
                 6 => { // Every Saturday
-                    if class_datetime.weekday() == Weekday::Sat {
+                    if query_class_start_datetime_tz.weekday() == Weekday::Sat {
                         return Ok(true);
                     }
                 },
                 7 => { // Every Sunday
-                    if class_datetime.weekday() == Weekday::Sun {
+                    if query_class_start_datetime_tz.weekday() == Weekday::Sun {
                         return Ok(true);
                     }
                 },
                 8 => { // Every Weekday
-                    match class_datetime.weekday() {
+                    match query_class_start_datetime_tz.weekday() {
                         Weekday::Mon | Weekday::Tue | Weekday::Wed | Weekday::Thu | Weekday::Fri => {
                             return Ok(true);
                         },
@@ -1373,7 +1467,7 @@ impl ScyllaConnector {
                     }
                 },
                 9 => { // Every Weekend
-                    match class_datetime.weekday() {
+                    match query_class_start_datetime_tz.weekday() {
                         Weekday::Sat | Weekday::Sun => {
                             return Ok(true);
                         },
@@ -1390,8 +1484,8 @@ impl ScyllaConnector {
                 },
                 12 | 16 => { // One off
                     // For one-off classes, check if the datetime exactly matches the scheduled time
-                    if class_datetime.date() == start_date && 
-                    class_time >= start_time && class_time <= end_time {
+                    if query_class_start_datetime_tz.date() == db_class_start_datetime_tz.date() && 
+                    query_class_start_time >= start_time && query_class_start_time <= end_time {
                         return Ok(true);
                     }
                 },
@@ -1399,14 +1493,14 @@ impl ScyllaConnector {
                     return Ok(true);
                 },
                 14 => { // Every fortnight
-                    let weeks_diff = (class_datetime.date() - start_date).num_weeks();
+                    let weeks_diff = (query_class_start_datetime_tz.date() - db_class_start_datetime_tz.date()).num_weeks();
                     if weeks_diff % 2 == 0 && weeks_diff >= 0 {
                         return Ok(true);
                     }
                 },
                 15 => { // Every month
                     // Check if it's the same day of month and time
-                    if class_datetime.day() == class_start_datetime.day() {
+                    if query_class_start_datetime_tz.day() == db_class_start_datetime.day() {
                         return Ok(true);
                     }
                 },
@@ -1417,7 +1511,7 @@ impl ScyllaConnector {
             }
         }
         
-        println!("Class {} is not valid for timestamp {}", class_id, class_start_ts);
+        println!("Class {} is not valid for timestamp {}", class_id, query_class_start_ts);
         Ok(false)
     }
 
@@ -1440,14 +1534,14 @@ impl ScyllaConnector {
             .await?
             .into_rows_result()?;
 
-        println!("Attendance query result: {:?}", result);
+        // println!("Attendance query result: {:?}", result);
         let mut attending_students: Vec<Uuid> = Vec::new();
         for row in result.rows()?
         {
             let (id, ): (Uuid, ) = row?;
             attending_students.push(id);
         }
-        println!("Attendance user list result: school:{:?} {:?}", school_id, attending_students);
+        // println!("Attendance user list result: school:{:?} {:?}", school_id, attending_students);
 
         let result = self.session
             .query_unpaged(
@@ -1457,7 +1551,7 @@ impl ScyllaConnector {
             .await?
             .into_rows_result()?;
 
-        println!("Attendance query result: {:?}", result);
+        // println!("Attendance query result: {:?}", result);
 
         let mut attendance: Vec<StudentClassAttendance> = Vec::new();
         for row in result.rows::<(Uuid, String, String, Option<String>, Uuid), >()?

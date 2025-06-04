@@ -20,6 +20,7 @@ argon2 = "0.5.3"
 rand_core = { version = "0.9.3", features = ["std"] }
 rand = "0.8"
 chrono = { version = "0.4", features = ["serde"]}
+chrono-tz = { version = "0.5", default-features = false }
 time = "0.3"
 futures-util = "0.3"
 dashmap = "5.5" # For concurrent HashMap

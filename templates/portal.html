@@ -4257,7 +4257,7 @@
             searchInput.addEventListener('input', (e) => {
                 clearTimeout(searchTimeout);
                 searchTimeout = setTimeout(() => {
-                this.searchStudents(e.target.value);
+                    this.searchStudents(e.target.value);
                 }, 300);
             });
 
@@ -4365,381 +4365,403 @@
                 return { top: topPosition, height };
             }
 
-            renderEvents() {
-            const eventsContainer = document.getElementById("events-container");
-            eventsContainer.innerHTML = "";
+                renderEvents() {
+                    const eventsContainer = document.getElementById("events-container");
+                    eventsContainer.innerHTML = "";
 
-            const sortedEvents = [...this.events].sort((a, b) => a.startTime - b.startTime);
+                    const sortedEvents = [...this.events].sort((a, b) => a.startTime - b.startTime);
 
-            sortedEvents.forEach((event) => {
-                if (
-                event.startTime.getHours() >= this.START_HOUR &&
-                event.startTime.getHours() <= this.END_HOUR
-                ) {
-                this.renderEvent(event);
+                    sortedEvents.forEach((event) => {
+                        if (
+                        event.startTime.getHours() >= this.START_HOUR &&
+                        event.startTime.getHours() <= this.END_HOUR
+                        ) {
+                        this.renderEvent(event);
+                        }
+                    });
+
+                    this.updateHighlights();
                 }
-            });
 
-            this.updateHighlights();
-            }
+                renderEvent(event) {
+                    const position = this.calculateEventPosition(event.startTime, event.endTime);
 
-            renderEvent(event) {
-            const position = this.calculateEventPosition(event.startTime, event.endTime);
+                    const eventElement = document.createElement("div");
+                    eventElement.className = "event";
+                    eventElement.id = `event-${event.id}`;
+                    eventElement.style.top = `${position.top}px`;
+                    eventElement.style.height = `${position.height}px`;
 
-            const eventElement = document.createElement("div");
-            eventElement.className = "event";
-            eventElement.id = `event-${event.id}`;
-            eventElement.style.top = `${position.top}px`;
-            eventElement.style.height = `${position.height}px`;
+                    // Add click handler for modal
+                    eventElement.addEventListener('click', () => {
+                        this.openModal(event);
+                    });
 
-            // Add click handler for modal
-            eventElement.addEventListener('click', () => {
-                this.openModal(event);
-            });
+                    const startTimeStr = event.startTime.toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        hour12: true,
+                    });
+                    const endTimeStr = event.endTime.toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        hour12: true,
+                    });
 
-            const startTimeStr = event.startTime.toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true,
-            });
-            const endTimeStr = event.endTime.toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true,
-            });
+                    eventElement.innerHTML = `
+                        <div class="event-title">${event.title}</div>
+                        <div class="event-time">${startTimeStr} - ${endTimeStr}</div>
+                        ${event.description ? `<div class="event-description">${event.description}</div>` : ""}
+                        ${event.location ? `<div class="event-description">📍 ${event.location}</div>` : ""}
+                    `;
 
-            eventElement.innerHTML = `
-                <div class="event-title">${event.title}</div>
-                <div class="event-time">${startTimeStr} - ${endTimeStr}</div>
-                ${event.description ? `<div class="event-description">${event.description}</div>` : ""}
-                ${event.location ? `<div class="event-description">📍 ${event.location}</div>` : ""}
-            `;
+                    const eventsContainer = document.getElementById("events-container");
+                    eventsContainer.appendChild(eventElement);
+                }
 
-            const eventsContainer = document.getElementById("events-container");
-            eventsContainer.appendChild(eventElement);
-            }
+                // Modal functionality
+                async openModal(event) {
+                    this.currentEvent = event;
+                    
+                    // Populate modal header
+                    document.getElementById('modal-event-title').textContent = event.title;
+                    document.getElementById('modal-event-description').textContent = event.description || '';
+                    document.getElementById('modal-event-location').textContent = event.location ? `📍 ${event.location}` : '';
+                    
+                    const timeStr = `${event.startTime.toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        hour12: true,
+                    })} - ${event.endTime.toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        hour12: true,
+                    })}`;
+                    document.getElementById('modal-event-time').textContent = `🕒 ${timeStr}`;
 
-            // Modal functionality
-            async openModal(event) {
-            this.currentEvent = event;
-            
-            // Populate modal header
-            document.getElementById('modal-event-title').textContent = event.title;
-            document.getElementById('modal-event-description').textContent = event.description || '';
-            document.getElementById('modal-event-location').textContent = event.location ? `📍 ${event.location}` : '';
-            
-            const timeStr = `${event.startTime.toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true,
-            })} - ${event.endTime.toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true,
-            })}`;
-            document.getElementById('modal-event-time').textContent = `🕒 ${timeStr}`;
-
-            // Show modal
-            document.getElementById('attendanceModal').classList.remove('hidden');
-            
-            // Load current students
-            await this.loadCurrentStudents();
-            }
+                    // Show modal
+                    document.getElementById('attendanceModal').classList.remove('hidden');
+                    
+                    // Load current students
+                    await this.loadCurrentStudents();
+                }
 
             closeModal() {
-            document.getElementById('attendanceModal').classList.add('hidden');
-            document.getElementById('student-search').value = '';
-            document.getElementById('search-results').classList.add('hidden');
-            this.currentEvent = null;
-            this.currentStudents = [];
+                document.getElementById('attendanceModal').classList.add('hidden');
+                document.getElementById('student-search').value = '';
+                document.getElementById('search-results').classList.add('hidden');
+                this.currentEvent = null;
+                this.currentStudents = [];
             }
 
             async loadCurrentStudents() {
-            try {
-                document.getElementById('loading-indicator').classList.remove('hidden');
-                
-                const timeSegment = 0; //this.getTimeSegment(this.currentEvent.startTime);
-                const response = await fetch('/api/class/get_students', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        class_id: this.currentEvent.classId,
-                        time_segment: timeSegment
-                    })
-                });
+                try {
+                    document.getElementById('loading-indicator').classList.remove('hidden');
+                    console.log('Loading students for class:', this.currentEvent.classId);
+                    const timeSegment = this.getTimeSegment(this.currentEvent.startTime);
+                    const response = await fetch('/api/class/get_students', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            class_id: this.currentEvent.classId,
+                            class_start_ts: timeSegment
+                        })
+                    });
 
-                if (response.ok) {
-                const data = await response.json();
-                this.currentStudents = data.students || [];
-                this.renderStudents();
-                } else {
-                console.error('Failed to load students');
-                this.currentStudents = [];
-                this.renderStudents();
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.currentStudents = data.students || [];
+                        this.renderStudents();
+                    } else {
+                        console.error('Failed to load students');
+                        this.currentStudents = [];
+                        this.renderStudents();
+                    }
+                } catch (error) {
+                    console.error('Error loading students:', error);
+                    this.currentStudents = [];
+                    this.renderStudents();
+                } finally {
+                    document.getElementById('loading-indicator').classList.add('hidden');
                 }
-            } catch (error) {
-                console.error('Error loading students:', error);
-                this.currentStudents = [];
-                this.renderStudents();
-            } finally {
-                document.getElementById('loading-indicator').classList.add('hidden');
-            }
             }
 
             async searchStudents(query) {
-            if (!query.trim()) {
-                document.getElementById('search-results').classList.add('hidden');
-                return;
-            }
-
-            try {
-                const response = await fetch(`/api/school/search_student?q=${encodeURIComponent(query)}`, {
-                method: 'GET',
-                });
-
-                if (response.ok) {
-                const data = await response.json();
-                this.renderSearchResults(data.students || []);
+                if (!query.trim()) {
+                    document.getElementById('search-results').classList.add('hidden');
+                    return;
                 }
-            } catch (error) {
-                console.error('Error searching students:', error);
-            }
+
+                const timeSegment = this.getTimeSegment(this.currentEvent.startTime);
+                try {
+                    document.getElementById('loading-indicator').classList.remove('hidden');
+                    const response = await fetch('/api/class/get_students', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            class_id: this.currentEvent.classId,
+                            class_start_ts: timeSegment,
+                            q: query.trim()
+                        })
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        const students = data.students || [];
+                        this.renderSearchResults(students);
+                    } else {
+                        console.error('Failed to search students');
+                        this.renderSearchResults([]);
+                    }
+
+                } catch (error) {
+                    console.error('Error showing loading indicator:', error);
+                }
+                document.getElementById('loading-indicator').classList.add('hidden');
             }
 
             renderSearchResults(students) {
-            const resultsContainer = document.getElementById('search-results');
-            
-            if (students.length === 0) {
-                resultsContainer.innerHTML = '<div class="p-4 text-gray-500 text-center">No students found</div>';
-            } else {
-                resultsContainer.innerHTML = students.map(student => `
-                <div class="student-search-item" data-student-id="${student.user_id}">
-                    <img src="${student.photo_url || '/default-avatar.png'}" alt="${student.first_name}" class="student-avatar">
-                    <div>
-                    <div class="font-medium text-gray-900">${student.first_name} ${student.last_name}</div>
-                    <div class="text-sm text-gray-500">ID: ${student.user_id}</div>
+                const resultsContainer = document.getElementById('search-results');
+                
+                if (students.length === 0) {
+                    resultsContainer.innerHTML = '<div class="p-4 text-gray-500 text-center">No students found</div>';
+                } else {
+                    resultsContainer.innerHTML = students.map(student => `
+                    <div class="student-search-item" data-student-id="${student.user_id}">
+                        <img src="${student.photo_url || '/default-avatar.png'}" alt="${student.first_name}" class="student-avatar">
+                        <div>
+                        <div class="font-medium text-gray-900">${student.first_name} ${student.last_name}</div>
+                        <div class="text-sm text-gray-500">ID: ${student.user_id}</div>
+                        </div>
                     </div>
-                </div>
-                `).join('');
+                    `).join('');
 
-                // Add click handlers
-                resultsContainer.querySelectorAll('.student-search-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    const studentId = item.dataset.studentId;
-                    this.toggleStudentAttendance(studentId);
-                });
-                });
-            }
+                    // Add click handlers
+                    resultsContainer.querySelectorAll('.student-search-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const studentId = item.dataset.studentId;
+                        const attended = this.currentStudents.find(s => s.user_id === studentId).attended;
+                        this.toggleStudentAttendance(studentId, !attended);
+                    });
+                    });
+                }
 
-            resultsContainer.classList.remove('hidden');
+                resultsContainer.classList.remove('hidden');
             }
 
             switchView(mode) {
-            this.currentViewMode = mode;
-            
-            // Update button states
-            if (mode === 'list') {
-                document.getElementById('list-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-900 shadow-sm';
-                document.getElementById('grid-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:text-gray-900';
-                document.getElementById('students-list-view').classList.remove('hidden');
-                document.getElementById('students-grid-view').classList.add('hidden');
-            } else {
-                document.getElementById('grid-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-900 shadow-sm';
-                document.getElementById('list-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:text-gray-900';
-                document.getElementById('students-list-view').classList.add('hidden');
-                document.getElementById('students-grid-view').classList.remove('hidden');
-            }
+                this.currentViewMode = mode;
+                
+                // Update button states
+                if (mode === 'list') {
+                    document.getElementById('list-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-900 shadow-sm';
+                    document.getElementById('grid-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:text-gray-900';
+                    document.getElementById('students-list-view').classList.remove('hidden');
+                    document.getElementById('students-grid-view').classList.add('hidden');
+                } else {
+                    document.getElementById('grid-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-900 shadow-sm';
+                    document.getElementById('list-view-btn').className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:text-gray-900';
+                    document.getElementById('students-list-view').classList.add('hidden');
+                    document.getElementById('students-grid-view').classList.remove('hidden');
+                }
             }
 
             renderStudents() {
-            this.renderStudentsList();
-            this.renderStudentsGrid();
+                this.renderStudentsList();
+                this.renderStudentsGrid();
             }
 
             renderStudentsList() {
-            const container = document.getElementById('students-list-view');
-            
-            if (this.currentStudents.length === 0) {
-                container.innerHTML = '<div class="text-center py-8 text-gray-500">No students in this class</div>';
-                return;
-            }
+                const container = document.getElementById('students-list-view');
+                
+                if (this.currentStudents.length === 0) {
+                    container.innerHTML = '<div class="text-center py-8 text-gray-500">No students in this class</div>';
+                    return;
+                }
 
-            container.innerHTML = this.currentStudents.map(student => `
-                <div class="student-list-item ${student.attending ? 'attending' : ''}" data-student-id="${student.user_id}">
-                <div class="flex items-center space-x-3">
-                    <img src="${student.photo_url || '/default-avatar.png'}" alt="${student.first_name}" class="student-avatar">
-                    <div>
-                    <div class="font-medium text-gray-900">${student.first_name} ${student.last_name}</div>
-                    <div class="text-sm text-gray-500">ID: ${student.user_id}</div>
+                container.innerHTML = this.currentStudents.map(student => `
+                    <div class="student-list-item ${student.attended ? 'attended' : ''}" data-student-id="${student.user_id}">
+                    <div class="flex items-center space-x-3">
+                        <img src="${student.photo_url || '/default-avatar.png'}" alt="${student.first_name}" class="student-avatar">
+                        <div>
+                        <div class="font-medium text-gray-900">${student.first_name} ${student.last_name}</div>
+                        <div class="text-sm text-gray-500">ID: ${student.user_id}</div>
+                        </div>
                     </div>
-                </div>
-                <div class="text-sm font-medium ${student.attending ? 'text-blue-600' : 'text-gray-400'}">
-                    ${student.attending ? '✓ Present' : 'Absent'}
-                </div>
-                </div>
-            `).join('');
+                    <div class="text-sm font-medium ${student.attended ? 'text-blue-600' : 'text-gray-400'}">
+                        ${student.attended ? '✓ Present' : 'Absent'}
+                    </div>
+                    </div>
+                `).join('');
 
-            // Add click handlers
-            container.querySelectorAll('.student-list-item').forEach(item => {
-                item.addEventListener('click', () => {
-                const studentId = item.dataset.studentId;
-                this.toggleStudentAttendance(studentId);
+                // Add click handlers
+                container.querySelectorAll('.student-list-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const studentId = item.dataset.studentId;
+                        const attended = this.currentStudents.find(s => s.user_id === studentId).attended;
+                        this.toggleStudentAttendance(studentId, !attended);
+                    });
                 });
-            });
             }
 
             renderStudentsGrid() {
-            const container = document.getElementById('students-grid-view');
-            
-            if (this.currentStudents.length === 0) {
-                container.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">No students in this class</div>';
-                return;
-            }
-
-            container.innerHTML = this.currentStudents.map(student => `
-                <div class="student-grid-item ${student.attending ? 'attending' : ''}" data-student-id="${student.user_id}">
-                <img src="${student.photo_url || '/default-avatar.png'}" alt="${student.first_name}" class="student-grid-avatar">
-                <div class="font-medium text-gray-900">${student.first_name}</div>
-                <div class="font-medium text-gray-900">${student.last_name}</div>
-                <div class="text-sm font-medium mt-2 ${student.attending ? 'text-blue-600' : 'text-gray-400'}">
-                    ${student.attending ? '✓ Present' : 'Absent'}
-                </div>
-                </div>
-            `).join('');
-
-            // Add click handlers
-            container.querySelectorAll('.student-grid-item').forEach(item => {
-                item.addEventListener('click', () => {
-                const studentId = item.dataset.studentId;
-                this.toggleStudentAttendance(studentId);
-                });
-            });
-            }
-
-            async toggleStudentAttendance(studentId) {
-            try {
-                const timeSegment = this.getTimeSegment(this.currentEvent.startTime);
+                const container = document.getElementById('students-grid-view');
                 
-                const response = await fetch('/api/class/student_attend', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    student_id: studentId,
-                    class_id: this.currentEvent.classId,
-                    time_segment: timeSegment
-                })
-                });
-
-                if (response.ok) {
-                // Reload students to get updated attendance
-                await this.loadCurrentStudents();
-                // Hide search results
-                document.getElementById('search-results').classList.add('hidden');
-                document.getElementById('student-search').value = '';
-                } else {
-                console.error('Failed to toggle attendance');
+                if (this.currentStudents.length === 0) {
+                    container.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">No students in this class</div>';
+                    return;
                 }
-            } catch (error) {
-                console.error('Error toggling attendance:', error);
+
+                container.innerHTML = this.currentStudents.map(student => `
+                    <div class="student-grid-item ${student.attended ? 'attended' : ''}" data-student-id="${student.user_id}">
+                    <img src="${student.photo_url || '/default-avatar.png'}" alt="${student.first_name}" class="student-grid-avatar">
+                    <div class="font-medium text-gray-900">${student.first_name}</div>
+                    <div class="font-medium text-gray-900">${student.last_name}</div>
+                    <div class="text-sm font-medium mt-2 ${student.attended ? 'text-blue-600' : 'text-gray-400'}">
+                        ${student.attended ? '✓ Present' : 'Absent'}
+                    </div>
+                    </div>
+                `).join('');
+
+                // Add click handlers
+                container.querySelectorAll('.student-grid-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const studentId = item.dataset.studentId;
+                        const attended = this.currentStudents.find(s => s.user_id === studentId).attended;
+                        this.toggleStudentAttendance(studentId, !attended);
+                    });
+                });
             }
+
+            async toggleStudentAttendance(studentId, attended) {
+                try {
+                    const timeSegment = this.getTimeSegment(this.currentEvent.startTime);
+                    
+                    const response = await fetch('/api/class/set_student_attendance', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            user_ids: [studentId],
+                            present: [attended],
+                            class_id: this.currentEvent.classId,
+                            class_start_ts: timeSegment
+                        })
+                    });
+
+                    if (response.ok) {
+                        // Reload students to get updated attendance
+                        await this.loadCurrentStudents();
+                        // Hide search results
+                        document.getElementById('search-results').classList.add('hidden');
+                        document.getElementById('student-search').value = '';
+                    } else {
+                        console.error('Failed to toggle attendance');
+                    }
+                } catch (error) {
+                    console.error('Error toggling attendance:', error);
+                }
             }
 
             getTimeSegment(date) {
-            // Convert date to time segment format
-            return date.toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false
-            });
+                // return the date timestamp
+                return Math.floor(date.getTime()); // Convert to seconds since epoch
+
+                // Convert date to time segment format
+                // return date.toLocaleTimeString("en-US", {
+                //     hour: "2-digit",
+                //     minute: "2-digit",
+                //     hour12: false
+                // });
             }
 
             // Keep existing methods for time indicator and highlighting...
             updateCurrentTimeIndicator() {
-            const existingIndicator = document.getElementById("current-time-indicator");
-            if (existingIndicator) {
-                existingIndicator.remove();
-            }
+                const existingIndicator = document.getElementById("current-time-indicator");
+                if (existingIndicator) {
+                    existingIndicator.remove();
+                }
 
-            const now = new Date();
-            const currentHour = now.getHours();
-            const currentMinutes = now.getMinutes();
+                const now = new Date();
+                const currentHour = now.getHours();
+                const currentMinutes = now.getMinutes();
 
-            if (currentHour >= this.START_HOUR && currentHour <= this.END_HOUR) {
-                const indicator = document.createElement("div");
-                indicator.className = "current-time-indicator";
-                indicator.id = "current-time-indicator";
+                if (currentHour >= this.START_HOUR && currentHour <= this.END_HOUR) {
+                    const indicator = document.createElement("div");
+                    indicator.className = "current-time-indicator";
+                    indicator.id = "current-time-indicator";
 
-                const timeLabel = document.createElement("div");
-                timeLabel.className = "current-time-label";
-                timeLabel.textContent = now.toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true,
-                });
-                indicator.appendChild(timeLabel);
+                    const timeLabel = document.createElement("div");
+                    timeLabel.className = "current-time-label";
+                    timeLabel.textContent = now.toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                    });
+                    indicator.appendChild(timeLabel);
 
-                const hoursFromStart = currentHour - this.START_HOUR;
-                const minutesOffset = currentMinutes / 60;
-                const topPosition = (hoursFromStart + minutesOffset) * this.SLOT_HEIGHT;
+                    const hoursFromStart = currentHour - this.START_HOUR;
+                    const minutesOffset = currentMinutes / 60;
+                    const topPosition = (hoursFromStart + minutesOffset) * this.SLOT_HEIGHT;
 
-                indicator.style.top = `${topPosition}px`;
+                    indicator.style.top = `${topPosition}px`;
 
-                const eventsContainer = document.getElementById("events-container");
-                eventsContainer.appendChild(indicator);
-            }
+                    const eventsContainer = document.getElementById("events-container");
+                    eventsContainer.appendChild(indicator);
+                }
             }
 
             updateHighlights() {
-            document.querySelectorAll(".event-highlight").forEach((el) => {
-                el.classList.remove("event-highlight");
-            });
+                document.querySelectorAll(".event-highlight").forEach((el) => {
+                    el.classList.remove("event-highlight");
+                });
 
-            const now = new Date();
-            let currentEvent = null;
-            let nextEvent = null;
-
-            this.events.forEach((event) => {
-                if (now >= event.startTime && now <= event.endTime) {
-                currentEvent = event;
-                }
-            });
-
-            if (!currentEvent) {
-                const thirtyMinutesFromNow = new Date(now.getTime() + 30 * 60 * 1000);
+                const now = new Date();
+                let currentEvent = null;
+                let nextEvent = null;
 
                 this.events.forEach((event) => {
-                if (event.startTime > now && event.startTime <= thirtyMinutesFromNow) {
-                    if (!nextEvent || event.startTime < nextEvent.startTime) {
-                    nextEvent = event;
+                    if (now >= event.startTime && now <= event.endTime) {
+                    currentEvent = event;
+                    }
+                });
+
+                if (!currentEvent) {
+                    const thirtyMinutesFromNow = new Date(now.getTime() + 30 * 60 * 1000);
+
+                    this.events.forEach((event) => {
+                    if (event.startTime > now && event.startTime <= thirtyMinutesFromNow) {
+                        if (!nextEvent || event.startTime < nextEvent.startTime) {
+                        nextEvent = event;
+                        }
+                    }
+                    });
+                }
+
+                const eventToHighlight = currentEvent || nextEvent;
+                if (eventToHighlight) {
+                    const eventElement = document.getElementById(`event-${eventToHighlight.id}`);
+                    if (eventElement) {
+                    eventElement.classList.add("event-highlight");
                     }
                 }
-                });
-            }
-
-            const eventToHighlight = currentEvent || nextEvent;
-            if (eventToHighlight) {
-                const eventElement = document.getElementById(`event-${eventToHighlight.id}`);
-                if (eventElement) {
-                eventElement.classList.add("event-highlight");
-                }
-            }
             }
 
             startHighlightUpdater() {
-            this.highlightInterval = setInterval(() => {
-                this.updateHighlights();
-                this.updateCurrentTimeIndicator();
-            }, 30000);
+                this.highlightInterval = setInterval(() => {
+                    this.updateHighlights();
+                    this.updateCurrentTimeIndicator();
+                }, 30000);
             }
 
             destroy() {
-            if (this.highlightInterval) {
-                clearInterval(this.highlightInterval);
-            }
+                if (this.highlightInterval) {
+                    clearInterval(this.highlightInterval);
+                }
             }
         }
 

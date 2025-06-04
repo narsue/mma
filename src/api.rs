@@ -492,6 +492,7 @@ pub struct SchoolUserId {
 pub struct GetClassStudentsRequest {
     pub class_id: Uuid,
     pub class_start_ts: i64,
+    pub q: Option<String>, // Optional query for filtering students
 }
 
 #[derive(Serialize)]
@@ -515,4 +516,5 @@ pub struct SetClassStudentsAttendanceRequest {
     pub class_id: Uuid,
     pub class_start_ts: i64,
     pub user_ids: Vec<Uuid>,
+    pub present: Vec<bool>,
 }
