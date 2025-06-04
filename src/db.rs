@@ -1,3 +1,4 @@
+use bigdecimal::num_bigint::BigInt;
 // use argon2::password_hash;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
@@ -64,6 +65,7 @@ pub struct ClassDataRow {
     pub styles: Vec<Uuid>,
     pub grades: Vec<Uuid>,
     pub deleted_ts: Option<CqlTimestamp>,
+    pub free_lessons: Option<i32>,
 }
 
 
@@ -274,7 +276,7 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     session
     .query_unpaged(
         "CREATE TABLE IF NOT EXISTS mma.class \
-        (school_id uuid, class_id uuid, venue_id uuid, waiver_id uuid, capacity int, publish_mode int, price decimal, timezone text, notify_booking boolean, title text, description text, created_ts timestamp, end_ts timestamp, creator_user_id uuid, styles SET<uuid>, grades SET<uuid>, gender_req text, deleted_ts timestamp, \
+        (school_id uuid, class_id uuid, venue_id uuid, waiver_id uuid, capacity int, publish_mode int, price decimal, timezone text, notify_booking boolean, title text, description text, created_ts timestamp, end_ts timestamp, creator_user_id uuid, styles SET<uuid>, grades SET<uuid>, gender_req text, deleted_ts timestamp, free_lessons int,\
             PRIMARY KEY (school_id, class_id))",
         &[],
     )
@@ -330,14 +332,25 @@ pub async fn init_schema(session: &Session) -> Result<()> {
     println!("Instructor table created");
 
     session
-    .query_unpaged(
-        "CREATE TABLE IF NOT EXISTS mma.attendance \
-        (user_id uuid, class_id uuid, is_instructor boolean, class_start_ts timestamp, checkin_ts timestamp, \
-            PRIMARY KEY (class_id, class_start_ts, user_id))",
-        &[],
-    )
-    .await?;
-    println!("Attendance table created");
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.attendance \
+            (user_id uuid, class_id uuid, is_instructor boolean, class_start_ts timestamp, checkin_ts timestamp, \
+                PRIMARY KEY (class_id, class_start_ts, user_id))",
+            &[],
+        )
+        .await?;
+        println!("Attendance table created");
+
+    session
+        .query_unpaged(
+            "CREATE TABLE IF NOT EXISTS mma.attendance_count \
+            (user_id uuid, class_id uuid, count int, \
+                PRIMARY KEY (class_id, user_id))",
+            &[],
+        )
+        .await?;
+        println!("Attendance count table created");
+
 
     session
     .query_unpaged(
@@ -1050,20 +1063,25 @@ impl ScyllaConnector {
 
 
     // Function to create a new waiver and make it current
-    pub async fn update_class(&self, school_id: &Uuid, _creator_user_id: &Uuid, class_id: &Uuid, title: &String, description: &String, venue_id: &Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequencyId>, notify_booking: bool, waiver_id: Option<Uuid>) -> AppResult<()> {
-        // Get current timestamp
-        // let now = SystemTime::now()
-        //     .duration_since(SystemTime::UNIX_EPOCH)
-        //     .unwrap_or_default()
-        //     .as_millis() as i64;
-        // let now = scylla::value::CqlTimestamp(now);
-        // let price: Option<CqlDecimal> = price
-        //     .map(|p| CqlDecimal::from(p));
-
+    pub async fn update_class(&self, school_id: &Uuid, _creator_user_id: &Uuid, class_id: &Uuid, title: &String, description: &String, venue_id: &Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequencyId>, notify_booking: bool, waiver_id: Option<Uuid>, free_lessons: i32) -> AppResult<()> {
+        
+        match waiver_id {
+            Some(waiver_id) => {
+                // Check if the waiver exists
+                let waiver_exists = self.get_waiver(school_id, &waiver_id).await?;
+                if waiver_exists.is_none() {
+                    return Err(AppError::Internal(format!("Waiver with ID {} does not exist", waiver_id)));
+                }
+            },
+            None => {
+                // If no waiver is provided, we can skip this check
+            }
+        }
+        
         self.session
             .query_unpaged(
-                "INSERT INTO mma.class (school_id, class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (school_id, class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids), 
+                "INSERT INTO mma.class (school_id, class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades, free_lessons) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (school_id, class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids, free_lessons), 
             )
             .await?;
 
@@ -1140,7 +1158,7 @@ impl ScyllaConnector {
     ) -> AppResult<Vec<ClassData>> {
 
         let result = self.session
-            .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts FROM mma.class where school_id = ?", (school_id, )) // Pass the query string and bound values
+            .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts, free_lessons FROM mma.class where school_id = ?", (school_id, )) // Pass the query string and bound values
             .await?
             .into_rows_result()?;
 
@@ -1164,6 +1182,7 @@ impl ScyllaConnector {
                     frequency: Vec::new(), // Initialize with an empty vector
                     styles: row.styles, // Initialize with an empty vector
                     grades: row.grades,
+                    free_lessons: row.free_lessons,
                 };
                 classes.push(class_data);
             } 
@@ -1345,6 +1364,76 @@ impl ScyllaConnector {
     }
 
 
+    pub async fn has_user_accepted_waiver(
+        &self,
+        user_id: &Uuid,
+        waiver_id: &Uuid,
+    ) -> AppResult<bool> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT user_id FROM mma.signed_waiver WHERE user_id = ? AND waiver_id = ?",
+                (user_id, waiver_id),
+            )
+            .await?
+            .into_rows_result()?;
+
+        if result.rows_num() > 0 {
+            return Ok(true); // User has accepted the waiver
+        }
+        Ok(false) // User has not accepted the waiver
+    }
+
+
+    pub async fn get_user_class_attendance_count(
+        &self,
+        user_id: &Uuid,
+        class_id: &Uuid,
+    ) -> AppResult<i32> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT count FROM mma.attendance_count WHERE user_id = ? AND class_id = ?",
+                (user_id, class_id),
+            )
+            .await?
+            .into_rows_result()?;
+
+        for row in result.rows::<(i32,)>()? {
+            let (count,) = row?;
+            return Ok(count);
+        }
+        Ok(0) // No attendance found
+    }
+
+    pub async fn can_user_pay(
+        &self,
+        user_id: &Uuid,
+    ) -> AppResult<bool> {
+        let stripe_payment_method_str = match self.dev_mode {
+            true => "dev_stripe_payment_method_ids", // Use a dummy ID in dev mode
+            false => "prod_stripe_payment_method_ids",
+        };
+
+        let result = self.session
+            .query_unpaged(
+                format!("SELECT COUNT({}) FROM mma.user WHERE user_id = ? ", stripe_payment_method_str),
+                (user_id, ),
+            )
+            .await?
+            .into_rows_result()?;
+
+        if result.rows_num() > 0 {
+            for row in result.rows::<(i64,)>()? {
+                let (count,) = row?;
+                if count > 0 {
+                    return Ok(true); // User has a payment method
+                }
+            }
+        }
+      
+        Ok(false) // User has not paid for the class
+    }
+
+
     pub async fn set_class_attendance(
         &self,
         class_id: &Uuid,
@@ -1354,14 +1443,75 @@ impl ScyllaConnector {
         class_start_ts: i64,
     ) -> AppResult<bool> {
 
+        let adding_student_count = present.iter().filter(|&&p| p).count();
+        let remove_student_count = present.iter().filter(|&&p| !p).count();
+        let total_student_attend_dif = adding_student_count as i32 - remove_student_count as i32;
+
         // SetClassStudentsAttendanceRequest
-        let class_valid_ts = self.is_valid_class_start(&class_id, &school_id, class_start_ts).await
-            .map_err(|app_err| AppError::Internal(app_err.to_string()) )?; // Convert potential AppError from validate
+        let class_valid_ts = self.is_valid_class_start(&class_id, &school_id, class_start_ts, Some(total_student_attend_dif)).await?;
+            // .map_err(|app_err| AppError::Internal(app_err.to_string()) )?; // Convert potential AppError from validate
         
         if !class_valid_ts {
             return Err(AppError::Internal("Invalid class start timestamp".to_string()));
         }
 
+        let result = self.session
+            .query_unpaged("SELECT waiver_id, price, free_lessons FROM mma.class where class_id = ? and school_id = ?", 
+            (class_id, school_id)) // Pass the query string and bound values
+            .await?
+            .into_rows_result()?;
+        
+        if result.rows_num() == 0 {
+            return Err(AppError::Internal(format!("Class with ID {} does not exist", class_id)));
+        }
+
+        for row in result.rows()? {
+            let (waiver_id, price, free_lessons): (Option<Uuid>, Option<BigDecimal>, Option<i32>) = row?;
+            match waiver_id {
+                Some(id) => {
+                    for (user, present) in user_ids.iter().zip(present.iter()) {
+                        if *present {
+                            // Check if user has accepted the waiver
+                            let accepted = self.has_user_accepted_waiver(user, &id).await?;
+                            if !accepted {
+                                return Err(AppError::UserWaiverNotAccepted(format!("")));
+                            }
+                        }
+                    }
+                },
+                None => {}
+            }
+
+            if price.is_some() {
+                let free_lessons = free_lessons.unwrap_or(0);
+                let price = price.unwrap_or(BigDecimal::from(0));
+                if price > BigDecimal::from(0) {
+                    // If the class has a price
+                    for (user, present) in user_ids.iter().zip(present.iter()) {
+                        if *present {
+                            // Check if user has paid for the class
+                            let classes_attended = self.get_user_class_attendance_count(user, class_id).await?;
+                            if free_lessons <= classes_attended {
+                                let user_can_pay = self.can_user_pay(user).await?;
+                                if !user_can_pay {
+                                    return Err(AppError::UserNoCreditCard("".to_string()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
+
+
+        // let result = self.session
+        //     .query_unpaged(
+        //         "SELECT deleted_ts, school_id, timezone, capacity FROM mma.class WHERE class_id = ?",
+        //         (class_id,),
+        //     )
+        //     .await?
+        //     .into_rows_result()?;   
 
         let class_start_ts: CqlTimestamp = scylla::value::CqlTimestamp(class_start_ts);
 
@@ -1380,9 +1530,16 @@ impl ScyllaConnector {
             )
             .await?;
 
+        let prepared_count = self
+            .session
+            .prepare(
+                "INSERT INTO mma.attendance_count (class_id, user_id, count) VALUES (?, ?, ?)"
+            )
+            .await?;
+
+
         // Create batch
         let mut batch = scylla::statement::batch::Batch::default();
-        
         // Add each user_id as a separate statement in the batch if present
         for (user_id, is_present) in user_ids.iter().zip(present.iter()) {
             if *is_present {
@@ -1428,6 +1585,21 @@ impl ScyllaConnector {
                 .await?;
         }
 
+        let mut batch = scylla::statement::batch::Batch::default();
+        let mut batch_values: Vec<_> = Vec::new();
+        // let classes_attended = self.get_user_class_attendance_count(user, class_id).await?;
+        for (user_id, is_present) in user_ids.iter().zip(present.iter()) {
+            if *is_present {
+                batch.append_statement(prepared_count.clone());
+                let attendance_count = self.get_user_class_attendance_count(user_id, class_id).await?;
+                batch_values .push((class_id, user_id, attendance_count)); // Increment count by 1 for each present user
+            }
+        }
+
+        // Execute batch for attendance count
+        self.session.batch(&batch, batch_values).await?;
+
+
 
         // println!("Attendance set for class {}: {:?}", class_id, user_ids);
         Ok(true)
@@ -1439,6 +1611,7 @@ impl ScyllaConnector {
         class_id: &Uuid,
         school_id: &Uuid,
         query_class_start_ts: i64,
+        student_attend_dif: Option<i32>,
     ) -> AppResult<bool> {
         let query_class_start_ts_cql: CqlTimestamp = scylla::value::CqlTimestamp(query_class_start_ts);
         
@@ -1456,7 +1629,7 @@ impl ScyllaConnector {
 
         let result = self.session
             .query_unpaged(
-                "SELECT deleted_ts, school_id, timezone FROM mma.class WHERE class_id = ?",
+                "SELECT deleted_ts, school_id, timezone, capacity FROM mma.class WHERE class_id = ?",
                 (class_id,),
             )
             .await?
@@ -1469,7 +1642,7 @@ impl ScyllaConnector {
         }
         let mut timezone = String::new();
         for row in result.rows()? {
-            let (deleted_ts, class_school_id, db_timezone): (CqlTimestamp, Uuid, String) = row?;
+            let (deleted_ts, class_school_id, db_timezone, capacity): (CqlTimestamp, Uuid, String, Option<i32>) = row?;
             
             // Check if the class is deleted
             if deleted_ts != CqlTimestamp(0) {
@@ -1484,6 +1657,40 @@ impl ScyllaConnector {
             }
             
             timezone = db_timezone;
+            match capacity {
+                Some(capacity) => {
+
+                    match student_attend_dif {
+                        Some(dif) => {
+                            if dif > 0 {
+                                let result = self.session
+                                    .query_unpaged(
+                                        "SELECT count(user_id) FROM mma.attendance WHERE class_id = ? and class_start_ts = ?",
+                                        (class_id, query_class_start_ts_cql),
+                                    )
+                                    .await?
+                                    .into_rows_result()?;
+
+
+                                let mut student_attend_count: i64 = 0;
+                                for row in result.rows()? {
+                                    let (count,): (i64,) = row?;
+                                    student_attend_count = count;
+                                }
+
+                                if student_attend_count as i32 + dif > capacity as i32 {
+                                    println!("Class with ID {} has insufficient capacity for the requested attendance change", class_id);
+                                    return Err(AppError::ClassIsFull(format!("")));
+                                    // return Ok(false);
+                                }
+                            }
+                        },
+                        None => {}
+                    }
+                },
+                None => {}
+            }
+
         }
 
 
@@ -1720,9 +1927,9 @@ impl ScyllaConnector {
 
     pub async fn get_class(&self, class_id: &Uuid, school_id: &Uuid) -> AppResult<Option<ClassData>> {
         let result = self.session
-        .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts FROM mma.class where class_id = ? and school_id = ?", (class_id, school_id)) // Pass the query string and bound values
-        .await?
-        .into_rows_result()?;
+            .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts, free_lessons FROM mma.class where class_id = ? and school_id = ?", (class_id, school_id)) // Pass the query string and bound values
+            .await?
+            .into_rows_result()?;
 
         let mut class: Option<ClassData> = None;
         for row in result.rows::<ClassDataRow>()?
@@ -1750,6 +1957,7 @@ impl ScyllaConnector {
                 frequency: Vec::new(), // Initialize with an empty vector
                 styles: Vec::new(), // Initialize with an empty vector
                 grades: Vec::new(), // Initialize with an empty vector
+                free_lessons: row.free_lessons,
             });
         }
         match class {

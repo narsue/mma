@@ -1039,6 +1039,7 @@ pub mod handlers {
             &parsed_frequency, // Pass the parsed frequency as a slice
             req_data.notify_booking,
             req_data.waiver_id, // Pass optional waiver_id
+            req_data.free_lessons
         ).await;
 
 
@@ -1193,8 +1194,6 @@ pub mod handlers {
         let auth_user_id = school_user_id.user_id; // Use the validated user ID
         let class_start_ts = req.class_start_ts; // Extract class_start_ts from query parameters
 
-        // GetClassStudentsRequest, GetClassStudentsResponse, StudentClassAttendance
-
         // Call the database function to get classes based on the provided filters
         let class_result: AppResult<Option<Vec<StudentClassAttendance>>> = state_manager.db.get_class_attendance(&class_id, &school_id, class_start_ts).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
 
@@ -1294,8 +1293,6 @@ pub mod handlers {
         let auth_user_id = school_user_id.user_id; // Use the validated user ID
         let class_start_ts = req.class_start_ts; // Extract class_start_ts from query parameters
 
-
-
         // Call the database function to get classes based on the provided filters
         let result: AppResult<bool> = state_manager.db.set_class_attendance(&class_id, &school_id, &req.user_ids, &req.present, class_start_ts).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
 
@@ -1309,10 +1306,24 @@ pub mod handlers {
                 }))
             },
             Err(app_err) => {
-                // A database error (AppError) occurred
                 tracing::error!("Database error setting class attendence list: {:?}", app_err);
-                // Convert the AppError into an ActixError representing a 500 Internal Server Error
-                Err(ErrorInternalServerError(app_err))
+
+                // Check if error is AppError::User
+                // if app_err.type_id() == AppError::User::type_id() {
+                // if let crate::error::AppError::UserNoCreditCard = app_err {
+                //     Err(ErrorInternalServerError(app_err))
+                // } else {
+                //     // A database error (AppError) occurred
+                //     // Convert the AppError into an ActixError representing a 500 Internal Server Error
+                //     Err(ErrorInternalServerError(app_err))
+                // }
+                Ok(HttpResponse::BadRequest().json(GenericResponse {
+                    success: false,
+                    error_message: Some(app_err.to_string()),
+                    message: None,
+                }))
+
+
             }
         }
     }

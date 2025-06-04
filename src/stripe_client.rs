@@ -36,7 +36,45 @@ pub struct CardDetails {
     pub exp_year: i32,
 }
 
-// Add the StripeClient struct definition
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaymentIntent {
+    pub id: String,
+    pub client_secret: String,
+    pub status: String,
+    pub amount: i64,
+    pub currency: String,
+    pub payment_method: Option<String>,
+    pub metadata: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Charge {
+    pub id: String,
+    pub amount: i64,
+    pub currency: String,
+    pub status: String,
+    pub paid: bool,
+    pub refunded: bool,
+    pub customer: Option<String>,
+    pub payment_method: Option<String>,
+    pub metadata: Option<HashMap<String, String>>,
+    pub created: i64,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Refund {
+    pub id: String,
+    pub amount: i64,
+    pub currency: String,
+    pub charge: String,
+    pub status: String,
+    pub reason: Option<String>,
+    pub metadata: Option<HashMap<String, String>>,
+    pub created: i64,
+}
+
+// Add the StripeClient struct definition (unchanged)
 pub struct StripeClient {
     pub client: reqwest::Client,
     pub base_url: String,
@@ -54,7 +92,7 @@ struct StripeConfig {
 }
 
 impl StripeClient {
-pub fn new(dev_mode: bool) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new(dev_mode: bool) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let config = Self::load_config()?;
         if dev_mode {
             if let (Some(secret_key), Some(public_key)) = (config.dev_secret_key, config.dev_public_key) {
@@ -220,4 +258,192 @@ pub fn new(dev_mode: bool) -> Result<Self, Box<dyn std::error::Error + Send + Sy
             Err(format!("Stripe API Error: {}", error_text).into())
         }
     }
+
+
+
+/// Charge a payment method for a specific amount
+    /// 
+    /// # Arguments
+    /// * `amount` - Amount in smallest currency unit (e.g., cents for USD)
+    /// * `currency` - ISO 4217 currency code (e.g., "usd", "aud")
+    /// * `payment_method_id` - The payment method to charge
+    /// * `customer_id` - Optional customer ID
+    /// * `transaction_id` - Your internal transaction ID
+    /// * `school_id` - Your internal school ID
+    /// * `user_id` - Your internal user ID
+    /// * `description` - Optional description for the charge
+    pub async fn charge_payment_method(
+        &self,
+        amount: i64,
+        currency: &str,
+        payment_method_id: &str,
+        customer_id: Option<&str>,
+        transaction_id: &str,
+        school_id: &str,
+        user_id: &str,
+        description: Option<&str>,
+    ) -> Result<PaymentIntent, Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!("{}/payment_intents", self.base_url);
+        
+        let mut form_data = HashMap::new();
+        form_data.insert("amount".to_string(), amount.to_string());
+        form_data.insert("currency".to_string(), currency.to_string());
+        form_data.insert("payment_method".to_string(), payment_method_id.to_string());
+        form_data.insert("confirm".to_string(), "true".to_string());
+        form_data.insert("off_session".to_string(), "true".to_string());
+        
+        if let Some(customer) = customer_id {
+            form_data.insert("customer".to_string(), customer.to_string());
+        }
+
+        if let Some(desc) = description {
+            form_data.insert("description".to_string(), desc.to_string());
+        }
+
+        // Add metadata
+        form_data.insert("metadata[transaction_id]".to_string(), transaction_id.to_string());
+        form_data.insert("metadata[school_id]".to_string(), school_id.to_string());
+        form_data.insert("metadata[user_id]".to_string(), user_id.to_string());
+
+        let response = self
+            .client
+            .post(&url)
+            .basic_auth(&self.secret_key, Some(""))
+            .form(&form_data)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            let payment_intent: PaymentIntent = response.json().await?;
+            Ok(payment_intent)
+        } else {
+            let error_text = response.text().await?;
+            Err(format!("Stripe API Error: {}", error_text).into())
+        }
+    }
+
+    /// Get all charges for a specific customer
+    /// 
+    /// # Arguments
+    /// * `customer_id` - The customer ID to get charges for
+    /// * `limit` - Optional limit (default 10, max 100)
+    pub async fn list_customer_charges(
+        &self,
+        customer_id: &str,
+        limit: Option<i32>,
+    ) -> Result<Vec<Charge>, Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!("{}/charges", self.base_url);
+        
+        let mut query_params = HashMap::new();
+        query_params.insert("customer".to_string(), customer_id.to_string());
+        
+        if let Some(limit_val) = limit {
+            let clamped_limit = limit_val.clamp(1, 100);
+            query_params.insert("limit".to_string(), clamped_limit.to_string());
+        } else {
+            query_params.insert("limit".to_string(), "10".to_string());
+        }
+
+        let response = self
+            .client
+            .get(&url)
+            .basic_auth(&self.secret_key, Some(""))
+            .query(&query_params)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            #[derive(Deserialize)]
+            struct ChargesList {
+                data: Vec<Charge>,
+            }
+            
+            let list: ChargesList = response.json().await?;
+            Ok(list.data)
+        } else {
+            let error_text = response.text().await?;
+            Err(format!("Stripe API Error: {}", error_text).into())
+        }
+    }
+
+    /// Refund a charge either partially or completely
+    /// 
+    /// # Arguments
+    /// * `charge_id` - The charge ID to refund
+    /// * `amount` - Optional amount to refund (if None, refunds the full amount)
+    /// * `reason` - Optional reason for the refund ("duplicate", "fraudulent", "requested_by_customer")
+    /// * `metadata` - Optional metadata for the refund
+    pub async fn refund_charge(
+        &self,
+        charge_id: &str,
+        amount: Option<i64>,
+        reason: Option<&str>,
+        metadata: Option<HashMap<String, String>>,
+    ) -> Result<Refund, Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!("{}/refunds", self.base_url);
+        
+        let mut form_data = HashMap::new();
+        form_data.insert("charge".to_string(), charge_id.to_string());
+        
+        if let Some(refund_amount) = amount {
+            form_data.insert("amount".to_string(), refund_amount.to_string());
+        }
+
+        if let Some(refund_reason) = reason {
+            // Validate reason is one of the allowed values
+            match refund_reason {
+                "duplicate" | "fraudulent" | "requested_by_customer" => {
+                    form_data.insert("reason".to_string(), refund_reason.to_string());
+                }
+                _ => {
+                    return Err("Invalid refund reason. Must be 'duplicate', 'fraudulent', or 'requested_by_customer'".into());
+                }
+            }
+        }
+
+        // Add metadata if provided
+        if let Some(meta) = metadata {
+            for (key, value) in meta {
+                form_data.insert(format!("metadata[{}]", key), value);
+            }
+        }
+
+        let response = self
+            .client
+            .post(&url)
+            .basic_auth(&self.secret_key, Some(""))
+            .form(&form_data)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            let refund: Refund = response.json().await?;
+            Ok(refund)
+        } else {
+            let error_text = response.text().await?;
+            Err(format!("Stripe API Error: {}", error_text).into())
+        }
+    }
+
+    /// Convenience method to refund a charge completely
+    pub async fn refund_charge_full(
+        &self,
+        charge_id: &str,
+        reason: Option<&str>,
+        metadata: Option<HashMap<String, String>>,
+    ) -> Result<Refund, Box<dyn std::error::Error + Send + Sync>> {
+        self.refund_charge(charge_id, None, reason, metadata).await
+    }
+
+    /// Convenience method to refund a charge partially
+    pub async fn refund_charge_partial(
+        &self,
+        charge_id: &str,
+        amount: i64,
+        reason: Option<&str>,
+        metadata: Option<HashMap<String, String>>,
+    ) -> Result<Refund, Box<dyn std::error::Error + Send + Sync>> {
+        self.refund_charge(charge_id, Some(amount), reason, metadata).await
+    }
+
 }

@@ -23,6 +23,18 @@ pub enum AppError {
     
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("User error: {0}")]
+    User(String),
+
+    #[error("User has no credit card, please add one to your account {0}")]
+    UserNoCreditCard(String),
+
+    #[error("User must accept waiver {0}")]
+    UserWaiverNotAccepted(String),
+
+    #[error("Class is full {0}")]
+    ClassIsFull(String),
 }
 
 pub type Result<T> = std::result::Result<T, AppError>;

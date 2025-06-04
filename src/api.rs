@@ -271,6 +271,7 @@ pub struct UpdateClassRequest {
     pub waiver_id: Option<Uuid>,
     pub publish_mode: i32,
     pub style_ids: Vec<Uuid>,
+    pub free_lessons: i32, // Assuming this is a timestamp
 }
 
 // Struct for the JSON response after trying to create a class
@@ -297,6 +298,7 @@ pub struct ClassData {
     pub frequency: Vec<ClassFrequencyId>,
     pub styles: Vec<Uuid>,
     pub grades: Vec<Uuid>,
+    pub free_lessons: Option<i32>, // Assuming this is a timestamp
 }
 
 

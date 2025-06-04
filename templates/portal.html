@@ -778,7 +778,11 @@
                             </div>
                             <div class="form-group">
                                 <label for="edit-class-capacity">Capacity:</label>
-                                <input type="number" id="edit-class-capacity" value="10" required>
+                                <input type="number" id="edit-class-capacity">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-class-free_lessons">Free Lessons:</label>
+                                <input type="number" id="edit-class-free_lessons">
                             </div>
 
                              <!-- Frequency Section for Edit -->
@@ -3094,6 +3098,8 @@
              const editClassNotifyBookingCheckbox = document.getElementById('edit-class-notify-booking');
              const editClassWaiverIdInput = document.getElementById('edit-class-waiver-id');
              const editClassMessageDiv = document.getElementById('edit-class-message');
+             const editClassFreeLessonsInput = document.getElementById('edit-class-free_lessons');
+             
 
             // Venue Info Modal Elements
             const venueInfoContentDiv = document.getElementById('venue-info-content');
@@ -3879,6 +3885,7 @@
                 const priceString = editClassPriceInput.value.trim();
                 const publish_mode = parseInt(editClassPublishModeInput.value, 10);
                 const capacity = parseInt(editClassCapacityInput.value, 10);
+                const free_lessons = parseInt(editClassFreeLessonsInput.value.trim());
                 const notify_booking = editClassNotifyBookingCheckbox.checked;
                 const waiver_id_string = editClassWaiverIdInput.value.trim();
 
@@ -4000,12 +4007,13 @@
                     venue_id: venue_id,
                     style_ids: style_ids,
                     grading_ids: grading_ids,
-                    price: price ? parseFloat(price) : null,
+                    price: price ? price : null,
                     publish_mode: publish_mode,
                     capacity: capacity,
                     frequency: frequencies, // Use the corrected 'frequencies' variable name
                     notify_booking: notify_booking,
                     waiver_id: waiver_id,
+                    free_lessons: free_lessons // Convert to number if not null
                 };
 
                 // console.log("Sending class update request:", requestBody);
@@ -4090,7 +4098,8 @@
                          editClassGradingIdsInput.value = cls.grading_ids ? cls.grading_ids.join(', ') : '';
                          editClassPriceInput.value = cls.price !== undefined && cls.price !== null ? parseFloat(cls.price) : '';
                          editClassPublishModeInput.value = cls.publish_mode !== undefined ? cls.publish_mode : 0;
-                         editClassCapacityInput.value = cls.capacity !== undefined ? cls.capacity : 10;
+                         editClassCapacityInput.value = cls.capacity !== undefined ? cls.capacity : null;
+                         editClassFreeLessonsInput.value = cls.free_lessons !== undefined ? cls.free_lessons : 0;
 
                          // Populate frequencies for edit
                          editFrequencyContainer.innerHTML = ''; // Clear existing frequencies
@@ -4817,12 +4826,58 @@
                     });
 
                     if (response.ok) {
+                        console.log(`Attendance for student ${studentId} toggled to ${attended ? 'present' : 'absent'}`);
                         // Reload students to get updated attendance
                         await this.loadCurrentStudents();
                         // Hide search results
                         document.getElementById('search-results').classList.add('hidden');
                         document.getElementById('student-search').value = '';
                     } else {
+                        // Show error message - show a popup
+                        const errorData = await response.json();
+                        const errorMessage = errorData.error_message || 'Failed to toggle attendance';
+                        // Show error in a modal error box
+                        const errorModal = document.createElement('div');
+                        errorModal.style.position = 'fixed';
+                        errorModal.style.top = '0';
+                        errorModal.style.left = '0';
+                        errorModal.style.width = '100vw';
+                        errorModal.style.height = '100vh';
+                        errorModal.style.background = 'rgba(0,0,0,0.4)';
+                        errorModal.style.zIndex = '9999';
+                        errorModal.innerHTML = `
+                            <div style="
+                                background: white;
+                                max-width: 400px;
+                                margin: 10vh auto;
+                                padding: 24px 32px;
+                                border-radius: 8px;
+                                box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+                                text-align: center;
+                                position: relative;
+                            ">
+                                <div style="color: #dc2626; font-size: 1.2rem; font-weight: bold; margin-bottom: 12px;">
+                                    Error
+                                </div>
+                                <div style="color: #991b1b; margin-bottom: 20px;">
+                                    ${errorMessage}
+                                </div>
+                                <button id="close-error-modal" style="
+                                    background: #ef4444;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    padding: 8px 20px;
+                                    font-size: 1rem;
+                                    cursor: pointer;
+                                ">Close</button>
+                            </div>
+                        `;
+                        document.body.appendChild(errorModal);
+                        document.getElementById('close-error-modal').onclick = () => {
+                            document.body.removeChild(errorModal);
+                        };
+
                         console.error('Failed to toggle attendance');
                     }
                 } catch (error) {
