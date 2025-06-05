@@ -67,7 +67,7 @@ impl FromRequest for LoggedUser {
 // Helper method to validate the session in the handler
 impl LoggedUser {
     pub async fn validate(&mut self, state: &Arc<StoreStateManager>  ) -> Result<Uuid, actix_web::Error> {
-        let verification_result = state.db.verify_session(self.logged_user_id, &self.session_token).await;
+        let verification_result = state.db.verify_session(&self.logged_user_id, &self.session_token).await;
         
         match verification_result {
             Ok((true, expires_ts_millis, school_user_ids)) => {

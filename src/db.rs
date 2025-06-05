@@ -93,7 +93,7 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
     
     // Verify the password against the hash
     let result = Argon2::default().verify_password(password.as_bytes(), &parsed_hash).is_ok();
-    
+    // let result = true;
     Ok(result)
 }
 
@@ -115,6 +115,7 @@ pub async fn create_prepared_statement(session: &Session, query: &str) -> Result
 
 
 pub async fn init_schema(session: &Session) -> Result<()> {
+    println!("Building keyspace mma");
     // Create keyspace
     session
         .query_unpaged(
@@ -567,7 +568,7 @@ impl ScyllaConnector {
     }
 
 
-    pub async fn get_logged_user_school_ids(&self, logged_user_id: Uuid) -> Result<Vec<SchoolUserId>> {
+    pub async fn get_logged_user_school_ids(&self, logged_user_id: &Uuid) -> Result<Vec<SchoolUserId>> {
         let result = self.session
             .query_unpaged(
                 "SELECT school_user_ids FROM mma.logged_user WHERE logged_user_id = ?",
@@ -587,7 +588,7 @@ impl ScyllaConnector {
 
 
     // Verify a session token and return the user ID if valid
-    pub async fn verify_session(&self, logged_user_id: Uuid, session_token: &str) -> Result<(bool, i64, Option::<Vec<SchoolUserId>>)> {
+    pub async fn verify_session(&self, logged_user_id: &Uuid, session_token: &str) -> Result<(bool, i64, Option::<Vec<SchoolUserId>>)> {
         // println!("Verifying session: {}", session_token);
         let result = self.session
             .query_unpaged(
@@ -625,7 +626,7 @@ impl ScyllaConnector {
     }
     
     // Invalidate a session (logout)
-    pub async fn invalidate_session(&self, user_id: Uuid, session_token: &str) -> Result<()> {
+    pub async fn invalidate_session(&self, user_id: &Uuid, session_token: &str) -> Result<()> {
         self.session
             .query_unpaged(
                 "UPDATE mma.session SET is_active = false WHERE session_token = ? and logged_user_id = ?",

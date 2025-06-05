@@ -1,0 +1,7 @@
+FROM python:3.11-slim
+
+RUN pip install requests cassandra-driver
+
+# COPY CI/test_endpoints.py /test_endpoints.py
+
+CMD ["python", "/test_endpoints.py"]

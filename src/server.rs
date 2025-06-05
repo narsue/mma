@@ -34,6 +34,13 @@ pub mod handlers {
     use urlencoding;
     use std::time::SystemTime;
 
+    #[get("/api/version")]
+    pub async fn get_version() -> HttpResponse {
+        // CARGO_PKG_VERSION is set by Cargo.toml automatically
+        let version = env!("CARGO_PKG_VERSION");
+        HttpResponse::Ok().body(version)
+    }
+
 
     // Get User Profile Handler ---
     #[get("/api/user/profile_data")]
@@ -475,7 +482,7 @@ pub mod handlers {
             let session_token = cookie.value();
             
             // Invalidate the session
-            if let Err(e) = state_manager.db.invalidate_session(user_id, session_token).await {
+            if let Err(e) = state_manager.db.invalidate_session(&user_id, session_token).await {
                 tracing::error!("Failed to invalidate session: {:?}", e);
                 return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                     "success": false,

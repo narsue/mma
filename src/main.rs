@@ -21,11 +21,51 @@ use state::StoreStateManager;
 use server::handlers;
 use actix_web::middleware::Logger; // Correct import for Logger
 use templates::{load_templates, watch_templates};
+use tracing::{Event, Subscriber};
+use tracing_subscriber::fmt::{self, format::FormatEvent, format::FormatFields};
+use tracing_subscriber::fmt::writer::BoxMakeWriter;
+use tracing_subscriber::registry::LookupSpan;
+use std::fmt::Write;
+
+struct CustomFormatter;
+
+impl<S, N> FormatEvent<S, N> for CustomFormatter
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        ctx: &fmt::FmtContext<'_, S, N>,
+        mut writer: fmt::format::Writer<'_>,
+        event: &Event<'_>,
+    ) -> std::fmt::Result {
+        let meta = event.metadata();
+        write!(writer, "[{}] ", meta.level())?;
+
+        if let Some(file) = meta.file() {
+            if file.starts_with("src/") {
+                if let Some(line) = meta.line() {
+                    write!(writer, "{}:{} ", file, line)?;
+                } else {
+                    write!(writer, "{} ", file)?;
+                }
+            }
+        }
+
+        ctx.format_fields(writer.by_ref(), event)?;
+        writeln!(writer)
+    }
+}
+
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .event_format(CustomFormatter)
+        .init();
+
     tracing::info!("Starting MMA Node");
 
     // Check local .env file for development mode
@@ -80,6 +120,9 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
             // --- Serve CSS from Cache ---
             // .service(handlers::serve_css)
+
+            // Server info
+            .service(handlers::get_version)
 
             // --- Page Routes ---
             .service(handlers::home_page)
@@ -139,7 +182,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::delete_payment_method_handler)
             
     })
-    .bind("127.0.0.1:1227")?
+    .bind("0.0.0.0:1227")?
     .run();
     
     // Wait for server to finish
