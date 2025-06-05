@@ -257,6 +257,15 @@ pub mod handlers {
     //     }
     // }
 
+    #[get("/health")]
+    pub async fn health() -> HttpResponse {
+        HttpResponse::Ok().json(serde_json::json!({
+            "status": "healthy",
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        }))
+    }
+
+
     #[get("/")]
     pub async fn home_page(cache: web::Data<TemplateCache>) -> HttpResponse {
         match get_template_content(&cache, "home.html") {

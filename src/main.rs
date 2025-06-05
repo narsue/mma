@@ -73,6 +73,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Check local .env file for development mode
     dotenv::dotenv().ok(); // Load environment variables from .env file if it exists
 
+// Read port from environment variable, default to 1227
+    let port: u16 = std::env::var("APP_PORT")
+        .unwrap_or_else(|_| "1227".to_string())
+        .parse::<u16>()
+        .expect("APP_PORT must be a valid port number");
+
     let dev_mode = std::env::var("DEV_MODE").is_ok();
     if dev_mode {
         tracing::info!("Running in development mode");
@@ -112,7 +118,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let template_data = web::Data::new(template_cache);
     let stripe_client_data = web::Data::new(stripe_client);
     
-    tracing::info!("Starting HTTP server on 127.0.0.1:1227");
+    tracing::info!("Starting HTTP server on 127.0.0.1:{}", port);
     let server = HttpServer::new(move || {
         App::new()
             .app_data(processor_data.clone())
@@ -125,7 +131,9 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
             // Server info
             .service(handlers::get_version)
+            .service(handlers::health)
 
+            
             // --- Page Routes ---
             .service(handlers::home_page)
             // .service(handlers::login_signup_page)
@@ -184,7 +192,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::delete_payment_method_handler)
             
     })
-    .bind("0.0.0.0:1227")?
+    .bind(format!("0.0.0.0:{}", port))?
     .run();
     
     // Wait for server to finish
