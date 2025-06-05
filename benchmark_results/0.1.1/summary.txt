@@ -24,3 +24,17 @@ api/style/get_list        | 5434.6951            | 0.0009s              | 0.0010
 api/venue/get_list        | 5272.5779            | 0.0009s              | 0.0011s              | 0.0017s             
 api/class/get_class       | 38667.9659           | 0.0001s              | 0.0002s              | 0.0004s             
 api/class/get_style       | 44037.0722           | 0.0001s              | 0.0001s              | 0.0006s             
+CPU: Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz
+
+Benchmark                 | Req/sec              | Avg latency          | 90%                  | 99%                 
+-----------------------------------------------------------------------------------------------
+version                   | 58377.6819           | 0.0002s              | 0.0003s              | 0.0006s             
+home_page                 | 39117.1555           | 0.0002s              | 0.0003s              | 0.0069s             
+login_success             | [0;31m87.8704             [0m | 0.0562s              | 0.0651s              | 0.0689s             
+login_bad_password_fail   | [0;31m88.5313             [0m | 0.0559s              | 0.0643s              | 0.0695s             
+login_no_user_fail        | 18597.4412           | 0.0003s              | 0.0003s              | 0.0008s             
+api/class/get_list        | 4727.5918            | 0.0011s              | 0.0013s              | 0.0017s             
+api/style/get_list        | 5399.7694            | 0.0009s              | 0.0011s              | 0.0018s             
+api/venue/get_list        | 5441.4057            | 0.0009s              | 0.0010s              | 0.0017s             
+api/class/get_class       | 37435.6743           | 0.0001s              | 0.0002s              | 0.0007s             
+api/class/get_style       | 40203.2031           | 0.0001s              | 0.0002s              | 0.0006s             

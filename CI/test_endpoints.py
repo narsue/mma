@@ -13,7 +13,7 @@ def wipe_db():
     # print("🔁 Connecting to ScyllaDB to truncate all tables in `mma`...")
     
     auth_provider = PlainTextAuthProvider(username='cassandra', password='cassandra')
-    cluster = Cluster(['rustpod'], auth_provider=auth_provider, port=9042)
+    cluster = Cluster(['mmapod'], auth_provider=auth_provider, port=9042)
     session = cluster.connect()
 
     keyspace = 'ci_mma'

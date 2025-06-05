@@ -9,6 +9,8 @@ mod auth;
 mod templates;
 mod email_sender;
 mod stripe_client;
+mod db_migrate;
+use db_migrate::MigrationTool;
 
 use email_sender::send_custom_email;
 use stripe_client::StripeClient;

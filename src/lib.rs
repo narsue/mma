@@ -8,6 +8,7 @@ pub mod templates;
 pub mod server;
 pub mod email_sender;
 pub mod auth;
+pub mod db_migrate;
 mod stripe_client;
 // re-export items if you prefer a flat structure:
 pub use db::ScyllaConnector;

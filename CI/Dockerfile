@@ -20,7 +20,8 @@ COPY src src
 COPY benches benches
 
 RUN sed -i 's/ mma/ ci_mma/g' src/db.rs
-RUN sed -i 's/127.0.0.1:9042/rustpod:9042/g' src/main.rs
+RUN sed -i 's/\"mma\"/\"ci_mma\"/g' src/db.rs
+RUN sed -i 's/127.0.0.1:9042/mmapod:9042/g' src/main.rs
 
 
 # Build your actual project
@@ -37,6 +38,7 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 # Copy built binary from builder
 COPY --from=builder /usr/local/bin/app /usr/local/bin/app
 COPY templates templates
+COPY schema schema
 COPY auth auth
 RUN echo "DEV_MODE=1" > .env
 
