@@ -1,0 +1,82 @@
+# ---- Stage 1: Build ----
+FROM docker.io/rust:1.87-slim AS builder
+
+# Install required tools and create workdir
+RUN apt-get update && apt-get install -y pkg-config libssl-dev zip build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy actual source code
+COPY Cargo.toml Cargo.toml
+COPY Cargo.lock Cargo.lock
+COPY src src
+COPY benches benches
+
+RUN sed -i 's/ mma/ ci_mma/g' src/db.rs
+RUN sed -i 's/\"mma\"/\"ci_mma\"/g' src/db.rs
+RUN sed -i 's/127.0.0.1:9042/mmapod:9042/g' src/main.rs
+
+# Build your actual project
+RUN cargo build --release
+
+# Strip the binary for smaller size BEFORE zipping
+RUN strip target/release/mma
+
+# Create the runtime .env file
+RUN echo "DEV_MODE=1" > /.env_runtime
+
+# Zip the stripped binary
+RUN zip -j /mma_app.zip /app/target/release/mma
+
+RUN ls -lh /mma_app.zip
+
+# Create the startup script in the builder stage
+# IMPORTANT CHANGE: Use "./mma_app.zip" instead of "/mma_app.zip"
+RUN echo "#!/bin/dash\n\
+cd /app\n\
+unzip /app/mma_app.zip -d /tmp\n\
+exec /tmp/mma\n" > /run_app.sh \
+    && chmod +x /run_app.sh
+
+# ---- Stage 2: Runtime ----
+FROM gcr.io/distroless/cc-debian12
+
+# Set the working directory to /app
+WORKDIR /app
+
+
+
+# Copy unzip and its dependencies
+COPY --from=builder /usr/bin/unzip /usr/bin/unzip
+COPY --from=builder /bin/dash /bin/dash
+COPY --from=builder /bin/rm /bin/rm
+
+# Copy all required shared libraries
+COPY --from=builder /lib/x86_64-linux-gnu/libc.so.6 /lib/x86_64-linux-gnu/
+COPY --from=builder /lib/x86_64-linux-gnu/libbz2.so.1.0 /lib/x86_64-linux-gnu/
+COPY --from=builder /lib/x86_64-linux-gnu/liblzma.so.5 /lib/x86_64-linux-gnu/
+COPY --from=builder /lib/x86_64-linux-gnu/libz.so.1 /lib/x86_64-linux-gnu/
+COPY --from=builder /lib64/ld-linux-x86-64.so.2 /lib64/
+
+# Copy CA certificates
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copy your zipped application binary to the WORKDIR in the runtime stage
+COPY --chown=65532:65532 --from=builder /mma_app.zip /app/mma_app.zip
+
+# Copy the pre-created startup script to the WORKDIR in the runtime stage
+COPY --chown=65532:65532 --from=builder /run_app.sh /app/run_app.sh
+
+# Copy application assets
+COPY templates templates
+COPY schema schema
+COPY auth auth
+
+# Copy the pre-created .env file to the WORKDIR
+COPY --from=builder /.env_runtime /app/.env
+
+EXPOSE 1227
+
+# Set the command to run your application via the startup script
+CMD ["/app/run_app.sh"]

@@ -1,10 +1,12 @@
-# roughly 42 MB image - can do the experimental version that compresses the binary and reduces it to 34MB but is a bit more complex of a docker image.
+# runs native speed. Tar is 42mb seems worth it. 
+# Release optimisation level = "s" makes it 38mb but drops performance by aroudn 20%.
+
+
 # ---- Stage 1: Build ----
 FROM docker.io/rust:1.87-slim AS builder
 
 # Install required tools and create workdir
-RUN apt-get update && apt-get install -y pkg-config libssl-dev zip build-essential \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y pkg-config libssl-dev
 
 WORKDIR /app
 
@@ -18,6 +20,7 @@ RUN sed -i 's/ mma/ ci_mma/g' src/db.rs
 RUN sed -i 's/\"mma\"/\"ci_mma\"/g' src/db.rs
 RUN sed -i 's/127.0.0.1:9042/mmapod:9042/g' src/main.rs
 
+
 # Build your actual project
 RUN cargo build --release
 
@@ -26,8 +29,6 @@ RUN cp /app/target/release/mma /usr/local/bin/app
 RUN echo "DEV_MODE=1" > /.env
 
 RUN ls -lh /usr/local/bin/app
-
-
 # ---- Stage 2: Runtime ----
 FROM gcr.io/distroless/cc-debian12:nonroot 
 # Or just cc-debian12 for root user

@@ -77,6 +77,7 @@ run_benchmark() {
 
 
 run_benchmark version "hey -n 1000 -c 10 http://127.0.0.1:1227/api/version"
+run_benchmark health "hey -n 1000 -c 10 http://127.0.0.1:1227/api/health"
 
 run_benchmark home_page "hey -n 1000 -c 10 http://127.0.0.1:1227"
 

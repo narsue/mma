@@ -44,7 +44,7 @@ run_command podman build -f CI/Dockerfile.dev -t mma_dev \
 echo "Running mma rust web app in CI mode..."
 run_command podman run -d --pod mmapod --rm --name mma mma_dev
 
-sleep 5
+# sleep 5
 
 # Build and run tests
 echo "Building test container..."

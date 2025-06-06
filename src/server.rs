@@ -257,7 +257,7 @@ pub mod handlers {
     //     }
     // }
 
-    #[get("/health")]
+    #[get("/api/health")]
     pub async fn health() -> HttpResponse {
         HttpResponse::Ok().json(serde_json::json!({
             "status": "healthy",

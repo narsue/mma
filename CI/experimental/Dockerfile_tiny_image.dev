@@ -1,0 +1,62 @@
+# This build results in a 34mb tar image but a 20-30% performance decrease. So not worth the space savings. The image size is mostly the app size itself. Because of static binding the app itself is around 30mb.
+
+# ---- Stage 1: Build ----
+FROM docker.io/rust:1.87-alpine AS builder
+
+# Ensure all build dependencies for musl target are installed
+# musl-dev: provides musl libc headers and libraries
+# pkgconfig: helps locate libraries via .pc files
+# openssl-dev openssl-libs-static: for OpenSSL
+# gcc: often needed by cc-rs even with musl target
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev openssl-libs-static gcc
+
+WORKDIR /app
+
+COPY Cargo.toml Cargo.lock ./
+COPY src src
+COPY benches benches
+
+ENV PKG_CONFIG_ALL_STATIC=1 \
+    RUSTFLAGS="-C target-feature=+crt-static -C link-arg=-s"
+
+RUN sed -i 's/ mma/ ci_mma/g' src/db.rs
+RUN sed -i 's/\"mma\"/\"ci_mma\"/g' src/db.rs
+RUN sed -i 's/127.0.0.1:9042/mmapod:9042/g' src/main.rs
+
+# This line creates the runtime_env file
+RUN echo "DEV_MODE=1" > /app/runtime_env
+
+RUN cargo build --release --target x86_64-unknown-linux-musl
+
+# Verify the binary exists and its path
+RUN ls -l target/x86_64-unknown-linux-musl/release/mma
+
+# Strip the binary (this is in-place)
+RUN strip /app/target/x86_64-unknown-linux-musl/release/mma
+
+# *** NEW STEP: Move the binary to a simple path in the builder ***
+RUN mv /app/target/x86_64-unknown-linux-musl/release/mma /mma_app_binary
+
+# Verify it moved
+RUN ls -l /mma_app_binary
+
+# ---- Stage 2: Runtime ----
+FROM scratch
+
+# Copy CA certificates
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copy your compiled application binary
+COPY --from=builder /mma_app_binary /app
+
+# Copy application assets
+COPY templates templates
+COPY schema schema
+COPY auth auth
+
+# Copy the pre-created .env file
+COPY --from=builder /app/runtime_env /.env
+
+EXPOSE 1227
+
+CMD ["/app"]

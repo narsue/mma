@@ -1,6 +1,6 @@
 [package]
 name = "mma"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 [dependencies]
@@ -48,7 +48,9 @@ harness = false
 [profile.release]
 opt-level = 3        # Maximum optimizations
 debug = false        # No debug info
-lto = false         # Link-time optimization (can be enabled for even more optimization)
+lto = true         # Link-time optimization (can be enabled for even more optimization)
+strip = true
+
 
 [profile.bench]
 opt-level = 3

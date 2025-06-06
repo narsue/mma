@@ -112,7 +112,7 @@ if ssh ${VPS_USER}@${VPS_HOST} << EOF
     # Health check on new container
     echo "Performing health check on new deployment..."
     for i in {1..30}; do
-        if curl -f http://127.0.0.1:\$NEW_PORT/health 2>/dev/null; then
+        if curl -f http://127.0.0.1:\$NEW_PORT/api/health 2>/dev/null; then
             echo "\n✅ Health check passed"
             break
         elif [ \$i -eq 30 ]; then
@@ -143,7 +143,7 @@ if ssh ${VPS_USER}@${VPS_HOST} << EOF
     # Final health check through nginx
     echo "Performing final health check through nginx..."
     sleep 2
-    if curl -f https://${VPS_HOST}/health 2>/dev/null; then
+    if curl -f https://${VPS_HOST}/api/health 2>/dev/null; then
         echo "\n✅ Final health check through nginx passed"
     else
         echo "\n❌ Final health check through nginx failed"
@@ -161,7 +161,7 @@ if ssh ${VPS_USER}@${VPS_HOST} << EOF
     # Final health check through nginx make sure everything is working after stopping the old container
     echo "Performing final health check through nginx..."
     sleep 2
-    if curl -f https://${VPS_HOST}/health 2>/dev/null; then
+    if curl -f https://${VPS_HOST}/api/health 2>/dev/null; then
         echo "\n✅ Final health check through nginx passed, old container stopped"
     else
         echo "\n❌ Final health check through nginx failed, old container stopped"

@@ -20,18 +20,22 @@ RUN cargo build --release
 
 RUN cp /app/target/release/mma /usr/local/bin/app
 
-# ---- Stage 2: Runtime ----
-FROM debian:bookworm-slim
+RUN echo "DEV_MODE=1" > /.env
 
-# Install SSL certs
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN ls -lh /usr/local/bin/app
+
+
+# ---- Stage 2: Runtime ----
+FROM gcr.io/distroless/cc-debian12:nonroot 
+# Or just cc-debian12 for root user
 
 # Copy built binary from builder
 COPY --from=builder /usr/local/bin/app /usr/local/bin/app
 COPY templates templates
 COPY schema schema
 COPY auth auth
-RUN echo "DEV_MODE=1" > .env
+COPY --from=builder /.env /.env
+# Or copy a pre-made .env file
 
 EXPOSE 1227
 
