@@ -9,6 +9,8 @@ use scylla::statement::Consistency;
 use std::fs;
 use std::path::{Path, PathBuf};
 use crate::db_migrate::MigrationTool;
+use crate::payment_plan::{self, PaymentGroupType, PaymentPlanDuration};
+use bigdecimal::ToPrimitive;
 
 use std::sync::Arc;
 use uuid::Uuid;
@@ -19,8 +21,9 @@ use chrono_tz::Tz;
 use scylla::value::CqlTimestamp;
 use bigdecimal::BigDecimal;
 use crate::db;
-use crate::error::{AppError, Result, Result as AppResult};
+use crate::error::{AppError, Result, Result as AppResult, TraceErr};
 use crate::api::{UserProfileData, UpdateUserProfileRequest, ClassData, ClassFrequency, VenueData, StyleData, ClassFrequencyId, SchoolUserId, StudentClassAttendance}; 
+use crate::stripe_client::StripeClient;
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -71,6 +74,13 @@ pub struct ClassDataRow {
     pub free_lessons: Option<i32>,
 }
 
+pub fn get_time() -> i64
+{
+    SystemTime::now()
+    .duration_since(SystemTime::UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_millis() as i64
+}
 
 
 pub fn hash_password(password: &str) -> Result<String> {
@@ -92,7 +102,7 @@ pub fn hash_password(password: &str) -> Result<String> {
 pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
     // Parse the stored password hash
     let parsed_hash = PasswordHash::new(hash)
-        .map_err(|e| AppError::Internal(format!("Invalid password hash format: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Invalid password hash format: {}", e))).trace()?;
     
     // Verify the password against the hash
     let result = Argon2::default().verify_password(password.as_bytes(), &parsed_hash).is_ok();
@@ -110,7 +120,7 @@ pub struct ScyllaConnector {
 }
 
 pub async fn create_prepared_statement(session: &Session, query: &str) -> Result<Arc<PreparedStatement>> {
-    let prepared_statement = session.prepare(query).await?;
+    let prepared_statement = session.prepare(query).await.trace()?;
     // prepared_statement.set_consistency(Consistency::LocalQuorum);
     Ok(Arc::new(prepared_statement))
 }
@@ -126,12 +136,12 @@ pub async fn init_schema(session: &Session) -> Result<()> {
             {'class': 'SimpleStrategy', 'replication_factor': 1}",
             &[],
         )
-        .await?;
+        .await.trace()?;
     println!("Keyspace created");
         
     // Set up tables if empty otherwise migrate tables if old schema
     let migration = MigrationTool::new("mma".to_string(), PathBuf::from("schema"));
-    migration.migrate_to_version(session, 1).await?;
+    migration.migrate_to_version(session, 2).await.trace()?;
 
     println!("Schema initialized");
     Ok(())
@@ -145,10 +155,10 @@ impl ScyllaConnector {
             .user("cassandra", "cassandra")
             .build()
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to connect to Scylla: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to connect to Scylla: {}", e))).trace()?;
         println!("DB Connected");
-        init_schema(&session).await?;
-        let select_user_by_email_stmt = create_prepared_statement(&session, "SELECT logged_user_id, password_hash FROM mma.logged_user WHERE email = ?").await?;
+        init_schema(&session).await.trace()?;
+        let select_user_by_email_stmt = create_prepared_statement(&session, "SELECT logged_user_id, password_hash FROM mma.logged_user WHERE email = ?").await.trace()?;
 
         Ok(Self {
             session: Arc::new(session),
@@ -166,17 +176,17 @@ impl ScyllaConnector {
                 (email,),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
         // let email_result = self.session
         //     .query_unpaged(
         //         "SELECT logged_user_id, password_hash FROM mma.logged_user WHERE email = ?",
         //         (email,),
         //     )
         //     .await?
-        //     .into_rows_result()?;
+        //     .into_rows_result().trace()?;
         for row in email_result.rows()?
         {
-            let (user_id, password_hash): (Uuid, String) = row?;
+            let (user_id, password_hash): (Uuid, String) = row.trace()?;
             return Ok(Some((user_id, password_hash)));
         }
 
@@ -224,7 +234,7 @@ impl ScyllaConnector {
                     true
                 ),
             )
-            .await?;
+            .await.trace()?;
         
         Ok(session_token)
     }
@@ -237,11 +247,11 @@ impl ScyllaConnector {
                 (logged_user_id,),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
         
         let mut school_ids = Vec::new();
         for row in result.rows::<(Vec<(Uuid, Uuid)>,)>()? {
-            let (schools,): (Vec<(Uuid, Uuid)>,) = row?;
+            let (schools,): (Vec<(Uuid, Uuid)>,) = row.trace()?;
             school_ids.extend(schools.into_iter().map(|(school_id, user_id)| SchoolUserId { school_id, user_id }));
         }
         return Ok(school_ids);
@@ -258,26 +268,26 @@ impl ScyllaConnector {
                 (session_token, logged_user_id),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         
 
         for row in result.rows()?
         {
-            let (expires_ts, is_active): (CqlTimestamp, bool) = row?;
+            let (expires_ts, is_active): (CqlTimestamp, bool) = row.trace()?;
             let now = Utc::now().timestamp();
 
             // Check if session is valid (not expired and is active)
             if now <= expires_ts.0 && is_active {
                 // Fetch the school IDs associated with this logged user
-                let school_ids = self.get_logged_user_school_ids(logged_user_id).await?;
+                let school_ids = self.get_logged_user_school_ids(logged_user_id).await.trace()?;
                 // println!("Session valid for logged_user_id: {}, expires at: {}", logged_user_id, expires_ts.0);
 
                 return Ok((true, expires_ts.0, Some(school_ids))); // Session is valid
             } else {
                 // Optionally invalidate expired sessions
                 if now > expires_ts.0 {
-                    self.invalidate_session(logged_user_id, session_token).await?;
+                    self.invalidate_session(logged_user_id, session_token).await.trace()?;
                 }
                 return Ok((false, 0, None)); // Session expired or inactive
             }
@@ -294,7 +304,7 @@ impl ScyllaConnector {
                 "UPDATE mma.session SET is_active = false WHERE session_token = ? and logged_user_id = ?",
                 (session_token, user_id),
             )
-            .await?;
+            .await.trace()?;
         
         Ok(())
     }
@@ -306,7 +316,7 @@ impl ScyllaConnector {
                 "UPDATE mma.session SET is_active = false WHERE logged_user_id = ?",
                 (user_id,),
             )
-            .await?;
+            .await.trace()?;
         
         Ok(())
     }
@@ -337,7 +347,7 @@ impl ScyllaConnector {
         } else {
             return Err(AppError::Internal("Password or password hash is required".to_string()));
         };
-        // let password_hash = hash_password(password)?;
+        // let password_hash = hash_password(password).trace()?;
         
         // Generate a new user ID
         let user_id = if let Some(id) = _user_id {
@@ -373,7 +383,8 @@ impl ScyllaConnector {
                         user_id,
                     ),
                 )
-                .await?;
+                .await
+                .trace_err("Updating db user")?;
             },
             None => {
                 // Check if email already exists using the email lookup table
@@ -383,12 +394,12 @@ impl ScyllaConnector {
                         (email,),
                     )
                     .await?
-                    .into_rows_result()?;
+                    .into_rows_result().trace()?;
 
                 
                 for row in result.rows()?
                 {
-                    let (user_id,): (Uuid,) = row?;
+                    let (user_id,): (Uuid,) = row.trace()?;
                     println!("User already exists ID: {}", user_id);
                     return Err(AppError::Internal(format!("Email {} is already registered", email)));
                 }
@@ -409,7 +420,8 @@ impl ScyllaConnector {
                         school_id
                     ),
                 )
-                .await?;
+                .await
+                .trace_err("creating db user")?;
 
 
                 let logged_user_id = Uuid::new_v4();
@@ -429,10 +441,11 @@ impl ScyllaConnector {
                         &school_user_ids
                     ),
                 )
-                .await?;
+                .await
+                .trace_err("creating db logged_user")?;
 
 
-                self.create_school(&user_id, &school_id, &None, &None).await?;
+                self.create_school(&user_id, &school_id, &None, &None).await.trace()?;
             }
         }
 
@@ -447,7 +460,7 @@ impl ScyllaConnector {
         //         "INSERT INTO mma.user_by_email (email, user_id, password_hash) VALUES (?, ?, ?)",
         //         (email, user_id, &password_hash),
         //     )
-        //     .await?;
+        //     .await.trace()?;
         
         Ok(user_id)
     }
@@ -465,11 +478,11 @@ impl ScyllaConnector {
                 (user_id,),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
         
         for row in result.rows::<UserRow>()?
         {
-            let row = row?;
+            let row = row.trace()?;
             let stripe_payment_method_id = if self.dev_mode {
                 row.dev_stripe_payment_method_ids
             } else {
@@ -538,7 +551,7 @@ impl ScyllaConnector {
                     user_id,
                 ),
             )
-            .await?;
+            .await.trace()?;
         Ok(())
     }
 
@@ -550,11 +563,11 @@ impl ScyllaConnector {
                 (logged_user_id,),
             )
             .await?            
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         for row in result.rows()?
         {
-            let (password_hash,): (String,) = row?;
+            let (password_hash,): (String,) = row.trace()?;
             return Ok(Some(password_hash));
         }
         return Ok(None);
@@ -567,7 +580,7 @@ impl ScyllaConnector {
                 "UPDATE mma.logged_user SET password_hash = ? WHERE logged_user_id = ?",
                 (&new_password_hash, logged_user_id),
             )
-            .await?;
+            .await.trace()?;
 
         Ok(())
     }
@@ -583,12 +596,12 @@ impl ScyllaConnector {
                 (school_id, )
             )
             .await?            
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         for row in result.rows()?
         {
-            let (waiver_id,): (Uuid,) = row?;
-            let waiver_tuple = self.get_waiver(&school_id, &waiver_id).await?;
+            let (waiver_id,): (Uuid,) = row.trace()?;
+            let waiver_tuple = self.get_waiver(&school_id, &waiver_id).await.trace()?;
             if waiver_tuple.is_none() {
                 // println!("No waiver found with ID: {}", waiver_id);
                 return Ok(None);
@@ -609,7 +622,7 @@ impl ScyllaConnector {
                 (waiver_id, school_id),
             )
             .await?
-            .into_rows_result()?;          
+            .into_rows_result().trace()?;          
             
         if result.rows_num() == 0 {
             // println!("No waiver found with ID: {}", waiver_id);
@@ -618,7 +631,7 @@ impl ScyllaConnector {
         
         for row in result.rows()?
         {
-            let (title, waiver,): (String, String) = row?;
+            let (title, waiver,): (String, String) = row.trace()?;
             return Ok(Some((title, waiver)));
         }
         return Ok(None);
@@ -641,7 +654,7 @@ impl ScyllaConnector {
                     guuid_nil
                 ),
             )
-            .await?;
+            .await.trace()?;
 
         Ok(())
     }
@@ -661,12 +674,12 @@ impl ScyllaConnector {
                 "INSERT INTO mma.waiver (school_id, waiver_id, title, waiver, creator_user_id, created_ts) VALUES (?, ?, ?, ?, ?, ?)",
                 (school_id, id, title, content, creator_user_id, now), // Include other fields as per your schema
             )
-            .await?;
+            .await.trace()?;
 
         let zero_guuid = Uuid::nil();
         self.session.query_unpaged("Insert into mma.latest_waiver (school_id, waiver_id, created_ts, club_id, class_id, style_id) VALUES (?, ?, ?, ?, ?, ?)", 
             (school_id, id, now, zero_guuid, zero_guuid, zero_guuid)
-        ).await?;
+        ).await.trace()?;
 
 
         Ok(())
@@ -689,7 +702,7 @@ impl ScyllaConnector {
                 "INSERT INTO mma.class (school_id, creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades, deleted_ts, timezone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (school_id, creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids, zero_ts, "Australia/Sydney"), 
             )
-            .await?;
+            .await.trace()?;
 
         for style_id in style_ids {
             self.session
@@ -697,7 +710,7 @@ impl ScyllaConnector {
                     "INSERT INTO mma.class_styles (class_id, style_id) VALUES (?, ?)",
                     (class_id, *style_id), 
                 )
-                .await?;
+                .await.trace()?;
         }
 
         for grade_id in grading_ids {
@@ -706,7 +719,7 @@ impl ScyllaConnector {
                     "INSERT INTO mma.class_grades (class_id, grade_id) VALUES (?, ?)",
                     (class_id, *grade_id), 
                 )
-                .await?;
+                .await.trace()?;
         }
 
         for frequency in class_frequency {
@@ -718,7 +731,7 @@ impl ScyllaConnector {
                     "INSERT INTO mma.class_frequency (class_id, class_frequency_id, frequency, start_date, end_date, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (class_id, class_frequency_id, frequency.frequency, &frequency.start_date, &frequency.end_date, &frequency.start_time, &frequency.end_time), 
                 )
-                .await?;
+                .await.trace()?;
         }
 
         Ok(())
@@ -726,12 +739,12 @@ impl ScyllaConnector {
 
 
     // Function to create a new waiver and make it current
-    pub async fn update_class(&self, school_id: &Uuid, _creator_user_id: &Uuid, class_id: &Uuid, title: &String, description: &String, venue_id: &Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequencyId>, notify_booking: bool, waiver_id: Option<Uuid>, free_lessons: i32) -> AppResult<()> {
+    pub async fn update_class(&self, school_id: &Uuid, _creator_user_id: &Uuid, class_id: &Uuid, title: &String, description: &String, venue_id: &Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequencyId>, notify_booking: bool, waiver_id: Option<Uuid>, free_lessons: Option<i32>) -> AppResult<()> {
         
         match waiver_id {
             Some(waiver_id) => {
                 // Check if the waiver exists
-                let waiver_exists = self.get_waiver(school_id, &waiver_id).await?;
+                let waiver_exists = self.get_waiver(school_id, &waiver_id).await.trace()?;
                 if waiver_exists.is_none() {
                     return Err(AppError::Internal(format!("Waiver with ID {} does not exist", waiver_id)));
                 }
@@ -746,7 +759,7 @@ impl ScyllaConnector {
                 "INSERT INTO mma.class (school_id, class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades, free_lessons) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (school_id, class_id, title, description, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids, free_lessons), 
             )
-            .await?;
+            .await.trace()?;
 
         for style_id in style_ids {
             self.session
@@ -754,7 +767,7 @@ impl ScyllaConnector {
                     "INSERT INTO mma.class_styles (class_id, style_id) VALUES (?, ?)",
                     (class_id, *style_id), 
                 )
-                .await?;
+                .await.trace()?;
         }
 
         for grade_id in grading_ids {
@@ -763,7 +776,7 @@ impl ScyllaConnector {
                     "INSERT INTO mma.class_grades (class_id, grade_id) VALUES (?, ?)",
                     (class_id, *grade_id), 
                 )
-                .await?;
+                .await.trace()?;
         }
 
 
@@ -773,12 +786,12 @@ impl ScyllaConnector {
                 (class_id,),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         let mut delete_class_frequency_ids: Vec<Uuid> = Vec::new();
         for row in result.rows()?
         {
-            let ( class_frequency_id, ) : ( Uuid, ) = row?;
+            let ( class_frequency_id, ) : ( Uuid, ) = row.trace()?;
             delete_class_frequency_ids.push(class_frequency_id);
         }
 
@@ -793,7 +806,7 @@ impl ScyllaConnector {
                     "DELETE FROM mma.class_frequency WHERE class_id = ? and class_frequency_id in ?",
                     (class_id, delete_class_frequency_ids), 
                 )
-                .await?;
+                .await.trace()?;
         }
         
         for frequency in class_frequency {
@@ -804,7 +817,7 @@ impl ScyllaConnector {
                     "INSERT INTO mma.class_frequency (class_id, class_frequency_id, frequency, start_date, end_date, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (class_id, class_frequency_id, frequency.frequency, &frequency.start_date, &frequency.end_date, &frequency.start_time, &frequency.end_time), 
                 )
-                .await?;
+                .await.trace()?;
         }
 
         Ok(())
@@ -823,12 +836,12 @@ impl ScyllaConnector {
         let result = self.session
             .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts, free_lessons FROM mma.class where school_id = ?", (school_id, )) // Pass the query string and bound values
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         let mut classes: Vec<ClassData> = Vec::new();
         for row in result.rows::<ClassDataRow>()?
         {
-            let row = row?;
+            let row = row.trace()?;
             // Successfully retrieved a row. Now extract the columns.
             if publish_mode_filter.is_none() || publish_mode_filter == Some(row.publish_mode) {
 
@@ -860,11 +873,11 @@ impl ScyllaConnector {
                 (class_id,),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
             for row in result.rows()?
             {
-                let ( class_frequency_id, frequency, start_date, end_date, start_time, end_time) : ( Uuid, i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row?;
+                let ( class_frequency_id, frequency, start_date, end_date, start_time, end_time) : ( Uuid, i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row.trace()?;
                 let class_frequency = ClassFrequencyId {
                     class_frequency_id: class_frequency_id,
                     frequency: frequency,
@@ -896,7 +909,7 @@ impl ScyllaConnector {
                 format!("UPDATE mma.user SET {} = ? WHERE user_id = ?", stripe_customer_str).as_str(),
                 (stripe_customer_id, user_id),
             )
-            .await?;
+            .await.trace()?;
         Ok(())
     }
 
@@ -915,7 +928,7 @@ impl ScyllaConnector {
     //             format!("UPDATE mma.user SET {} = {} + ? WHERE user_id = ?", stripe_payment_method_str, stripe_payment_method_str).as_str(),
     //             (stripe_payment_method_id, user_id),
     //         )
-    //         .await?;
+    //         .await.trace()?;
     //     Ok(())
     // }
 
@@ -933,7 +946,7 @@ impl ScyllaConnector {
                 format!("UPDATE mma.user SET {} = ? WHERE user_id = ?", stripe_payment_method_str).as_str(),
                 (stripe_payment_method_ids, user_id),
             )
-            .await?;
+            .await.trace()?;
         Ok(())
     }
 
@@ -953,7 +966,7 @@ impl ScyllaConnector {
                 format!("UPDATE mma.user SET {} = {} - ? WHERE user_id = ?", stripe_payment_method_str, stripe_payment_method_str).as_str(),
                 (&stripe_payment_method_ids, user_id),
             )
-            .await?;
+            .await.trace()?;
         Ok(())
     }
 
@@ -972,10 +985,10 @@ impl ScyllaConnector {
                 (user_id,),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         for row in result.rows()? {
-            let (stripe_customer_id,): (Option<String>,) = row?;
+            let (stripe_customer_id,): (Option<String>,) = row.trace()?;
             return Ok(stripe_customer_id);
         }
         return Ok(None);
@@ -996,10 +1009,10 @@ impl ScyllaConnector {
                 (user_id, ),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         for row in result.rows()? {
-            let (stripe_customer_id,): (Option<String>,) = row?;
+            let (stripe_customer_id,): (Option<String>,) = row.trace()?;
             return Ok(stripe_customer_id);
         }
         return Ok(None);
@@ -1013,12 +1026,12 @@ impl ScyllaConnector {
                 (venue_id, school_id),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         for row in result.rows::<VenueData, >()?
         {
-            // let (title, description): (String, String) = row?;
-            let row = row?;
+            // let (title, description): (String, String) = row.trace()?;
+            let row = row.trace()?;
             // Successfully retrieved a row. Now extract the columns.
 
             return Ok(Some(row));
@@ -1038,7 +1051,7 @@ impl ScyllaConnector {
                 (user_id, waiver_id),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         if result.rows_num() > 0 {
             return Ok(true); // User has accepted the waiver
@@ -1058,10 +1071,11 @@ impl ScyllaConnector {
                 (user_id, class_id),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result()
+            .trace_err("Getting db attending_count")?;
 
         for row in result.rows::<(i32,)>()? {
-            let (count,) = row?;
+            let (count,) = row.trace()?;
             return Ok(count);
         }
         Ok(0) // No attendance found
@@ -1082,11 +1096,12 @@ impl ScyllaConnector {
                 (user_id, ),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result()
+            .trace_err("Checking for users payment methods")?;
 
         if result.rows_num() > 0 {
             for row in result.rows::<(i64,)>()? {
-                let (count,) = row?;
+                let (count,) = row.trace()?;
                 if count > 0 {
                     return Ok(true); // User has a payment method
                 }
@@ -1097,13 +1112,157 @@ impl ScyllaConnector {
     }
 
 
-    pub async fn set_class_attendance(
+
+    pub async fn pay_class (
+        &self,
+        user_id: &Uuid,
+        school_id: &Uuid,
+        class_id: &Uuid,
+        class_start_ts: i64,
+        stripe_client: &StripeClient,
+        free_lessons: i32,
+        price: &Option<BigDecimal>
+    ) -> AppResult<bool>
+    {
+
+        match price {
+            Some(price) => {
+                // Class is Free
+                if *price == BigDecimal::from(0) { 
+                    return Ok(true);
+                }
+                
+                let stripe_payment_method_str = match self.dev_mode {
+                    true => "dev_stripe_payment_method_ids", // Use a dummy ID in dev mode
+                    false => "prod_stripe_payment_method_ids",
+                };
+
+                let stripe_customer_str = match self.dev_mode {
+                    true => "dev_stripe_customer_id", // Use a dummy ID in dev mode
+                    false => "prod_stripe_customer_id",
+                };
+
+                let result = self.session
+                    .query_unpaged(format!("SELECT school_id, active_payment_plans, payment_provider, {}, {} FROM mma.user where user_id = ?", stripe_payment_method_str, stripe_customer_str), 
+                    (user_id, )) // Pass the query string and bound values
+                    .await.trace()?
+                    .into_rows_result()
+                    .trace_err("getting db user payment data")?;
+                
+                if result.rows_num() == 0 {
+                    return Err(AppError::Internal(format!("User with ID {} does not exist", class_id)));
+                }
+
+                for row in result.rows().trace()? {
+                    let mut expired_active_plans = Vec::new();
+
+                    let (ref_school_id, active_payment_plans, payment_provider, stripe_payment_method_ids, stripe_customer_id): (Uuid, Option<Vec<(Uuid, CqlTimestamp)>>, Option<Uuid>, Option<Vec<String>>, Option<String>) = row.trace()?;
+                    if ref_school_id != *school_id {
+                        return Err(AppError::Internal(format!("User Id {} has wrong school ID {} class id {} does not exist", user_id, school_id, class_id)));
+                    }
+
+                    let now = get_time();
+                    let mut has_pass = false;
+                    // Check if active pass, also clean up expired passes
+                    match active_payment_plans {
+                        Some(active_payment_plans) => {
+                            for active_payment_plan in active_payment_plans {
+                                let (payment_plan_id, expiration_ts) = active_payment_plan;
+                                let expiration_ts = expiration_ts.0;
+                                if now > expiration_ts {
+                                    expired_active_plans.push(active_payment_plan);
+                                } else {
+                                    has_pass = true;
+                                } 
+                            }
+                        },
+                        None => {}
+                    }
+
+
+
+                    // Clean up expired active plans
+                    for explired_plan in expired_active_plans {
+                        tracing::info!("expiring active_payment_plan");
+
+                        let result = self.session
+                            .query_unpaged("update mma.user set active_payment_plans = active_payment_plans - ? where user_id = ?", 
+                            (explired_plan, user_id)) // Pass the query string and bound values
+                            .await.trace()?
+                            .into_rows_result().trace()?;
+                    }
+
+                    if has_pass {
+                        return Ok(true);
+                    }
+                    
+                    
+                    // Try individuals payment methods first
+                    match stripe_customer_id {
+                        Some(stripe_customer_id) => {
+                            match stripe_payment_method_ids {
+                                Some(stripe_payment_method_ids) => {
+                                    for payment_method_id in stripe_payment_method_ids {
+                                        let transaction_id = Uuid::new_v4();
+                                        let description = format!("Casual attendance of class:{}", class_id);
+                                        let currency = "aud";
+                                        // let amount = price*BigDecimal::from(100);
+                                        let cents_i64 = (price * BigDecimal::from(100))
+                                            .round(0)
+                                            .to_i64()
+                                            .unwrap();
+                                        let result = stripe_client.charge_payment_method(cents_i64, currency, &payment_method_id, &stripe_customer_id, &transaction_id, school_id, user_id, Some(&description)).await.trace()?;
+                                        // result.id
+                                        let stripe_payment_id = result.id;
+                                        let duration = PaymentPlanDuration::SingleClass as i32;
+                                        let payment_status = 1; // captured
+
+                                        let zero_guuid = Uuid::nil();
+                                        let now = scylla::value::CqlTimestamp(now);
+                                        let class_start_ts = scylla::value::CqlTimestamp(class_start_ts);
+                                        
+                                        let result = self.session
+                                            .query_unpaged("insert into mma.user_payment (user_id, base_payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                                            (user_id, zero_guuid, class_id, class_start_ts, now, stripe_payment_id, now, price, payment_status)) // Pass the query string and bound values
+                                            .await.trace()?;
+                                        return Ok(true);
+                                        // CREATE TABLE IF NOT EXISTS {}.user_payment (user_payment_id uuid, user_id uuid, class_id uuid, class_start_ts timestamp, base_payment_plan_id uuid, payment_plan_id uuid, status int, stripe_payment_id text, created_ts timestamp, paid decimal, amount decimal, refunded decimal, refunded_ts timestamp, paid_ts timestamp, processing_ts timestamp, processing_node text, captured_ts timestamp, captured decimal, PRIMARY KEY (user_id, base_payment_plan_id, class_id, class_start_ts));
+
+                                    }
+                                }, 
+                                None => {}
+                            }
+                        }, 
+                        None => {}
+                    }
+
+                }
+                
+            },
+            None => {return Ok(true); }
+        }
+
+        // Check if user has paid for the class
+        let classes_attended = self.get_user_class_attendance_count(user_id, class_id).await.trace()?;
+        if free_lessons <= classes_attended {
+            let user_can_pay = self.can_user_pay(user_id).await.trace()?;
+            if !user_can_pay {
+                return Err(AppError::UserNoCreditCard("".to_string()));
+            }
+        }
+
+        Ok(false)
+    }
+
+
+    pub async fn set_class_attendance (
         &self,
         class_id: &Uuid,
         school_id: &Uuid,
         user_ids: &Vec<Uuid>,
         present: &Vec<bool>,
         class_start_ts: i64,
+        stripe_client: &StripeClient
     ) -> AppResult<bool> {
 
         let adding_student_count = present.iter().filter(|&&p| p).count();
@@ -1111,8 +1270,8 @@ impl ScyllaConnector {
         let total_student_attend_dif = adding_student_count as i32 - remove_student_count as i32;
 
         // SetClassStudentsAttendanceRequest
-        let class_valid_ts = self.is_valid_class_start(&class_id, &school_id, class_start_ts, Some(total_student_attend_dif)).await?;
-            // .map_err(|app_err| AppError::Internal(app_err.to_string()) )?; // Convert potential AppError from validate
+        let class_valid_ts = self.is_valid_class_start(&class_id, &school_id, class_start_ts, Some(total_student_attend_dif)).await.trace()?;
+            // .map_err(|app_err| AppError::Internal(app_err.to_string()) ).trace()?; // Convert potential AppError from validate
         
         if !class_valid_ts {
             return Err(AppError::Internal("Invalid class start timestamp".to_string()));
@@ -1122,20 +1281,20 @@ impl ScyllaConnector {
             .query_unpaged("SELECT waiver_id, price, free_lessons FROM mma.class where class_id = ? and school_id = ?", 
             (class_id, school_id)) // Pass the query string and bound values
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
         
         if result.rows_num() == 0 {
             return Err(AppError::Internal(format!("Class with ID {} does not exist", class_id)));
         }
 
         for row in result.rows()? {
-            let (waiver_id, price, free_lessons): (Option<Uuid>, Option<BigDecimal>, Option<i32>) = row?;
+            let (waiver_id, price, free_lessons): (Option<Uuid>, Option<BigDecimal>, Option<i32>) = row.trace()?;
             match waiver_id {
                 Some(id) => {
                     for (user, present) in user_ids.iter().zip(present.iter()) {
                         if *present {
                             // Check if user has accepted the waiver
-                            let accepted = self.has_user_accepted_waiver(user, &id).await?;
+                            let accepted = self.has_user_accepted_waiver(user, &id).await.trace()?;
                             if !accepted {
                                 return Err(AppError::UserWaiverNotAccepted(format!("")));
                             }
@@ -1147,34 +1306,21 @@ impl ScyllaConnector {
 
             if price.is_some() {
                 let free_lessons = free_lessons.unwrap_or(0);
-                let price = price.unwrap_or(BigDecimal::from(0));
-                if price > BigDecimal::from(0) {
-                    // If the class has a price
-                    for (user, present) in user_ids.iter().zip(present.iter()) {
-                        if *present {
-                            // Check if user has paid for the class
-                            let classes_attended = self.get_user_class_attendance_count(user, class_id).await?;
-                            if free_lessons <= classes_attended {
-                                let user_can_pay = self.can_user_pay(user).await?;
-                                if !user_can_pay {
-                                    return Err(AppError::UserNoCreditCard("".to_string()));
-                                }
-                            }
+                // If the class has a price
+                for (user, present) in user_ids.iter().zip(present.iter()) {
+                    if *present {
+                        let paid = self.pay_class(user, school_id, class_id, class_start_ts, stripe_client, free_lessons, &price).await.trace()?;
+                        
+                        if !paid { 
+                            return Ok(false);
                         }
+
                     }
                 }
             }
 
         }
 
-
-        // let result = self.session
-        //     .query_unpaged(
-        //         "SELECT deleted_ts, school_id, timezone, capacity FROM mma.class WHERE class_id = ?",
-        //         (class_id,),
-        //     )
-        //     .await?
-        //     .into_rows_result()?;   
 
         let class_start_ts: CqlTimestamp = scylla::value::CqlTimestamp(class_start_ts);
 
@@ -1191,14 +1337,14 @@ impl ScyllaConnector {
             .prepare(
                 "INSERT INTO mma.attendance (class_id, user_id, class_start_ts, is_instructor, checkin_ts) VALUES (?, ?, ?, ?, ?)"
             )
-            .await?;
+            .await.trace()?;
 
         let prepared_count = self
             .session
             .prepare(
                 "INSERT INTO mma.attendance_count (class_id, user_id, count) VALUES (?, ?, ?)"
             )
-            .await?;
+            .await.trace()?;
 
 
         // Create batch
@@ -1223,7 +1369,7 @@ impl ScyllaConnector {
             .collect();
 
         // Execute batch
-        self.session.batch(&batch, batch_values).await?;
+        self.session.batch(&batch, batch_values).await.trace()?;
 
 
         // Now remove attendance for users not present
@@ -1245,22 +1391,22 @@ impl ScyllaConnector {
                     "DELETE FROM mma.attendance WHERE class_id = ? AND class_start_ts = ? and user_id IN ?",
                     (class_id, class_start_ts, not_present_user_ids),
                 )
-                .await?;
+                .await.trace()?;
         }
 
         let mut batch = scylla::statement::batch::Batch::default();
         let mut batch_values: Vec<_> = Vec::new();
-        // let classes_attended = self.get_user_class_attendance_count(user, class_id).await?;
+        // let classes_attended = self.get_user_class_attendance_count(user, class_id).await.trace()?;
         for (user_id, is_present) in user_ids.iter().zip(present.iter()) {
             if *is_present {
                 batch.append_statement(prepared_count.clone());
-                let attendance_count = self.get_user_class_attendance_count(user_id, class_id).await?;
-                batch_values .push((class_id, user_id, attendance_count)); // Increment count by 1 for each present user
+                let attendance_count = self.get_user_class_attendance_count(user_id, class_id).await.trace()?;
+                batch_values.push((class_id, user_id, attendance_count)); // Increment count by 1 for each present user
             }
         }
 
         // Execute batch for attendance count
-        self.session.batch(&batch, batch_values).await?;
+        self.session.batch(&batch, batch_values).await.trace()?;
 
 
 
@@ -1269,7 +1415,7 @@ impl ScyllaConnector {
     }
 
 
-    pub async fn is_valid_class_start(
+    pub async fn is_valid_class_start (
         &self,
         class_id: &Uuid,
         school_id: &Uuid,
@@ -1280,7 +1426,7 @@ impl ScyllaConnector {
         
         // Convert timestamp to NaiveDateTime for comparison
         let query_class_datetime = NaiveDateTime::from_timestamp_millis(query_class_start_ts)
-            .ok_or_else(|| AppError::Internal("Invalid timestamp".to_string()))?;
+            .ok_or_else(|| AppError::Internal("Invalid timestamp".to_string())).trace()?;
 
         // Get current timestamp
         let now = SystemTime::now()
@@ -1296,7 +1442,7 @@ impl ScyllaConnector {
                 (class_id,),
             )
             .await?
-            .into_rows_result()?;   
+            .into_rows_result().trace()?;   
 
         // Check if the class exists and is not deleted
         if result.rows_num() == 0 {
@@ -1305,7 +1451,7 @@ impl ScyllaConnector {
         }
         let mut timezone = String::new();
         for row in result.rows()? {
-            let (deleted_ts, class_school_id, db_timezone, capacity): (CqlTimestamp, Uuid, String, Option<i32>) = row?;
+            let (deleted_ts, class_school_id, db_timezone, capacity): (CqlTimestamp, Uuid, String, Option<i32>) = row.trace()?;
             
             // Check if the class is deleted
             if deleted_ts != CqlTimestamp(0) {
@@ -1332,12 +1478,12 @@ impl ScyllaConnector {
                                         (class_id, query_class_start_ts_cql),
                                     )
                                     .await?
-                                    .into_rows_result()?;
+                                    .into_rows_result().trace()?;
 
 
                                 let mut student_attend_count: i64 = 0;
                                 for row in result.rows()? {
-                                    let (count,): (i64,) = row?;
+                                    let (count,): (i64,) = row.trace()?;
                                     student_attend_count = count;
                                 }
 
@@ -1364,7 +1510,7 @@ impl ScyllaConnector {
                 (class_id,),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
             
         if result.rows_num() == 0 {
             println!("Class with ID {} does not exist", class_id);
@@ -1374,7 +1520,7 @@ impl ScyllaConnector {
         // Check if the class is valid based on frequency rules
         for row in result.rows()? {
             let (class_frequency_id, frequency, start_date, end_date, start_time, end_time): 
-                (Uuid, i32, NaiveDate, Option<NaiveDate>, NaiveTime, NaiveTime) = row?;
+                (Uuid, i32, NaiveDate, Option<NaiveDate>, NaiveTime, NaiveTime) = row.trace()?;
             
             let db_class_start_datetime = start_date.and_time(start_time);
             // Parse the timezone string into a Tz object
@@ -1389,7 +1535,7 @@ impl ScyllaConnector {
             // Convert the naive datetime from DB to timezone-aware datetime, then to UTC timestamp
             let db_class_start_datetime_tz = timezone.from_local_datetime(&db_class_start_datetime)
                 .single()
-                .ok_or_else(|| AppError::Internal("Invalid datetime conversion".to_string()))?;
+                .ok_or_else(|| AppError::Internal("Invalid datetime conversion".to_string())).trace()?;
 
             let db_class_start_datetime_utc_ts = db_class_start_datetime_tz.timestamp_millis();
 
@@ -1406,7 +1552,7 @@ impl ScyllaConnector {
                 // Convert the naive datetime from DB to timezone-aware datetime, then to UTC timestamp
                 let db_class_end_datetime_tz = timezone.from_local_datetime(&db_class_end_datetime)
                     .single()
-                    .ok_or_else(|| AppError::Internal("Invalid datetime conversion".to_string()))?;
+                    .ok_or_else(|| AppError::Internal("Invalid datetime conversion".to_string())).trace()?;
 
                 let db_class_end_datetime_utc_ts = db_class_end_datetime_tz.timestamp_millis();
                 
@@ -1541,13 +1687,13 @@ impl ScyllaConnector {
                 (class_id, class_start_ts),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         // println!("Attendance query result: {:?}", result);
         let mut attending_students: Vec<Uuid> = Vec::new();
         for row in result.rows()?
         {
-            let (id, ): (Uuid, ) = row?;
+            let (id, ): (Uuid, ) = row.trace()?;
             attending_students.push(id);
         }
         // println!("Attendance user list result: school:{:?} {:?}", school_id, attending_students);
@@ -1558,14 +1704,14 @@ impl ScyllaConnector {
                 (&school_id, ),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         // println!("Attendance query result: {:?}", result);
 
         let mut attendance: Vec<StudentClassAttendance> = Vec::new();
         for row in result.rows::<(Uuid, String, String, Option<String>, Uuid), >()?
         {
-            let (user_id, first_name, surname, img, user_school_id): (Uuid, String, String, Option<String>, Uuid) = row?;
+            let (user_id, first_name, surname, img, user_school_id): (Uuid, String, String, Option<String>, Uuid) = row.trace()?;
             if school_id != &user_school_id {
                 println!("Skipping student {} not in school {}", user_id, school_id);
                 // Skip students not in the same school
@@ -1592,12 +1738,12 @@ impl ScyllaConnector {
         let result = self.session
             .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts, free_lessons FROM mma.class where class_id = ? and school_id = ?", (class_id, school_id)) // Pass the query string and bound values
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         let mut class: Option<ClassData> = None;
         for row in result.rows::<ClassDataRow>()?
         {
-            let row = row?;
+            let row = row.trace()?;
             // Successfully retrieved a row. Now extract the columns.
             // if publish_mode_filter.is_none() || publish_mode_filter == Some(row.publish_mode) {
             // The class is deleted
@@ -1633,11 +1779,11 @@ impl ScyllaConnector {
                         (class_id,),
                     )
                     .await?
-                    .into_rows_result()?;
+                    .into_rows_result().trace()?;
     
                 for row in result.rows()?
                 {
-                    let ( class_frequency_id, frequency, start_date, end_date, start_time, end_time) : ( Uuid, i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row?;
+                    let ( class_frequency_id, frequency, start_date, end_date, start_time, end_time) : ( Uuid, i32, NaiveDate, NaiveDate, NaiveTime, NaiveTime) = row.trace()?;
                     let class_frequency = ClassFrequencyId {
                         class_frequency_id: class_frequency_id,
                         frequency: frequency,
@@ -1674,7 +1820,7 @@ impl ScyllaConnector {
                 "INSERT INTO mma.school (super_user_id, school_id, title, description, created_ts, deleted_ts) VALUES (?, ?, ?, ?, ?, ?)",
                 (super_user_id, school_id, title, description, now, zero_ts), // Include other fields as per your schema
             )
-            .await?;
+            .await.trace()?;
 
         Ok(())
     }
@@ -1694,7 +1840,7 @@ impl ScyllaConnector {
                 "INSERT INTO mma.venue (venue_id, creator_user_id, title, description, created_ts, address, suburb, state, country, postcode, latitude, longitude, contact_phone, deleted_ts, school_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (venue_id, creator_user_id, title, description, now, address, suburb, state, country, postcode, latitude, longitude, contact_phone, zero_ts, school_id), // Include other fields as per your schema
             )
-            .await?;
+            .await.trace()?;
 
         Ok(())
     }
@@ -1707,7 +1853,7 @@ impl ScyllaConnector {
                 "INSERT INTO mma.venue (school_id, venue_id, title, description, address, suburb, state, country, postcode, latitude, longitude, contact_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (school_id, venue_id, title, description, address, suburb, state, country, postcode, latitude, longitude, contact_phone), // Include other fields as per your schema
             )
-            .await?;
+            .await.trace()?;
 
         Ok(true)
     }
@@ -1721,7 +1867,7 @@ impl ScyllaConnector {
                 "UPDATE mma.style SET title = ?, description = ? WHERE style_id = ? and school_id = ?",
                 (title, description, style_id, school_id), // Include other fields as per your schema
             )
-            .await?;
+            .await.trace()?;
 
         Ok(true)
     }
@@ -1733,12 +1879,12 @@ impl ScyllaConnector {
         let result = self.session
         .query_unpaged("SELECT style_id, title, description FROM mma.style where style_id = ? and school_id = ?", (style_id, school_id)) // Pass the query string and bound values
         .await?
-        .into_rows_result()?;
+        .into_rows_result().trace()?;
 
         // let mut class: Option<ClassData> = None;
         for row in result.rows::<StyleData>()?
         {
-            let row = row?;
+            let row = row.trace()?;
             return Ok(Some(row));
         }
         return Ok(None); // style_id not found
@@ -1754,12 +1900,12 @@ impl ScyllaConnector {
                 (school_id, )
             )
             .await?            
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         let mut venues: Vec<VenueData> = Vec::new();
         for row in result.rows::<VenueData>()?
         {
-            let row = row?;
+            let row = row.trace()?;
             // Successfully retrieved a row. Now extract the columns.
             venues.push(row);
         }
@@ -1781,7 +1927,7 @@ impl ScyllaConnector {
                 "INSERT INTO mma.style (school_id, style_id, title, description, created_ts, creator_user_id, deleted_ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (school_id, style_id, title, description, now, creator_user_id, zero_ts), // Include other fields as per your schema
             )
-            .await?;
+            .await.trace()?;
 
         Ok(())
     }
@@ -1799,12 +1945,12 @@ impl ScyllaConnector {
                 (school_id, )
             )
             .await?            
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
 
         let mut styles: Vec<StyleData> = Vec::new();
         for row in result.rows::<StyleData>()?
         {
-            let row = row?;
+            let row = row.trace()?;
             // Successfully retrieved a row. Now extract the columns.
             styles.push(row);
         }
@@ -1838,7 +1984,7 @@ impl ScyllaConnector {
                     false
                 ),
             )
-            .await?;
+            .await.trace()?;
         
         Ok(())
     }
@@ -1861,14 +2007,14 @@ impl ScyllaConnector {
                 (email, code),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
         
         // Extract row data
         let mut logged_user_id: Option<Uuid> = None;
         let mut is_valid = false;
         
         for row in result.rows()? {
-            let (id, expires_ts, is_used): (Uuid, CqlTimestamp, bool) = row?;
+            let (id, expires_ts, is_used): (Uuid, CqlTimestamp, bool) = row.trace()?;
             
             // Check if code is not expired and not used
             if !is_used && expires_ts.0 > now_i64 {
@@ -1885,7 +2031,7 @@ impl ScyllaConnector {
                         "UPDATE mma.forgotten_password_codes SET is_used = true WHERE email = ? and code = ?",
                         (email, code),
                     )
-                    .await?;
+                    .await.trace()?;
                 
 
                 let result = self.session
@@ -1894,11 +2040,11 @@ impl ScyllaConnector {
                     (logged_user_id,),
                 )
                 .await?
-                .into_rows_result()?;
+                .into_rows_result().trace()?;
 
                 let mut school_id: Option<Uuid> = None;
                 for row in result.rows()? {
-                    let (id,): (Uuid,) = row?;
+                    let (id,): (Uuid,) = row.trace()?;
                     school_id = Some(id);
                 }
                 match school_id {
@@ -1947,7 +2093,7 @@ impl ScyllaConnector {
                     user_id
                 ),
             )
-            .await?;
+            .await.trace()?;
         
         Ok(())
     }
@@ -1968,7 +2114,7 @@ impl ScyllaConnector {
                 (email, code),
             )
             .await?
-            .into_rows_result()?;
+            .into_rows_result().trace()?;
         
         // Check if code exists, is not expired, and is not used
         let mut is_valid = false;
@@ -1979,7 +2125,7 @@ impl ScyllaConnector {
         let mut new_school: bool = false;
         let mut user_id: Option<Uuid> = None;
         for row in result.rows()? {
-            let (expires_ts, is_used, _first_name, _surname, _password_hash, _school_id, _new_school, _user_id): (CqlTimestamp, bool, Option<String>, Option<String>, String, Option<Uuid>, bool, Option<Uuid>) = row?;
+            let (expires_ts, is_used, _first_name, _surname, _password_hash, _school_id, _new_school, _user_id): (CqlTimestamp, bool, Option<String>, Option<String>, String, Option<Uuid>, bool, Option<Uuid>) = row.trace()?;
             first_name = _first_name;
             surname = _surname;
             password_hash = Some(_password_hash);
@@ -2000,7 +2146,7 @@ impl ScyllaConnector {
                     "UPDATE mma.sign_up_invite SET is_used = true WHERE email = ? AND code = ?",
                     (email, code),
                 )
-                .await?;
+                .await.trace()?;
             
             return Ok((true, first_name, surname, password_hash, school_id, user_id, new_school));
         }

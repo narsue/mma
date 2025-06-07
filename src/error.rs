@@ -1,4 +1,6 @@
 use thiserror::Error;
+use tracing::error;
+use std::fmt::Display;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -38,3 +40,42 @@ pub enum AppError {
 }
 
 pub type Result<T> = std::result::Result<T, AppError>;
+
+
+pub trait TraceErr<T, E> {
+    #[track_caller] // 🔥 This is the key!
+    fn trace_err(self, context: &'static str) -> std::result::Result<T, E>;
+    fn trace(self) -> std::result::Result<T, E>;
+}
+
+impl<T, E: Display> TraceErr<T, E> for std::result::Result<T, E> {
+    #[track_caller]
+    fn trace_err(self, context: &'static str) -> std::result::Result<T, E> {
+        if let Err(ref e) = self {
+            let location = std::panic::Location::caller();
+            error!(
+                "{}:{}: error in {}: {}",
+                location.file(),
+                location.line(),
+                context,
+                e
+            );
+        }
+        self
+    }
+
+    #[track_caller]
+    fn trace(self) -> std::result::Result<T, E> {
+        if let Err(ref e) = self {
+            let location = std::panic::Location::caller();
+            error!(
+                "{}:{}: error: {}",
+                location.file(),
+                location.line(),
+                e
+            );
+        }
+        self
+    }
+
+}

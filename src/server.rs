@@ -241,7 +241,13 @@ pub mod handlers {
     }
 
 
-
+    #[get("/api/health")]
+    pub async fn health() -> HttpResponse {
+        HttpResponse::Ok().json(serde_json::json!({
+            "status": "healthy",
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        }))
+    }
 
 
 
@@ -257,15 +263,6 @@ pub mod handlers {
     //     }
     // }
 
-    #[get("/api/health")]
-    pub async fn health() -> HttpResponse {
-        HttpResponse::Ok().json(serde_json::json!({
-            "status": "healthy",
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        }))
-    }
-
-
     #[get("/")]
     pub async fn home_page(cache: web::Data<TemplateCache>) -> HttpResponse {
         match get_template_content(&cache, "home.html") {
@@ -276,6 +273,7 @@ pub mod handlers {
         }
     }
 
+    
     // #[get("/login")]
     // pub async fn login_signup_page(cache: web::Data<TemplateCache>) -> HttpResponse {
     //      match get_template_content(&cache, "login.html") {
@@ -1039,6 +1037,7 @@ pub mod handlers {
         };
         // pub async fn create_new_class(&self, creator_user_id: Uuid, class_id: Uuid, title: String, description: String, venue_id: Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: BigDecimal, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequency>, notify_booking: bool) -> AppResult<()> {
 
+            
         // 3. Call the database function to create the class and related entries
         let create_result: AppResult<()> = state_manager.db.update_class(
             &school_id,
@@ -1267,6 +1266,7 @@ pub mod handlers {
     #[post("/api/class/set_student_attendance")] 
     pub async fn set_class_student_attendance_handler(
         state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+        stripe_client: web::Data<StripeClient>,
         mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
         req: web::Json<SetClassStudentsAttendanceRequest>, // Extract query parameters from the URL
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
@@ -1310,7 +1310,7 @@ pub mod handlers {
         let class_start_ts = req.class_start_ts; // Extract class_start_ts from query parameters
 
         // Call the database function to get classes based on the provided filters
-        let result: AppResult<bool> = state_manager.db.set_class_attendance(&class_id, &school_id, &req.user_ids, &req.present, class_start_ts).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
+        let result: AppResult<bool> = state_manager.db.set_class_attendance(&class_id, &school_id, &req.user_ids, &req.present, class_start_ts, &stripe_client).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
 
         // Handle the result of the database operation explicitly
         match result {
@@ -1335,7 +1335,7 @@ pub mod handlers {
                 // }
                 Ok(HttpResponse::BadRequest().json(GenericResponse {
                     success: false,
-                    error_message: Some(app_err.to_string()),
+                    error_message: Some("Error setting student attendance".to_string()),
                     message: None,
                 }))
 

@@ -33,7 +33,7 @@ run_command podman run -d --pod mmapod --rm --name scylla \
   -v $(pwd)/CI/scylla.yaml:/etc/scylla/scylla.yaml \
   docker.io/scylladb/scylla --smp 1
 
-sleep 10
+sleep 5
 
 # Build Rust web app
 echo "Building mma application..."
@@ -44,7 +44,7 @@ run_command podman build -f CI/Dockerfile.dev -t mma_dev \
 echo "Running mma rust web app in CI mode..."
 run_command podman run -d --pod mmapod --rm --name mma mma_dev
 
-# sleep 5
+sleep 5
 
 # Build and run tests
 echo "Building test container..."
@@ -64,5 +64,5 @@ run_command podman run --pod mmapod --rm \
   -v $(pwd)/scripts/external_bench.sh:/external_bench.sh:ro \
   -v $(pwd)/benchmark_results:/benchmark_results mma_bench
 
-cleanup
+# cleanup
 echo "✅ All CI tests completed successfully!"

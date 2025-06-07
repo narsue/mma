@@ -10,6 +10,7 @@ mod templates;
 mod email_sender;
 mod stripe_client;
 mod db_migrate;
+mod payment_plan;
 use db_migrate::MigrationTool;
 
 use email_sender::send_custom_email;
@@ -28,6 +29,7 @@ use tracing_subscriber::fmt::{self, format::FormatEvent, format::FormatFields};
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::registry::LookupSpan;
 use std::fmt::Write;
+use ansi_term::Colour;
 
 struct CustomFormatter;
 
@@ -43,10 +45,18 @@ where
         event: &Event<'_>,
     ) -> std::fmt::Result {
         let meta = event.metadata();
-        write!(writer, "[{}] ", meta.level())?;
+        // Apply color based on log level
+        let level_str = match *meta.level() {
+            tracing::Level::ERROR => Colour::Red.paint("[ERROR]"),
+            tracing::Level::WARN => Colour::Yellow.paint("[WARN]"),
+            tracing::Level::INFO => Colour::Green.paint("[INFO]"),
+            tracing::Level::DEBUG => Colour::Blue.paint("[DEBUG]"),
+            tracing::Level::TRACE => Colour::Purple.paint("[TRACE]"),
+        };
+        write!(writer, "{} ", level_str)?;
 
         if let Some(file) = meta.file() {
-            if file.starts_with("src/") {
+            if file.starts_with("src/") && file != "src/error.rs"  {
                 if let Some(line) = meta.line() {
                     write!(writer, "{}:{} ", file, line)?;
                 } else {
@@ -65,6 +75,7 @@ where
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     tracing_subscriber::fmt()
+        .with_ansi(true) // ✅ Enable ANSI colors
         .event_format(CustomFormatter)
         .init();
 

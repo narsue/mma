@@ -3,8 +3,12 @@ use std::collections::HashMap;
 use actix_web::dev;
 // Add these methods to your StripeClient impl block
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use std::fs;
 use std::path::Path;
+
+
+use crate::error::{AppError, Result as AppResult};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SetupIntent {
@@ -272,17 +276,17 @@ impl StripeClient {
     /// * `school_id` - Your internal school ID
     /// * `user_id` - Your internal user ID
     /// * `description` - Optional description for the charge
-    pub async fn charge_payment_method(
+    pub async fn charge_payment_method (
         &self,
         amount: i64,
         currency: &str,
-        payment_method_id: &str,
-        customer_id: Option<&str>,
-        transaction_id: &str,
-        school_id: &str,
-        user_id: &str,
-        description: Option<&str>,
-    ) -> Result<PaymentIntent, Box<dyn std::error::Error + Send + Sync>> {
+        payment_method_id: &String,
+        customer_id: &String,
+        transaction_id: &Uuid,
+        school_id: &Uuid,
+        user_id: &Uuid,
+        description: Option<&String>,
+    ) -> AppResult<PaymentIntent> {
         let url = format!("{}/payment_intents", self.base_url);
         
         let mut form_data = HashMap::new();
@@ -292,9 +296,9 @@ impl StripeClient {
         form_data.insert("confirm".to_string(), "true".to_string());
         form_data.insert("off_session".to_string(), "true".to_string());
         
-        if let Some(customer) = customer_id {
-            form_data.insert("customer".to_string(), customer.to_string());
-        }
+        // if let Some(customer) = customer_id {
+            form_data.insert("customer".to_string(), customer_id.clone());
+        // }
 
         if let Some(desc) = description {
             form_data.insert("description".to_string(), desc.to_string());
@@ -311,14 +315,15 @@ impl StripeClient {
             .basic_auth(&self.secret_key, Some(""))
             .form(&form_data)
             .send()
-            .await?;
+            .await
+            .map_err(| e| AppError::Internal("Failed to charge customer payment method".to_string()))?;
 
         if response.status().is_success() {
-            let payment_intent: PaymentIntent = response.json().await?;
+            let payment_intent: PaymentIntent = response.json().await.map_err(|e| AppError::Internal(format!("Json error stripe")))?;
             Ok(payment_intent)
         } else {
-            let error_text = response.text().await?;
-            Err(format!("Stripe API Error: {}", error_text).into())
+            let error_text = response.text().await.map_err(|e| AppError::Internal(format!("Json2 error stripe")))?;
+            Err (AppError::Internal(format!("Stripe API Error: {}", error_text).into()))
         }
     }
 

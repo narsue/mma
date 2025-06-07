@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS {}.payment_plan (payment_plan_id uuid, base_payment_plan_id uuid, title text, description text, cost decimal, duration_id int, deleted_ts timestamp, created_ts timestamp, PRIMARY KEY(base_payment_plan_id, payment_plan_id));
+CREATE TABLE IF NOT EXISTS {}.user_payment (user_payment_id uuid, user_id uuid, class_id uuid, class_start_ts timestamp, base_payment_plan_id uuid, payment_plan_id uuid, status int, stripe_payment_id text, created_ts timestamp, paid decimal, amount decimal, refunded decimal, refunded_ts timestamp, paid_ts timestamp, processing_ts timestamp, processing_node text, captured_ts timestamp, captured decimal, PRIMARY KEY (user_id, base_payment_plan_id, class_id, class_start_ts));
+CREATE TABLE IF NOT EXISTS {}.group_payment_plan (group_payment_id uuid, user_id uuid, base_payment_plan_id uuid, group_user_ids set<uuid>, created_ts timestamp, PRIMARY KEY(user_id, base_payment_plan_id));
+CREATE TABLE IF NOT EXISTS {}.payment_subscription (group_payment_id uuid, base_payment_plan_id uuid, user_id uuid, renew_ts timestamp, PRIMARY KEY(user_id, base_payment_plan_id, renew_ts, group_payment_id));
+
+alter table {}.user add (dependents SET<uuid>, guardians SET<uuid>, payment_provider uuid, payment_dependents SET<uuid>, active_payment_plans SET<TUPLE<uuid,timestamp>>);

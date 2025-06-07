@@ -1,0 +1,60 @@
+CPU: Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz
+
+Benchmark                 | Req/sec              | Avg latency          | 90%                  | 99%                 
+-----------------------------------------------------------------------------------------------
+version                   | 59435.5301           | 0.0002s              | 0.0003s              | 0.0006s             
+health                    | 26730.6992           | 0.0003s              | 0.0003s              | 0.0091s             
+home_page                 | 27868.8501           | 0.0004s              | 0.0003s              | 0.0100s             
+login_success             | [0;31m86.5342             [0m | 0.0563s              | 0.0662s              | 0.0788s             
+login_bad_password_fail   | [0;31m75.7611             [0m | 0.0651s              | 0.0866s              | 0.1112s             
+login_no_user_fail        | 17847.9556           | 0.0003s              | 0.0003s              | 0.0007s             
+api/class/get_list        | 4669.5954            | 0.0011s              | 0.0013s              | 0.0024s             
+api/style/get_list        | 5673.4276            | 0.0009s              | 0.0010s              | 0.0018s             
+api/venue/get_list        | 4544.5389            | 0.0011s              | 0.0013s              | 0.0034s             
+api/class/get_class       | 46081.7176           | 0.0001s              | 0.0001s              | 0.0004s             
+api/class/get_style       | 20576.9116           | 0.0002s              | 0.0001s              | 0.0144s             
+CPU: Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz
+
+Benchmark                 | Req/sec              | Avg latency          | 90%                  | 99%                 
+-----------------------------------------------------------------------------------------------
+version                   | 62906.9332           | 0.0002s              | 0.0002s              | 0.0006s             
+health                    | 32179.1509           | 0.0002s              | 0.0002s              | 0.0067s             
+home_page                 | 33544.9505           | 0.0003s              | 0.0003s              | 0.0072s             
+login_success             | [0;31m89.6698             [0m | 0.0539s              | 0.0674s              | 0.0699s             
+login_bad_password_fail   | [0;31m90.2071             [0m | 0.0543s              | 0.0670s              | 0.0703s             
+login_no_user_fail        | 19126.5977           | 0.0002s              | 0.0003s              | 0.0009s             
+api/class/get_list        | 5238.2631            | 0.0009s              | 0.0011s              | 0.0019s             
+api/style/get_list        | 6248.6058            | 0.0008s              | 0.0009s              | 0.0018s             
+api/venue/get_list        | 5945.0262            | 0.0008s              | 0.0009s              | 0.0016s             
+api/class/get_class       | 40959.9774           | 0.0001s              | 0.0002s              | 0.0004s             
+api/class/get_style       | 42782.7583           | 0.0001s              | 0.0001s              | 0.0004s             
+CPU: Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz
+
+Benchmark                 | Req/sec              | Avg latency          | 90%                  | 99%                 
+-----------------------------------------------------------------------------------------------
+version                   | 60076.1778           | 0.0002s              | 0.0002s              | 0.0008s             
+health                    | 31153.1119           | 0.0002s              | 0.0003s              | 0.0069s             
+home_page                 | 32879.7333           | 0.0003s              | 0.0003s              | 0.0068s             
+login_success             | [0;31m88.3564             [0m | 0.0548s              | 0.0661s              | 0.0701s             
+login_bad_password_fail   | [0;31m88.7133             [0m | 0.0545s              | 0.0662s              | 0.0695s             
+login_no_user_fail        | 21055.7390           | 0.0002s              | 0.0003s              | 0.0006s             
+api/class/get_list        | 5148.4491            | 0.0010s              | 0.0011s              | 0.0017s             
+api/style/get_list        | 6084.2263            | 0.0008s              | 0.0009s              | 0.0018s             
+api/venue/get_list        | 6016.8252            | 0.0008s              | 0.0009s              | 0.0016s             
+api/class/get_class       | 42501.3254           | 0.0001s              | 0.0001s              | 0.0004s             
+api/class/get_style       | 43030.4523           | 0.0001s              | 0.0001s              | 0.0006s             
+CPU: AMD Ryzen 9 5950X 16-Core Processor
+
+Benchmark                 | Req/sec              | Avg latency          | 90%                  | 99%                 
+-----------------------------------------------------------------------------------------------
+version                   | 77008.4971           | 0.0001s              | 0.0002s              | 0.0008s             
+health                    | 72548.7500           | 0.0001s              | 0.0001s              | 0.0010s             
+home_page                 | 61185.3187           | 0.0002s              | 0.0002s              | 0.0015s             
+login_success             | [0;31m146.5375            [0m | 0.0337s              | 0.0383s              | 0.0430s             
+login_bad_password_fail   | [0;31m144.8682            [0m | 0.0336s              | 0.0383s              | 0.0442s             
+login_no_user_fail        | 23634.0366           | 0.0002s              | 0.0003s              | 0.0008s             
+api/class/get_list        | 5676.8607            | 0.0009s              | 0.0010s              | 0.0019s             
+api/style/get_list        | 7054.9549            | 0.0007s              | 0.0008s              | 0.0016s             
+api/venue/get_list        | 6947.9891            | 0.0007s              | 0.0008s              | 0.0012s             
+api/class/get_class       | 51135.5675           | 0.0001s              | 0.0001s              | 0.0005s             
+api/class/get_style       | 48405.6767           | 0.0001s              | 0.0001s              | 0.0009s             

@@ -28,8 +28,9 @@ def wipe_db():
         return
 
     for table in tables:
+        if table != 'schema_version':
         # print(f"🧹 Truncating table: {table}")
-        session.execute(f"TRUNCATE {keyspace}.{table}")
+            session.execute(f"TRUNCATE {keyspace}.{table}")
 
     # print("✅ Database wiped clean.")
 
@@ -170,7 +171,7 @@ def create_class(session: requests.Session, venue_id, style_id):
         "capacity": 20,
         "frequency": [
             {
-                "frequency": 1,
+                "frequency": 6,
                 "start_date": "2025-06-01",
                 "end_date": "2025-06-30",
                 "start_time": "10:00:00",

@@ -1,4 +1,4 @@
-# 28MB docker image - + upx binary, opt ="z"
+# 30MB docker image - with compressed binary, + upx binary
 # ---- Stage 1: build + package ----
 FROM docker.io/rust:1.87-slim AS builder
 WORKDIR /app
@@ -32,8 +32,7 @@ RUN ls -lh target/release/mma
 
 
 # package into a tar.gz
-# RUN tar czf /mma_app.tar.gz -C target/release mma
-RUN cp /app/target/release/mma /usr/local/bin/app
+RUN tar czf /mma_app.tar.gz -C target/release mma
 
 # capture ENV file
 RUN echo "DEV_MODE=1" > /.env_runtime
@@ -43,11 +42,10 @@ FROM gcr.io/distroless/cc-debian12:nonroot
 WORKDIR /app
 
 # 1) copy the one and only helper: a static busybox
-# COPY --from=builder /bin/busybox /busybox
+COPY --from=builder /bin/busybox /busybox
 
 # 2) copy your compressed payload + assets + .env
-# COPY --from=builder --chown=65532:65532 /mma_app.tar.gz /app/mma_app.tar.gz
-COPY --from=builder --chown=65532:65532 /usr/local/bin/app /app/mma
+COPY --from=builder --chown=65532:65532 /mma_app.tar.gz /app/mma_app.tar.gz
 COPY --from=builder --chown=65532:65532 /.env_runtime     /app/.env
 COPY --chown=65532:65532 templates         /app/templates
 COPY --chown=65532:65532 schema            /app/schema
@@ -58,4 +56,5 @@ EXPOSE 1227
 # 3) at container start, use busybox’s shell+tar:
 #    a) extract into /tmp (which is 1777, so writable by our non-root)
 #    b) exec the real binary from there
-CMD ["/app/mma"]
+CMD ["/busybox", "sh", "-c", \
+     "tar xzf /app/mma_app.tar.gz -C /tmp && exec /tmp/mma"]

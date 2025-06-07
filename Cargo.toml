@@ -1,6 +1,6 @@
 [package]
 name = "mma"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 
 [dependencies]
@@ -33,6 +33,7 @@ mail-builder = "0.2.5"
 urlencoding = "2.1.3"
 reqwest = { version ="0.12.19", features = ["json"]}
 dotenv = "0.15.0"
+ansi_term = "0.12.1"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "plotters", "cargo_bench_support"] }
@@ -46,7 +47,7 @@ harness = false
 
 # These are the default settings (you don't need to add this unless customizing)
 [profile.release]
-opt-level = 3        # Maximum optimizations
+opt-level = "z"        # Maximum optimizations
 debug = false        # No debug info
 lto = true         # Link-time optimization (can be enabled for even more optimization)
 strip = true
