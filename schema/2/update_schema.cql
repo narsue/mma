@@ -8,3 +8,4 @@ alter table {}.attendance add (user_payment_id uuid, user_payment_plan_id uuid);
 alter table {}.school add timezone text;
 
 CREATE TABLE IF NOT EXISTS {}.class_attendance_locks ( class_id uuid, class_start_ts timestamp, PRIMARY KEY(class_id, class_start_ts) ) WITH default_time_to_live = 5;
+CREATE TABLE IF NOT EXISTS {}.class_attendance_count ( class_id uuid, class_start_ts timestamp, count int, PRIMARY KEY (class_id, class_start_ts));
