@@ -18,6 +18,10 @@ pub struct GenericResponse {
     pub message: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct GenericSuccessResponse {
+    pub success: bool,
+}
 
 // Transaction status update
 #[derive(Debug, Deserialize)]
@@ -78,7 +82,7 @@ pub struct ContactForm {
 pub struct UserProfileData {
     // Note: Email is read-only by profile update, password isn't sent here
     pub user_id: Uuid,
-    pub email: String, // Include email for display
+    pub email: Option<String>, // Include email for display
     pub first_name: String,
     pub surname: String,
     pub gender: Option<String>,
@@ -112,8 +116,10 @@ pub struct GetUserProfileResponse {
 #[derive(Debug, Deserialize)]
 pub struct UpdateUserProfileRequest {
     // User ID isn't needed in the request body as it comes from the session
+    pub user_id: Uuid,
     pub first_name: String,
     pub surname: String,
+    pub email: Option<String>,
     pub gender: Option<String>,
     pub phone: Option<String>,
     pub dob: Option<String>,
@@ -125,6 +131,20 @@ pub struct UpdateUserProfileRequest {
     pub emergency_medical: Option<String>,
     pub belt_size: Option<String>,
     pub uniform_size: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UserIdRequest {
+    pub user_id: Uuid,
+}
+
+
+
+
+#[derive(Debug, Deserialize)]
+pub struct UserInviteRequest {
+    pub user_id: Uuid,
+    pub email: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -491,6 +511,14 @@ pub struct SchoolUserId {
     pub user_id: Uuid,   // User ID
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DetailedSchoolUserId {
+    pub school_id: Uuid, // School ID
+    pub user_id: Uuid,   // User ID
+    pub school_title: String,
+    pub user_name: String,
+}
+
 #[derive(Deserialize)]
 pub struct GetClassStudentsRequest {
     pub class_id: Uuid,
@@ -545,4 +573,95 @@ pub struct GetStripeSavedPaymentMethodsResponse {
 // Delete a payment method
 pub struct DeletePaymentMethodRequest{
     pub payment_method_id: Option<String>, // ID of the deleted payment method
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PurchasablePaymentPlanData {
+    pub payment_plan_id: Uuid,
+    pub base_payment_plan_id: Uuid,
+    pub grouping_id: i32,
+    pub min_age: Option<i32>,
+    pub max_age: Option<i32>,
+    pub working: Option<bool>,
+    pub title: String,
+    pub description: String,
+    pub cost: BigDecimal,
+    pub duration_id: i32,
+    pub purchasable: bool, // Indicates if the plan can be purchased
+    pub purchasable_message: Option<String>, // Message if not purchasable
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserWithName {
+    pub user_id: Uuid,
+    pub first_name: String,
+    pub surname: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ActivePaymentPlanData {
+    pub user_payment_plan_id: Uuid,
+    pub payment_plan_id: Uuid,
+    pub base_payment_plan_id: Uuid,
+    pub grouping_id: i32,
+    pub min_age: Option<i32>,
+    pub max_age: Option<i32>,
+    pub working: Option<bool>,
+    pub title: String,
+    pub description: String,
+    pub cost: BigDecimal,
+    pub duration_id: i32,
+    pub subscribed: bool,
+    pub expiration_ts: i64,
+    pub members: Vec<UserWithName>,
+    pub next_members: Vec<UserWithName>
+}
+
+#[derive(Debug, Serialize)]
+pub struct PayablePaymentPlansResponse {
+    pub success: bool,
+    pub payment_plans: Vec<PurchasablePaymentPlanData>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SchoolUpdatePaymentPlanRequest {
+    pub base_payment_plan_id: Option<Uuid>,
+    pub min_age: Option<i32>,
+    pub max_age: Option<i32>,
+    pub working: Option<bool>,
+    pub title: String,
+    pub description: String,
+    pub cost: BigDecimal,
+    pub duration_id: i32,
+    pub grouping_id: i32,
+}
+
+
+#[derive(Debug, Deserialize)]
+pub struct UserSubscribePaymentPlan {
+    pub base_payment_plan_id: Uuid,
+    pub payment_plan_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChangeUserSubscribePaymentPlan {
+    pub user_payment_plan_id: Uuid,
+    pub subscribe: bool
+}
+
+#[derive(Serialize)]
+pub struct SchoolUser {
+    pub user_id: Uuid,
+    pub first_name: String,
+    pub surname: String,
+    pub email: Option<String>,
+    pub email_verified: bool,
+    pub img: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct UserSchoolPermission{
+    pub club_id: Option<Uuid>,
+    pub class_id: Option<Uuid>,
+    pub permission: i32
 }

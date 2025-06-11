@@ -7,6 +7,10 @@
     <!-- Include Tailwind CSS from CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://js.stripe.com/v3/"></script>
+    <!-- Flowbite + Chart.js (Flowbite uses Chart.js under the hood) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/flowbite@2.3.0/dist/flowbite.min.js"></script>
+
     <style>
         /* Basic nav styling to demonstrate */
         nav ul {
@@ -574,14 +578,16 @@
     <nav>
         <ul>
             <!-- Nav items for client-side tab switching -->
+            <li id="dashboard-nav" class="hidden"><a href="#" data-section="dashboard" class="nav-link">Dashboard</a></li>
             <li><a href="#" data-section="frontpage" class="nav-link">Front Page</a></li>
             <li><a href="#" data-section="classes" class="nav-link">Classes</a></li>
             <li><a href="#" data-section="venues" class="nav-link">Venues</a></li>
             <li><a href="#" data-section="styles" class="nav-link">Styles</a></li>
             <li><a href="#" data-section="waivers" class="nav-link">Waivers</a></li>
             <li><a href="#" data-section="locations" class="nav-link">Locations</a></li>
-            <li><a href="#" data-section="pos" class="nav-link">POS</a></li>
-            <li id="users-nav" class="nav-item" style="display: none;"><a href="#" data-section="users" class="nav-link">Users</a></li>
+            <li><a href="#" data-section="pos" class="nav-link">Today</a></li>
+            <li><a href="#" data-section="payment_plans" class="nav-link">Plans</a></li>
+            <li id="users-nav" class="nav-item hidden"><a href="#" data-section="users" class="nav-link">Users</a></li>
             <li><a href="#" data-section="account" class="nav-link">Account</a></li>
             <!-- Logout is a different action -->
             <li><a href="#" id="logoutLink" class="nav-link">Log out</a></li>
@@ -594,11 +600,51 @@
             <h2 class="text-2xl font-bold text-gray-900 mb-4">Welcome to the Portal!</h2>
             <p class="text-gray-700 mb-6">This is your main dashboard area. Select an option from the navigation above.</p>
             <!-- Add summary data, recent activity, etc. here -->
-             <div id="dashboard-content">
+             <div id="frontpage-content">
                   <!-- Dynamic dashboard content will go here -->
                   <p>Loading dashboard content...</p>
              </div>
         </div>
+
+        <div id="dashboardSection" class="portal-section p-6">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Dashboard</h2>
+          
+            <!-- Filters -->
+            <div class="mb-6 flex flex-col sm:flex-row gap-4">
+              <select id="classFilter" class="w-full sm:w-1/3 border-gray-300 rounded-md shadow-sm">
+                <option value="">All Classes</option>
+                <option value="1">Class 1</option>
+                <option value="2">Class 2</option>
+              </select>
+          
+              <select id="timeFilter" class="w-full sm:w-1/3 border-gray-300 rounded-md shadow-sm">
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="week" selected>This Week</option>
+                <option value="last_month">Last Month</option>
+                <option value="last_3_months">Last 3 Months</option>
+                <option value="last_year">Last Year</option>
+              </select>
+          
+              <button id="refreshDashboard" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                Refresh
+              </button>
+            </div>
+          
+            <!-- Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-semibold mb-2">Lesson Attendance</h3>
+                <canvas id="attendanceChart" height="200"></canvas>
+              </div>
+          
+              <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-semibold mb-2">Revenue</h3>
+                <canvas id="revenueChart" height="200"></canvas>
+              </div>
+            </div>
+          </div>
+
 
         <!-- Section: Classes -->
         <div id="classesSection" class="portal-section">
@@ -1153,6 +1199,110 @@
         </div>
 
 
+		<!-- Section: PaymentPlans -->
+		<div id="payment_plansSection" class="portal-section">
+			<h2 class="text-2xl font-bold text-gray-900 mb-4">Payment Plans</h2>
+
+			<!-- User’s Active Memberships -->
+			<div id="userMemberships" class="mb-8 text-center">
+				<p class="text-gray-600 italic">Loading your memberships…</p>
+			</div>
+
+			<!-- Purchasable Plans Grid -->
+			<div id="purchasablePlansGrid" class="grid grid-cols-2 gap-4 mb-12">
+				<!-- Filled dynamically -->
+			</div>
+
+			<!-- Admin-only: adjust all plans -->
+			<div id="adminPaymentPlansSection" style="display: none;">
+				<h3 class="text-xl font-semibold text-gray-800 mb-4">
+				Admin: Current Payment Plans
+				</h3>
+				<div
+				id="adminPlansGrid"
+				class="grid grid-cols-2 gap-4 mb-6 text-sm"
+				></div>
+			</div>
+		</div>
+
+		<!-- Admin Edit Payment Plan Modal -->
+		<div id="edit-paymentplan-modal" class="modal">
+			<div class="modal-content">
+				<div class="modal-header">
+				<h3>Edit Payment Plan</h3>
+				<span class="close-button">&times;</span>
+				</div>
+				<div class="modal-body">
+				<form id="edit-paymentplan-form">
+					<input type="hidden" id="edit-pp-id" />
+					<div class="form-group">
+					<label>Title:</label>
+					<input
+						type="text"
+						id="edit-pp-title"
+						class="w-full"
+					/>
+					</div>
+					<div class="form-group">
+					<label>Description:</label>
+					<textarea
+						id="edit-pp-desc"
+						rows="2"
+						class="w-full"
+					></textarea>
+					</div>
+					<div class="form-group">
+					<label>Cost:</label>
+					<input
+						type="number"
+						step="0.01"
+						id="edit-pp-cost"
+						class="w-full"
+					/>
+					</div>
+					<div class="form-group">
+					<label>Duration:</label>
+					<select id="edit-pp-duration" disabled class="w-full">
+						<option value="1">Calendar Month</option>
+						<option value="2">School Term</option>
+					</select>
+					</div>
+					<div class="form-group">
+					<label>Type:</label>
+					<select id="edit-pp-type" class="w-full">
+						<option value="0">Individual</option>
+						<option value="1">Family</option>
+					</select>
+					</div>
+					<div class="form-group">
+					<label>Min Age:</label>
+					<input type="number" id="edit-pp-min-age" class="w-full" />
+					</div>
+					<div class="form-group">
+					<label>Max Age:</label>
+					<input type="number" id="edit-pp-max-age" class="w-full" />
+					</div>
+					<div class="form-group checkbox-group">
+					<input type="checkbox" id="edit-pp-is-working" />
+					<label for="edit-pp-is-working">Applies if Working</label>
+					</div>
+				</form>
+				<div id="edit-pp-message" class="message text-center"></div>
+				</div>
+				<div class="modal-footer">
+				<button type="button" class="cancel-button">Cancel</button>
+				<button
+					type="button"
+					class="submit-button"
+					id="submit-edit-paymentplan"
+				>
+					Save Changes
+				</button>
+				</div>
+			</div>
+		</div>
+
+
         <!-- Section: POS -->
         <div id="posSection" class="portal-section">
             <h2 class="text-2xl font-bold text-gray-900 mb-4">Today's Schedule</h2>
@@ -1248,13 +1398,209 @@
 
         <!-- Section: Users -->
         <div id="usersSection" class="portal-section">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Users</h2>
-            <p class="text-gray-700 mb-6">Allocate user permissions.</p>
-            <!-- User listing/management interface goes here -->
-             <div id="user-list" class="mt-6 space-y-4">
-                  <p class="text-gray-600 italic">Loading users...</p>
-             </div>
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Users</h2>
+                    <p class="text-gray-700">Allocate user permissions.</p>
+                </div>
+                <button id="addUserBtn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    Add User
+                </button>
+            </div>
+
+            <!-- Filter & Sort Controls -->
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
+            <input
+                type="text"
+                id="userSearch"
+                placeholder="Search by name or email..."
+                class="w-full sm:w-1/2 px-4 py-2 border border-gray-300 rounded"
+            />
+            <select
+                id="userSort"
+                class="px-3 py-2 border border-gray-300 rounded"
+            >
+                <option value="">Sort By</option>
+                <option value="name">Name (A-Z)</option>
+                <option value="email">Email (A-Z)</option>
+            </select>
+            </div>
+        
+            <!-- User List -->
+            <div id="user-list" class="mt-6 space-y-4">
+            <p class="text-gray-600 italic">Loading users...</p>
+            </div>
         </div>
+
+        <!-- Edit User Modal -->
+        <div id="userEditModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+            <div class="bg-white w-full max-w-3xl p-6 rounded-lg relative overflow-y-auto max-h-[90vh]">
+            <button id="closeUserEditModalBtn" class="absolute top-2 right-2 text-gray-500 hover:text-black text-xl">&times;</button>
+            
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Edit User</h2>
+            
+            <form id="editUserForm" class="space-y-6 overflow-y-auto">
+                <input type="hidden" id="edit_user_id" />
+        
+                <!-- Same fields as Account section (copy/paste from your Account form) -->
+                <div class="form-group">
+                <label for="edit_email">Email:</label>
+                <input type="email" id="edit_email"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <div class="form-group">
+                <label for="edit_first_name">First Name:</label>
+                <input type="text" id="edit_first_name" maxlength="64"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <div class="form-group">
+                <label for="edit_surname">Surname:</label>
+                <input type="text" id="edit_surname" maxlength="64"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <div class="form-group">
+                <label for="edit_gender">Gender:</label>
+                <select id="edit_gender"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                    <option value="">Select Gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                </select>
+                </div>
+        
+                <div class="form-group">
+                <label for="edit_phone">Phone:</label>
+                <input type="tel" id="edit_phone" maxlength="64"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <div class="form-group">
+                <label for="edit_dob">Date of Birth:</label>
+                <input type="date" id="edit_dob"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <div class="form-group">
+                <label for="edit_address">Address:</label>
+                <input type="text" id="edit_address" maxlength="512"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <div class="form-group">
+                <label for="edit_suburb">Suburb:</label>
+                <input type="text" id="edit_suburb" maxlength="64"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <h4 class="text-lg font-semibold text-gray-800 mt-6 mb-3">Emergency Contact</h4>
+        
+                <div class="form-group">
+                <label for="edit_emergency_name">Name:</label>
+                <input type="text" id="edit_emergency_name" maxlength="64"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <div class="form-group">
+                <label for="edit_emergency_relationship">Relationship:</label>
+                <input type="text" id="edit_emergency_relationship" maxlength="64"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <div class="form-group">
+                <label for="edit_emergency_phone">Phone:</label>
+                <input type="tel" id="edit_emergency_phone" maxlength="64"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <div class="form-group">
+                <label for="edit_emergency_medical">Medical Notes:</label>
+                <textarea id="edit_emergency_medical" rows="3"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm"></textarea>
+                </div>
+        
+                <h4 class="text-lg font-semibold text-gray-800 mt-6 mb-3">Uniform Details</h4>
+        
+                <div class="form-group">
+                <label for="edit_belt_size">Belt Size:</label>
+                <input type="number" id="edit_belt_size" min="0" max="100"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <div class="form-group">
+                <label for="edit_uniform_size">Uniform Size:</label>
+                <input type="number" id="edit_uniform_size" min="0" max="100"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+        
+                <!-- Read-only fields
+                <div id="editModalReadOnlyFields" class="mt-6 text-sm text-gray-600 space-y-1">
+                <p><strong>User ID:</strong> <span id="edit_user_id_display"></span></p>
+                <p><strong>Member #:</strong> <span id="edit_member_number_display"></span></p>
+                <p><strong>Joined:</strong> <span id="edit_created_ts_display"></span></p>
+                <p><strong>Contracted Until:</strong> <span id="edit_contracted_until_display"></span></p>
+                <p><strong>Email Verified:</strong> <span id="edit_email_verified_display"></span></p>
+                <p><strong>Waiver ID:</strong> <span id="edit_waiver_id_display"></span></p>
+                <p><strong>Photo ID:</strong> <span id="edit_photo_id_display"></span></p>
+                <p><strong>Stripe Payment ID:</strong> <span id="edit_stripe_payment_method_id_display"></span></p>
+                </div> -->
+        
+                <!-- Actions -->
+                <div class="flex justify-between mt-6">
+                <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Update</button>
+                <button type="button" id="inviteUserBtn" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">Invite</button>
+                </div>
+        
+                <div id="editUserStatusMessage" class="mt-4 text-center text-gray-700"></div>
+            </form>
+
+            <!-- Admin Stripe Card Section -->
+            <div id="admin-stripe-section" class="mt-10 p-6 bg-gray-50 rounded-lg border-t pt-8">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Manage Payment Method</h3>
+            
+                <form id="stripe-card-form-admin" class="space-y-4">
+                <div class="form-group">
+                    <label for="stripe-cardholder-name-admin" class="block text-sm font-medium text-gray-700">Cardholder Name</label>
+                    <input type="text" id="stripe-cardholder-name-admin" placeholder="John Doe" required
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm">
+                </div>
+            
+                <div class="form-group">
+                    <label for="card-element-admin" class="block text-sm font-medium text-gray-700">Card Details</label>
+                    <div id="card-element-admin" class="mt-1 p-3 border border-gray-300 rounded-md shadow-sm bg-white"></div>
+                    <div id="card-errors-admin" role="alert" class="mt-2 text-sm text-red-600"></div>
+                </div>
+            
+                <button type="submit" id="stripe-submit-btn-admin"
+                        class="w-full py-2 px-4 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+                    Save Payment Method
+                </button>
+                </form>
+            
+                <div id="stripe-loading-admin" class="hidden mt-4 text-center">
+                <p class="text-gray-600">Processing...</p>
+                </div>
+            
+                <div id="stripe-result-admin" class="mt-4"></div>
+            
+                <div class="mt-6">
+                <h4 class="text-lg font-semibold text-gray-800 mb-3">Saved Payment Methods</h4>
+                <div id="saved-cards-list-admin" class="space-y-2">
+                    <p class="text-gray-600">Loading saved cards...</p>
+                </div>
+                <button type="button" id="refresh-cards-admin"
+                        class="mt-3 py-2 px-4 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    Refresh Cards
+                </button>
+                </div>
+            </div>
+
+            </div>
+        </div>
+
+
 
         <!-- Section: Account -->
         <div id="accountSection" class="portal-section">
@@ -1283,8 +1629,8 @@
                     <select id="gender" name="gender"
                             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         <option value="">Select Gender</option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -1339,18 +1685,6 @@
              <input type="number" id="uniform_size" name="uniform_size" min="0" max="100"
                     class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
          </div>
-
-        <div id="readOnlyFields" class="mt-6 space-y-2 text-gray-700 text-sm">
-            <p><strong>User ID:</strong> <span id="user_id_display"></span></p>
-            <p><strong>Member Number:</strong> <span id="member_number_display"></span></p>
-            <p><strong>Joined:</strong> <span id="created_ts_display"></span></p>
-            <p><strong>Contracted Until:</strong> <span id="contracted_until_display"></span></p>
-            <p><strong>Email Verified:</strong> <span id="email_verified_display"></span></p>
-            <p><strong>Waiver ID:</strong> <span id="waiver_id_display"></span></p>
-            <p><strong>Photo ID:</strong> <span id="photo_id_display"></span></p>
-            <p><strong>Stripe Payment Method ID:</strong> <span id="stripe_payment_method_id_display"></span></p>
-        </div>
-
 
          <button type="submit" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Update Profile</button>
           <div id="profileStatusMessage" class="mt-4 text-center text-gray-700"></div>
@@ -1476,6 +1810,11 @@
             Banned: 32,
             // Add any new permissions here, continuing the sequence
         };
+
+        var accounts = [];
+        let userPermissions = []; // This should be set when the user logs in or is fetched from the server
+        var my_user_id = null;
+        var my_school_id = null;
 
         var cached_data = {};
 
@@ -1714,7 +2053,6 @@
 
 
     
-        let userPermissions = [0]; // This should be set when the user logs in or is fetched from the server
 
         // Get modal elements
         const createWaiverModal = document.getElementById('create-waiver-modal');
@@ -1725,18 +2063,6 @@
         const newWaiverContentArea = document.getElementById('new-waiver-content');
         const createWaiverErrorDiv = document.getElementById('create-waiver-error');
 
-        if (hasPermission(userPermissions, [Permissions.CreateWaiver])) {
-            createWaiverButton.style.display = 'block'; // Show button if user has permission
-        } else {
-            createWaiverButton.style.display = 'none'; // Hide button if no permission
-        }
-
-        const usersNav = document.getElementById('users-nav');
-        if (hasPermission(userPermissions, [Permissions.CreateSuperAdmin, Permissions.RemoveSuperAdmin, Permissions.ViewInstructor, Permissions.CreateInstructor, Permissions.ModifyInstructor, Permissions.RemoveInstructor, Permissions.ViewStudent, Permissions.AddStudent, Permissions.RemoveStudent, Permissions.ModifyStudent])) {
-            usersNav.style.display = 'block'; // Show button if user has permission
-        } else {
-            usersNav.style.display = 'none'; // Hide button if no permission
-        }
 
         // Open the modal
         createWaiverButton.onclick = function() {
@@ -1816,12 +2142,138 @@
              }
         }
 
-
-
-
-
         // Wait for the DOM to be fully loaded
         document.addEventListener('DOMContentLoaded', () => {
+            async function loadPermissionsData() {
+                try {
+                    const res = await fetch("/api/user/get_permissions", {
+                        method: "POST"
+                    });
+                    var data = await res.json();
+                    var tmp_permissions = [];
+                    // For the moment we'll simplify the permission model to just look at permissions.
+                    // Ignoring class / club specific information
+                    for (i in data.permissions) {
+                        tmp_permissions.push(data.permissions[i].permission);
+                    }
+                    userPermissions = tmp_permissions;
+                    accounts = data.accounts;
+                    my_user_id = data.user_id;
+                    my_school_id = data.school_id;
+
+                    if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin]))
+                    {
+                        document.getElementById("dashboard-nav").classList.remove("hidden");
+                        document.getElementById("users-nav").classList.remove("hidden");
+                        document.getElementById("add-venue-button").classList.remove("hidden");
+                        document.getElementById("add-class-button").classList.remove("hidden");
+                    }
+                    else{
+                        document.getElementById("dashboard-nav").classList.add("hidden");
+                        document.getElementById("users-nav").classList.add("hidden");
+                        document.getElementById("add-venue-button").classList.add("hidden");
+                        document.getElementById("add-class-button").classList.add("hidden");
+                    }
+
+                    if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin, Permissions.CreateWaiver])) {
+                        document.getElementById('create-waiver-button').style.display = 'block'; // Show button if user has permission
+                    } else {
+                        document.getElementById('create-waiver-button').style.display = 'none'; // Hide button if no permission
+                    }
+
+                    if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
+                        document.getElementById('add-style-button').style.display = 'block'; // Show button if user has permission
+                    } else {
+                        document.getElementById('add-style-button').style.display = 'none'; // Hide button if no permission
+                    }
+
+                } catch (error) {
+                    console.error('Error loading permission data:', error);
+                }
+            }
+            loadPermissionsData();
+
+            // userPermissions
+
+            // Dashboard -- start
+            const attendanceChartCtx = document.getElementById('attendanceChart').getContext('2d');
+            const revenueChartCtx = document.getElementById('revenueChart').getContext('2d');
+
+            let attendanceChart, revenueChart;
+
+            async function loadDashboardData() {
+                const classId = document.getElementById('classFilter').value;
+                const timeFilter = document.getElementById('timeFilter').value;
+
+                try {
+                    const res = await fetch(`/api/school/get_dashboard_data?class_id=${classId}&time_filter=${timeFilter}`);
+                    const { data, totals } = await res.json();
+
+                    const labels = data.map(d => new Date(d.datetime).toLocaleDateString());
+                    const attendanceAll = data.map(d => d.all);
+                    const men = data.map(d => d.men);
+                    const women = data.map(d => d.women);
+                    const unknown = data.map(d => d.unknown);
+                    const revenueCasual = data.map(d => d.casual_earned);
+                    const revenuePlan = data.map(d => d.plan_earned);
+
+                    // Attendance Chart
+                    if (attendanceChart) attendanceChart.destroy();
+                    attendanceChart = new Chart(attendanceChartCtx, {
+                        type: 'line',
+                        data: {
+                        labels,
+                        datasets: [
+                            { label: 'All', data: attendanceAll, borderColor: '#2563eb', backgroundColor: '#2563eb20', tension: 0.3 },
+                            { label: 'Men', data: men, borderColor: '#4b5563', backgroundColor: '#4b556320', tension: 0.3 },
+                            { label: 'Women', data: women, borderColor: '#10b981', backgroundColor: '#10b98120', tension: 0.3 },
+                            { label: 'Unknown', data: unknown, borderColor: '#f59e0b', backgroundColor: '#f59e0b20', tension: 0.3 }
+                        ]
+                        },
+                            options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { position: 'top' },
+                                title: { display: true, text: 'Lesson Attendance Over Time' }
+                            }
+                        }
+                    });
+
+                    // Revenue Chart
+                    if (revenueChart) revenueChart.destroy();
+                    revenueChart = new Chart(revenueChartCtx, {
+                        type: 'bar',
+                        data: {
+                        labels,
+                        datasets: [
+                            { label: 'Casual Revenue ($)', data: revenueCasual, backgroundColor: '#3b82f6' },
+                            { label: 'Plan Revenue ($)', data: revenuePlan, backgroundColor: '#10b981' }
+                        ]
+                        },
+                        options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'top' },
+                            title: { display: true, text: 'Revenue Breakdown' }
+                        }
+                        }
+                    });
+
+                } catch (error) {
+                    console.error('Error loading dashboard data:', error);
+                }
+            }
+
+            document.getElementById('refreshDashboard').addEventListener('click', loadDashboardData);
+            loadDashboardData(); // Initial load
+
+            // Dashboard -- end
+
+
+
+
+
+
             const sections = document.querySelectorAll('.portal-section');
             const navLinks = document.querySelectorAll('nav ul li a[data-section]');
             const logoutLink = document.getElementById('logoutLink');
@@ -1849,15 +2301,6 @@
                 belt_size: document.getElementById('belt_size'), // This is now type="number"
                 uniform_size: document.getElementById('uniform_size'), // This is now type="number"
 
-                 // Read-only display spans (add user_id)
-                user_id_display: document.getElementById('user_id_display'),
-                member_number_display: document.getElementById('member_number_display'),
-                created_ts_display: document.getElementById('created_ts_display'),
-                contracted_until_display: document.getElementById('contracted_until_display'),
-                email_verified_display: document.getElementById('email_verified_display'),
-                waiver_id_display: document.getElementById('waiver_id_display'),
-                photo_id_display: document.getElementById('photo_id_display'),
-                stripe_payment_method_id_display: document.getElementById('stripe_payment_method_id_display'),
             };
 
             // Get password change fields
@@ -1885,6 +2328,16 @@
                 });
                 history.pushState(null, '', `#${sectionId}`);
 
+                
+				if (sectionId === 'users') {
+					initUsersSection();
+				}
+                if (sectionId === 'dashboard') {
+					initDashboardSection();
+				}
+				if (sectionId === 'payment_plans') {
+					initPaymentPlansSection();
+				}
                 if (sectionId === 'classes') {
                     fetchAndDisplayClasses(); // Fetch and display classes when this section is shown
                 }
@@ -1899,7 +2352,8 @@
                 }
                  // --- Load profile data when Account section is shown ---
                  if (sectionId === 'account') {
-                     loadUserProfile();
+                    init_stripe();
+                    loadUserProfile();
                  } else {
                      // Optional: Clear forms when leaving the section
                      profileUpdateForm.reset();
@@ -1911,6 +2365,102 @@
                  if (sectionId === 'waivers') {
                      fetchLatestWaiver(); // Load the latest waiver when this section is shown
                  }
+            }
+
+            document.getElementById('addUserBtn').addEventListener('click', () => {
+                openNewUserModal(); // Pass `null` to trigger blank form
+            });
+
+            function initDashboardSection() {
+
+            }
+
+            function initUsersSection() {
+                const userList = document.getElementById("user-list");
+                const userSearch = document.getElementById("userSearch");
+                const userSort = document.getElementById("userSort");
+
+                let allUsers = [];
+
+                // Render users to the UI
+                function renderUsers(users) {
+                    if (users.length === 0) {
+                        userList.innerHTML = '<p class="text-gray-600 italic">No users found.</p>';
+                        return;
+                    }
+
+                    userList.innerHTML = '';
+                    users.forEach(user => {
+                        const userDiv = document.createElement("div");
+                        userDiv.className = "bg-white shadow p-4 rounded flex items-center justify-between";
+
+                        userDiv.innerHTML = `
+                            <div class="flex items-center gap-4">
+                                <img src="${user.img || '/default-avatar.png'}" alt="avatar" class="w-10 h-10 rounded-full object-cover bg-gray-200" />
+                                <div>
+                                    <p class="text-gray-900 font-medium">${user.first_name} ${user.surname}</p>
+                                    <p class="text-gray-600 text-sm">${user.email}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm ${user.email_verified ? 'text-green-600' : 'text-red-500'}">
+                                    ${user.email_verified ? 'Verified' : 'Unverified'}
+                                </span>
+                                <button class="editUserBtn text-sm bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded" data-user-id="${user.user_id}">
+                                    Edit
+                                </button>
+                            </div>
+                        `;
+                        const editBtn = userDiv.querySelector('.editUserBtn');
+                        editBtn.addEventListener('click', () => openEditUserModal(user.user_id));
+                        userList.appendChild(userDiv);
+                    });
+                }
+
+                // Filter and sort users
+                function updateDisplayedUsers() {
+                    const searchTerm = userSearch.value.toLowerCase().trim();
+                    const sortBy = userSort.value;
+
+                    let filtered = allUsers.filter(user =>
+                        `${user.first_name} ${user.surname}`.toLowerCase().includes(searchTerm) ||
+                        user.email.toLowerCase().includes(searchTerm)
+                    );
+
+                    if (sortBy === "name") {
+                        filtered.sort((a, b) => {
+                            const nameA = `${a.first_name} ${a.surname}`.toLowerCase();
+                            const nameB = `${b.first_name} ${b.surname}`.toLowerCase();
+                            return nameA.localeCompare(nameB);
+                        });
+                    } else if (sortBy === "email") {
+                        filtered.sort((a, b) => a.email.toLowerCase().localeCompare(b.email.toLowerCase()));
+                    }
+
+                    renderUsers(filtered);
+                }
+
+                // Fetch users from the backend
+                fetch("/api/school/get_users", {
+                    method: "POST"
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && Array.isArray(data.users)) {
+                        allUsers = data.users;
+                        updateDisplayedUsers();
+                    } else {
+                        userList.innerHTML = '<p class="text-red-600">Failed to load users.</p>';
+                    }
+                })
+                .catch(err => {
+                    console.error("Error loading users:", err);
+                    userList.innerHTML = '<p class="text-red-600">Error loading users.</p>';
+                });
+
+                // Event listeners for sorting and filtering
+                userSearch.addEventListener("input", updateDisplayedUsers);
+                userSort.addEventListener("change", updateDisplayedUsers);
             }
 
             navLinks.forEach(link => {
@@ -1959,7 +2509,9 @@
                         profileFields.surname.value = profile.surname || '';
                         profileFields.gender.value = profile.gender || ''; // Set select value
                         profileFields.phone.value = profile.phone || '';
-                        profileFields.dob.value = profile.dob || ''; // YYYY-MM-DD format from backend expected by input[type="date"]
+                        profileFields.dob.value = profile.dob
+                            ? profile.dob.replace(/\//g, '-')
+                            : '';
                         profileFields.address.value = profile.address || '';
                         profileFields.suburb.value = profile.suburb || '';
                         profileFields.emergency_name.value = profile.emergency_name || '';
@@ -1969,18 +2521,6 @@
                          // Handle number inputs - ensure they are numbers or empty strings
                         profileFields.belt_size.value = profile.belt_size !== null && profile.belt_size !== undefined ? profile.belt_size : '';
                         profileFields.uniform_size.value = profile.uniform_size !== null && profile.uniform_size !== undefined ? profile.uniform_size : '';
-
-
-                         // Populate read-only display spans
-                         profileFields.user_id_display.textContent = profile.user_id || 'N/A'; // Display User ID
-                         profileFields.member_number_display.textContent = profile.member_number || 'N/A';
-                         // Format timestamp for display (simple example)
-                         profileFields.created_ts_display.textContent = profile.created_ts ? new Date(profile.created_ts * 1000).toLocaleDateString() : 'N/A';
-                         profileFields.contracted_until_display.textContent = profile.contracted_until ? new Date(profile.contracted_until * 1000).toLocaleDateString() : 'N/A';
-                         profileFields.email_verified_display.textContent = profile.email_verified ? 'Yes' : 'No';
-                         profileFields.waiver_id_display.textContent = profile.waiver_id || 'N/A';
-                         profileFields.photo_id_display.textContent = profile.photo_id || 'N/A';
-                         profileFields.stripe_payment_method_id_display.textContent = profile.stripe_payment_method_id || 'N/A';
 
 
                         displayMessage(profileStatusMessageDiv, 'Profile loaded.', true);
@@ -1994,6 +2534,151 @@
                     displayMessage(profileStatusMessageDiv, 'Failed to connect to the server to load profile.', false);
                 }
             }
+
+            // Edit users modal section -- START //
+
+            const userEditModal = document.getElementById('userEditModal');
+            const closeModalBtn = document.getElementById('closeUserEditModalBtn');
+            const inviteUserBtn = document.getElementById('inviteUserBtn');
+            const editUserForm = document.getElementById('editUserForm');
+            const editUserStatusMessage = document.getElementById('editUserStatusMessage');
+
+            function openNewUserModal() {
+                        
+                // Fill form fields
+                document.getElementById('edit_user_id').value = '00000000-0000-0000-0000-000000000000';
+                document.getElementById('edit_email').value = '';
+                document.getElementById('edit_first_name').value = '';
+                document.getElementById('edit_surname').value = '';
+                document.getElementById('edit_gender').value = '';
+                document.getElementById('edit_phone').value = '';
+                document.getElementById('edit_dob').value = '';
+                document.getElementById('edit_address').value = '';
+                document.getElementById('edit_suburb').value = '';
+                document.getElementById('edit_emergency_name').value = '';
+                document.getElementById('edit_emergency_relationship').value = '';
+                document.getElementById('edit_emergency_phone').value = '';
+                document.getElementById('edit_emergency_medical').value = '';
+                document.getElementById('edit_belt_size').value = '';
+                document.getElementById('edit_uniform_size').value = '';
+
+                userEditModal.classList.remove('hidden');
+                document.getElementById("admin-stripe-section").classList.add('hidden');
+                document.getElementById("inviteUserBtn").classList.add('hidden');
+                
+                
+                // initStripeForAdmin(u.user_id, u.email, `${u.first_name || ''} ${u.surname || ''}`.trim());
+            }
+
+            function openEditUserModal(userId) {
+                fetch('/api/user/get', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({'user_id': userId})
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                    if (data.success && data.user_profile) {
+                        const u = data.user_profile;
+
+                        
+                        // Fill form fields
+                        document.getElementById('edit_user_id').value = u.user_id;
+                        document.getElementById('edit_email').value = u.email || '';
+                        document.getElementById('edit_first_name').value = u.first_name || '';
+                        document.getElementById('edit_surname').value = u.surname || '';
+                        document.getElementById('edit_gender').value = u.gender || '';
+                        document.getElementById('edit_phone').value = u.phone || '';
+                        document.getElementById('edit_dob').value = u.dob ? u.dob.replace(/\//g, '-'): '';
+                        document.getElementById('edit_address').value = u.address || '';
+                        document.getElementById('edit_suburb').value = u.suburb || '';
+                        document.getElementById('edit_emergency_name').value = u.emergency_name || '';
+                        document.getElementById('edit_emergency_relationship').value = u.emergency_relationship || '';
+                        document.getElementById('edit_emergency_phone').value = u.emergency_phone || '';
+                        document.getElementById('edit_emergency_medical').value = u.emergency_medical || '';
+                        document.getElementById('edit_belt_size').value = u.belt_size || '';
+                        document.getElementById('edit_uniform_size').value = u.uniform_size || '';
+
+                        userEditModal.classList.remove('hidden');
+                        document.getElementById("inviteUserBtn").classList.remove('hidden');
+
+                        initStripeForAdmin(u.user_id, u.email, `${u.first_name || ''} ${u.surname || ''}`.trim());
+                    } else {
+                        alert('User not found.');
+                    }
+                });
+            }
+
+            closeModalBtn.addEventListener('click', () => {
+                userEditModal.classList.add('hidden');
+                editUserForm.reset();
+                editUserStatusMessage.textContent = '';
+            });
+
+            editUserForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+
+                const payload = {
+                    user_id: document.getElementById('edit_user_id').value,
+                    first_name: document.getElementById('edit_first_name').value,
+                    surname: document.getElementById('edit_surname').value,
+                    gender: document.getElementById('edit_gender').value,
+                    phone: document.getElementById('edit_phone').value,
+                    dob: document.getElementById('edit_dob').value
+                        ? (() => {
+                            const date = new Date(document.getElementById('edit_dob').value);
+                            const yyyy = date.getFullYear();
+                            const mm = String(date.getMonth() + 1).padStart(2, '0');
+                            const dd = String(date.getDate()).padStart(2, '0');
+                            return `${yyyy}/${mm}/${dd}`;
+                        })()
+                        : null,
+                    address: document.getElementById('edit_address').value,
+                    suburb: document.getElementById('edit_suburb').value,
+                    emergency_name: document.getElementById('edit_emergency_name').value,
+                    emergency_relationship: document.getElementById('edit_emergency_relationship').value,
+                    emergency_phone: document.getElementById('edit_emergency_phone').value,
+                    emergency_medical: document.getElementById('edit_emergency_medical').value,
+                    belt_size: document.getElementById('edit_belt_size').value,
+                    uniform_size: document.getElementById('edit_uniform_size').value,
+                    email: document.getElementById('edit_email').value
+                };
+
+                fetch('/api/user/update_profile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(res => res.json())
+                .then(data => {
+                    editUserStatusMessage.textContent = data.success ? 'User updated successfully.' : (data.error_message || 'Failed to update.');
+                    if (data.success) {
+                        setTimeout(() => {
+                            userEditModal.classList.add('hidden');
+                            editUserForm.reset();
+                            editUserStatusMessage.textContent = '';
+                            initUsersSection(); // reload user list
+                        }, 1500);
+                    }
+                });
+            });
+
+            inviteUserBtn.addEventListener('click', () => {
+                const userId = document.getElementById('edit_user_id').value;
+                const email = document.getElementById('edit_email').value;
+
+                fetch('/api/user/invite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, email: email })
+                })
+                .then(res => res.json())
+                .then(data => {
+                editUserStatusMessage.textContent = data.success ? 'Invite sent successfully!' : (data.error_message || 'Failed to invite.');
+                });
+            });
+
+            // EDIT USERS MODAL SECTION -- END //
 
 
             // --- Handle Profile Update Submission ---
@@ -2055,7 +2740,15 @@
                      surname: profileFields.surname.value,
                      gender: profileFields.gender.value || null,
                      phone: profileFields.phone.value || null,
-                     dob: profileFields.dob.value || null, // type="date" gives YYYY-MM-DD string or "" if empty
+                     dob: profileFields.dob.value
+                        ? (() => {
+                            const date = new Date(profileFields.dob.value);
+                            const yyyy = date.getFullYear();
+                            const mm = String(date.getMonth() + 1).padStart(2, '0');
+                            const dd = String(date.getDate()).padStart(2, '0');
+                            return `${yyyy}/${mm}/${dd}`;
+                        })()
+                        : null,
                      address: profileFields.address.value || null,
                      suburb: profileFields.suburb.value || null,
                      emergency_name: profileFields.emergency_name.value || null,
@@ -2422,7 +3115,6 @@
                  if (sortBy) queryParams.append('sort_by', sortBy);
 
                  const url = `/api/venue/get_list${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-                 console.log("Fetching venues from:", url);
 
                  try {
                      const response = await fetch(url, { method: 'GET' });
@@ -2435,6 +3127,11 @@
                              if (venues.length > 0) {
                                  let html = '';
                                  venues.forEach(venue => {
+                                     var edit_btn = "";
+                                     if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])){
+                                        edit_btn = `<button class="edit-venue-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-venue-id="${venue.venue_id}">Edit</button>`;
+                                     }
+
                                      add_cached_value("venue", venue.venue_id, venue); // Cache the venue data
                                      html += `
                                          <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
@@ -2457,7 +3154,7 @@
                                               <div class="flex flex-wrap gap-3">
                                                   <!-- Add buttons like View Details (opens venue info modal) or Edit -->
                                                    <button class="view-venue-button py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 text-sm" data-venue-id="${venue.venue_id}">View Details</button>
-                                                  <button class="edit-venue-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-venue-id="${venue.venue_id}">Edit</button>
+                                                  ${edit_btn}
                                                    <!-- Add Delete button if needed -->
                                               </div>
                                          </div>
@@ -2841,15 +3538,23 @@
                              if (styles.length > 0) {
                                  let html = '';
                                  styles.forEach(style => {
+
+                                    let edit_btn = "";
+                                    if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
+                                        edit_btn=  `
+                                                <div class="flex flex-wrap gap-3 mt-4">
+                                                  <button class="edit-style-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-style-id="${style.style_id}">Edit</button>
+                                                  <!-- Add Delete button if needed -->
+                                                </div>
+                                        `;
+                                    }
+
+                                    //has Permissions
                                      html += `
                                          <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
                                              <h3 class="text-xl font-semibold text-gray-900 mb-2">${style.title}</h3>
                                              <p class="text-gray-700">${style.description || 'No description'}</p>
-
-                                             <div class="flex flex-wrap gap-3 mt-4">
-                                                  <button class="edit-style-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-style-id="${style.style_id}">Edit</button>
-                                                  <!-- Add Delete button if needed -->
-                                              </div>
+                                             ${edit_btn}
                                          </div>
                                      `;
                                  });
@@ -3307,10 +4012,8 @@
                  if (searchTerm) queryParams.append('search', searchTerm);
 
                 await fetchVenuesForSelect(classFilterVenue);
-                    // fetchStylesForSelect(classFilterStyle);
 
                  const url = `/api/class/get_list`;
-                 console.log("Fetching classes from:", url);
 
                  try {
                      const response = await fetch(url, {
@@ -3387,6 +4090,10 @@
                                     }
                                 });
                                 calendar.removeNonPresentClassIdEvents(cls.class_id, all_event_ids);
+                                var editbtn = ``;
+                                if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
+                                    editbtn = `<button class="edit-class-button py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Edit</button>`;
+                                }
 
 
                                  html += `
@@ -3423,7 +4130,7 @@
                                          <div class="flex flex-wrap gap-3">
                                               <button class="join-class-button py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Join Class</button>
                                              <button class="checkin-class-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Check-in</button>
-                                             <button class="edit-class-button py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Edit</button>
+                                             ${editbtn}
                                              <!-- Add Delete button if needed -->
                                          </div>
                                      </div>
@@ -3591,49 +4298,84 @@
             }
 
             // Function to fetch styles for select dropdowns
-             async function fetchStylesForSelect(selectElement, selectedStyleIds = []) {
-                 selectElement.innerHTML = '<option value="">Loading styles...</option>';
-                 selectElement.disabled = true;
-                 try {
-                     const response = await fetch('/api/style/get_list'); // Adjust endpoint
-                     if (response.ok) {
+            async function fetchStylesForSelect(selectEl, selectedStyleIds = []) {
+                // Disable while we load
+                selectEl.disabled = true;
+                selectEl.innerHTML = ''; // clear any old options
 
-                        const result = await response.json(); // Assuming the backend returns { success: true, styles: [...] } or { success: false, error_message: "" }
+                // Build a Set of the selected IDs, all as strings
+                const selectedSet = new Set(
+                    selectedStyleIds
+                    .map(item => (typeof item === 'object' ? item.style_id : item))
+                    .map(String)
+                );
 
-                        if (result.success && result.styles) {
-                            const styles = result.styles;
-                            let optionsHtml = '';
-                            if (!selectElement.multiple) {
-                                optionsHtml += '<option value="">Select Style</option>';
-                            }
-                            selectElement.disabled = false;
-                            if (styles.length > 0) {
-                                styles.forEach(style => {
-                                    const selected = selectedStyleIds.includes(style.style_id) ? 'selected' : '';
-                                    optionsHtml += `<option value="${style.style_id}" ${selected}>${style.title}</option>`;
-                                    add_cached_value("style", style.style_id, style); // Cache the venue ID and title
-                                });
-                                selectElement.innerHTML = optionsHtml;
-                            } else {
-                                selectElement.innerHTML = '<option value="">No styles found</option>';
-                            }
+                // (Re-)add a placeholder option if this is not a multi-select
+                if (!selectEl.multiple) {
+                    const placeholder = document.createElement('option');
+                    placeholder.value = '';
+                    placeholder.textContent = 'Select Style';
+                    selectEl.appendChild(placeholder);
+                }
+
+                // Add a “loading…” option while we fetch
+                const loadingOpt = document.createElement('option');
+                loadingOpt.value = '';
+                loadingOpt.textContent = 'Loading styles…';
+                selectEl.appendChild(loadingOpt);
+
+                try {
+                    const res = await fetch('/api/style/get_list');
+                    if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                    }
+                    const payload = await res.json();
+                    if (!payload.success || !Array.isArray(payload.styles)) {
+                    throw new Error(
+                        payload.error_message || 'Malformed styles payload'
+                    );
+                    }
+
+                    // Clear the loading/placeholder
+                    selectEl.innerHTML = '';
+                    if (!selectEl.multiple) {
+                    // re-add placeholder
+                    const placeholder2 = document.createElement('option');
+                    placeholder2.value = '';
+                    placeholder2.textContent = 'Select Style';
+                    selectEl.appendChild(placeholder2);
+                    }
+
+                    if (payload.styles.length === 0) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = 'No styles found';
+                    selectEl.appendChild(opt);
+                    } else {
+                    payload.styles.forEach(style => {
+                        const opt = document.createElement('option');
+                        opt.value = String(style.style_id);
+                        opt.textContent = style.title;
+                        if (selectedSet.has(String(style.style_id))) {
+                        opt.selected = true;
                         }
-                    } else if (response.status === 401 || response.status === 403) {
-                          selectElement.innerHTML = '<option value="">Error: Not authorized</option>';
-                          console.error("Authorization error fetching venues:", response.status);
-                     }
-                     else {
-                          // Handle other HTTP errors
-                          const errorText = await response.text();
-                           selectElement.innerHTML = `<option value="">Error: ${response.status} - ${errorText.substring(0, 50)}...</option>`;
-                          console.error("Error fetching venues:", response.status, errorText);
-                     }
+                        selectEl.appendChild(opt);
 
-                 } catch (error) {
-                     console.error('Network error fetching styles:', error);
-                     selectElement.innerHTML = '<option value="">Network Error</option>';
-                 }
-             }
+                        // your existing cache helper
+                        add_cached_value('style', style.style_id, style);
+                    });
+                    }
+                } catch (err) {
+                    console.error('Error loading styles:', err);
+                    selectEl.innerHTML = '';
+                    const errOpt = document.createElement('option');
+                    errOpt.value = '';
+                    errOpt.textContent = 'Error loading styles';
+                    selectEl.appendChild(errOpt);
+                } finally {
+                    selectEl.disabled = false;
+                }
+            }
 
 
              // --- Event Listeners ---
@@ -4759,8 +5501,7 @@
                     <div class="flex items-center space-x-3">
                         <img src="${student.photo_url || '/default-avatar.png'}" alt="${student.first_name}" class="student-avatar">
                         <div>
-                        <div class="font-medium text-gray-900">${student.first_name} ${student.last_name}</div>
-                        <div class="text-sm text-gray-500">ID: ${student.user_id}</div>
+                        <div class="font-medium text-gray-900">${student.first_name} ${student.surname}</div>
                         </div>
                     </div>
                     <div class="text-sm font-medium ${student.attended ? 'text-blue-600' : 'text-gray-400'}">
@@ -4989,50 +5730,149 @@
         // Stripe - START
         
         // Initialize Stripe
-        const stripe = Stripe('pk_test_51RW5mIP9izC6CZUZ9SqPTU177jhpSRM7NLdGRTjhUmAqILMy5YYP7vbuMxVGEh4XUj9spa9MdbeoAeAxqX5bNVBc00iDtJHDgv'); // Replace with your public key
-        const elements = stripe.elements();
+        var stripe = null;
+        function init_stripe()
+        {
+            if (stripe == null) {
+                stripe = Stripe('pk_test_51RW5mIP9izC6CZUZ9SqPTU177jhpSRM7NLdGRTjhUmAqILMy5YYP7vbuMxVGEh4XUj9spa9MdbeoAeAxqX5bNVBc00iDtJHDgv'); // Replace with your public key
+            
+                const elements = stripe.elements();
+
+                // Create card element
+                const cardElement = elements.create('card', {
+                    hidePostalCode: true,
+                    style: {
+                        base: {
+                            fontSize: '16px',
+                            color: '#424770',
+                            '::placeholder': {
+                                color: '#aab7c4',
+                            },
+                        },
+                    },
+                });
+
+                cardElement.mount('#card-element');
+
+                // Handle real-time validation errors from the card Element
+                cardElement.on('change', ({error}) => {
+                    const displayError = document.getElementById('card-errors');
+                    if (error) {
+                        displayError.textContent = error.message;
+                    } else {
+                        displayError.textContent = '';
+                    }
+                });
+
+                // Get form elements
+                stripeForm = document.getElementById('stripe-card-form');
+                stripeSubmitBtn = document.getElementById('stripe-submit-btn');
+                stripeLoading = document.getElementById('stripe-loading');
+                stripeResult = document.getElementById('stripe-result');
+                stripeEmail = document.getElementById('email');
+                stripeCardholderName = document.getElementById('stripe-cardholder-name');
+            
+                syncStripeFormData();
+                loadSavedCards();
+
+                // Handle Stripe form submission
+                stripeForm.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+                    event.stopPropagation(); // Prevent bubbling to other forms
+
+                    stripeSubmitBtn.disabled = true;
+                    stripeLoading.classList.remove('hidden');
+                    stripeResult.innerHTML = '';
+
+                    const cardholderName = stripeCardholderName.value;
+                    const email = stripeEmail.value;
+
+                    if (!cardholderName.trim()) {
+                        showStripeMessage('Please enter the cardholder name.', 'error');
+                        stripeSubmitBtn.disabled = false;
+                        stripeLoading.classList.add('hidden');
+                        return;
+                    }
+
+                    if (!email.trim()) {
+                        showStripeMessage('Email is required.', 'error');
+                        stripeSubmitBtn.disabled = false;
+                        stripeLoading.classList.add('hidden');
+                        return;
+                    }
+
+                    try {
+                        // Create setup intent on your backend
+                        const setupIntentResponse = await fetch('/api/user/create_setup_intent', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                customer_email: email,
+                                cardholder_name: cardholderName
+                            }),
+                        });
+
+                        if (!setupIntentResponse.ok) {
+                            throw new Error(`HTTP ${setupIntentResponse.status}: Failed to create setup intent`);
+                        }
+
+                        const { client_secret, customer_id } = await setupIntentResponse.json();
+
+                        // Confirm setup intent with card
+                        const {error, setupIntent} = await stripe.confirmCardSetup(
+                            client_secret,
+                            {
+                                payment_method: {
+                                    card: cardElement,
+                                    billing_details: {
+                                        name: cardholderName,
+                                        email: email,
+                                    },
+                                }
+                            }
+                        );
+
+                        if (error) {
+                            throw new Error(error.message);
+                        }
+
+                        // Success
+                        showStripeMessage('Success! Your payment method has been saved securely.', 'success');
+
+                        // Clear form
+                        stripeCardholderName.value = '';
+                        cardElement.clear();
+
+                        // Refresh saved cards list
+                        loadSavedCards();
+                        
+
+                    } catch (error) {
+                        console.error('Stripe error:', error);
+                        showStripeMessage(`Error: ${error.message}`, 'error');
+                    } finally {
+                        stripeSubmitBtn.disabled = false;
+                        stripeLoading.classList.add('hidden');
+                    }
+                });
+
+            }
+        }
+
+        var elements = null;
 
         // Create card element
-        const cardElement = elements.create('card', {
-            hidePostalCode: true,
-            style: {
-                base: {
-                    fontSize: '16px',
-                    color: '#424770',
-                    '::placeholder': {
-                        color: '#aab7c4',
-                    },
-                },
-            },
-        });
-
-        cardElement.mount('#card-element');
-
-        // Handle real-time validation errors from the card Element
-        cardElement.on('change', ({error}) => {
-            const displayError = document.getElementById('card-errors');
-            if (error) {
-                displayError.textContent = error.message;
-            } else {
-                displayError.textContent = '';
-            }
-        });
+        var cardElement = null;
 
         // Get form elements
-        const stripeForm = document.getElementById('stripe-card-form');
-        const stripeSubmitBtn = document.getElementById('stripe-submit-btn');
-        const stripeLoading = document.getElementById('stripe-loading');
-        const stripeResult = document.getElementById('stripe-result');
-        const stripeEmail = document.getElementById('email');
-        const stripeCardholderName = document.getElementById('stripe-cardholder-name');
-
-        // Pre-populate email from profile form
-        // function syncEmailFromProfile() {
-        //     const profileEmail = document.getElementById('email');
-        //     if (profileEmail && profileEmail.value) {
-        //         stripeEmail.value = profileEmail.value;
-        //     }
-        // }
+        var stripeForm = null;
+        var stripeSubmitBtn = null;
+        var stripeLoading = null;
+        var stripeResult = null;
+        var stripeEmail = null;
+        var stripeCardholderName = null;
 
         // Pre-populate cardholder name from profile form
         function syncNameFromProfile() {
@@ -5049,9 +5889,6 @@
             syncNameFromProfile();
         }
 
-        // Call sync when the page loads and when profile is updated
-        syncStripeFormData();
-
         // Listen for profile updates to sync the Stripe form
         const profileForm = document.getElementById('profileUpdateForm');
         if (profileForm) {
@@ -5060,88 +5897,6 @@
                 setTimeout(syncStripeFormData, 1000);
             });
         }
-
-        // Handle Stripe form submission
-        stripeForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            event.stopPropagation(); // Prevent bubbling to other forms
-
-            stripeSubmitBtn.disabled = true;
-            stripeLoading.classList.remove('hidden');
-            stripeResult.innerHTML = '';
-
-            const cardholderName = stripeCardholderName.value;
-            const email = stripeEmail.value;
-
-            if (!cardholderName.trim()) {
-                showStripeMessage('Please enter the cardholder name.', 'error');
-                stripeSubmitBtn.disabled = false;
-                stripeLoading.classList.add('hidden');
-                return;
-            }
-
-            if (!email.trim()) {
-                showStripeMessage('Email is required.', 'error');
-                stripeSubmitBtn.disabled = false;
-                stripeLoading.classList.add('hidden');
-                return;
-            }
-
-            try {
-                // Create setup intent on your backend
-                const setupIntentResponse = await fetch('/api/user/create_setup_intent', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        customer_email: email,
-                        cardholder_name: cardholderName
-                    }),
-                });
-
-                if (!setupIntentResponse.ok) {
-                    throw new Error(`HTTP ${setupIntentResponse.status}: Failed to create setup intent`);
-                }
-
-                const { client_secret, customer_id } = await setupIntentResponse.json();
-
-                // Confirm setup intent with card
-                const {error, setupIntent} = await stripe.confirmCardSetup(
-                    client_secret,
-                    {
-                        payment_method: {
-                            card: cardElement,
-                            billing_details: {
-                                name: cardholderName,
-                                email: email,
-                            },
-                        }
-                    }
-                );
-
-                if (error) {
-                    throw new Error(error.message);
-                }
-
-                // Success
-                showStripeMessage('Success! Your payment method has been saved securely.', 'success');
-
-                // Clear form
-                stripeCardholderName.value = '';
-                cardElement.clear();
-
-                // Refresh saved cards list
-                loadSavedCards();
-
-            } catch (error) {
-                console.error('Stripe error:', error);
-                showStripeMessage(`Error: ${error.message}`, 'error');
-            } finally {
-                stripeSubmitBtn.disabled = false;
-                stripeLoading.classList.add('hidden');
-            }
-        });
 
         // Helper function to show messages
         function showStripeMessage(message, type) {
@@ -5165,7 +5920,7 @@
             
             try {
                 const response = await fetch('/api/user/get_stripe_saved_payment_methods', {
-                    method: 'GET',
+                    method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
@@ -5237,15 +5992,652 @@
         // Refresh cards button
         document.getElementById('refresh-cards').addEventListener('click', loadSavedCards);
 
-        // Load saved cards on initialization
-        loadSavedCards();
-
         // Stripe - end
 
 
 
+		// Payment plans -- Section -- START //
+
+		// --- Payment Plans Module ---
+
+		async function initPaymentPlansSection() {
+            await Promise.all([
+                renderUserMemberships(),
+                renderPurchasablePlans()
+            ]);
+            if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin]))
+            {
+                document.getElementById('adminPaymentPlansSection').style.display =
+                'block';
+                await renderAdminPaymentPlans();
+            }
+		}
+
+		async function renderUserMemberships() {
+		const container = document.getElementById('userMemberships');
+		container.innerHTML = '<p>Loading your memberships…</p>';
+		try {
+			const res = await fetch('/api/user/get_payment_plans', {
+			    method: 'POST'
+			});
+			const { payment_plans } = await res.json(); // assume { memberships: [...] }
+            let memberships = payment_plans;
+			if (!memberships || memberships.length === 0) {
+                container.innerHTML =
+                    '<p class="text-gray-600 italic">No active memberships.</p>';
+                return;
+			}
+			container.innerHTML = '';
+			memberships.forEach((m) => {
+                var exp = new Date(m.expiration_ts).toLocaleString();
+                exp = exp.replace(", 12:00:00 am", "");
+                const card = document.createElement('div');
+                card.className =
+                    'inline-block bg-white p-4 m-2 rounded shadow text-left';
+                card.innerHTML = `
+                    <h4 class="font-semibold">${m.title}</h4>
+                    <p>${m.subscribed ? 'Renews: ' +exp : 'Expires : ' + exp }</p>
+                    <p>
+                    Auto-renew:
+                    ${m.subscribed ? 'Yes' : 'No'}
+                    </p>
+                    <button
+                    class="mt-2 px-3 py-1 bg-red-500 text-white rounded text-sm cancel-pp"
+                    data-user_payment_plan_id="${m.user_payment_plan_id}"
+                    data-subscribed="${m.subscribed}"
+                    >
+                    ${m.subscribed ? 'Unsubscribe' : 'Subscribe'}
+                    </button>
+                `;
+                container.appendChild(card);
+			});
+			container
+			.querySelectorAll('.cancel-pp')
+			.forEach((btn) =>
+				btn.addEventListener('click', async () => {
+                    const subscribed = btn.dataset.subscribed === 'true';
+                    await fetch('/api/user/change_subscribe_user_payment_plan', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ user_payment_plan_id: btn.dataset.user_payment_plan_id, subscribe: !subscribed })
+                        });
+
+                    await renderUserMemberships();
+				})
+			);
+		} catch (e) {
+			console.error(e);
+			container.innerHTML =
+			'<p class="text-red-600">Error loading memberships.</p>';
+		}
+		}
+
+		async function renderPurchasablePlans() {
+		const grid = document.getElementById('purchasablePlansGrid');
+		grid.innerHTML = '<p>Loading plans…</p>';
+		try {
+			const res = await fetch(
+                '/api/user/get_purchasable_payment_plans',
+                { method: 'POST' }
+			);
+			const { payment_plans } = await res.json(); // { payment_plans: [...] }
+			if (!payment_plans.length) {
+                grid.innerHTML =
+                    '<p class="col-span-2 text-gray-600 italic">No plans available.</p>';
+                return;
+			}
+			// bucket by duration×type
+			grid.innerHTML = '';
+			payment_plans.forEach((p) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white p-4 rounded shadow flex flex-col justify-between';
+                if (!p) {
+                    card.classList.add('bg-gray-200');
+                    card.innerHTML = '<p class="italic">Not offered.</p>';
+                } else {
+                    card.innerHTML = `
+                        <h4 class="font-semibold">${p.title}</h4>
+                        <p class="text-sm mb-2">${p.description}</p>
+                        <p>Cost: $${parseFloat(p.cost).toFixed(2)}</p>
+                        <p>Duration: ${
+                        p.duration_id === 1 ? 'Calendar Month' : 'School Term'
+                        }</p>
+                        <p>Type: ${p.grouping_id === 0 ? 'Individual' : 'Family'}</p>`;
+                    if (p.purchasable) {
+                        const btn = document.createElement('button');
+                        btn.textContent = 'Subscribe';
+                        btn.className =
+                        'mt-3 px-3 py-1 bg-green-500 text-white rounded text-sm';
+                        btn.addEventListener('click', async () => {
+                        await fetch('/api/user/subscribe_payment_plan', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ payment_plan_id: p.payment_plan_id, base_payment_plan_id: p.base_payment_plan_id })
+                        });
+                        await renderUserMemberships();
+                        });
+                        card.appendChild(btn);
+                    }
+                }
+                grid.appendChild(card);
+			});
+		} catch (e) {
+			console.error(e);
+			grid.innerHTML =
+			'<p class="col-span-2 text-red-600">Error loading plans.</p>';
+		}
+		}
+
+		// async function renderAdminPaymentPlans() {
+		// const grid = document.getElementById('adminPlansGrid');
+		// grid.innerHTML = '<p>Loading admin plans…</p>';
+		// try {
+		// 	const res = await fetch('/api/school/current_payment_plans', {
+		// 	method: 'POST'
+		// 	});
+		// 	const { payment_plans } = await res.json();
+		// 	// bucket by duration×type×age×working
+		// 	const byCell = {};
+		// 	payment_plans.forEach((p) => {
+		// 	// determine rowKey
+		// 	let row;
+		// 	if (p.type_id === 1) row = 'family';
+		// 	else if (p.is_working) row = 'ind_adult';
+		// 	else if (p.max_age <= 18) row = 'ind_child';
+		// 	else row = 'ind_nonworking';
+		// 	byCell[`${p.duration_id}_${row}`] = p;
+		// 	});
+		// 	grid.innerHTML = '';
+		// 	const rows = [
+		// 	['ind_adult', 'Individual Adult'],
+		// 	['ind_child', 'Individual Child'],
+		// 	['ind_nonworking', 'Individual Adult Non-working'],
+		// 	['family', 'Family']
+		// 	];
+		// 	rows.forEach(([rowKey, label]) => {
+		// 	[1, 2].forEach((dur) => {
+		// 		const p = byCell[`${dur}_${rowKey}`];
+		// 		const card = document.createElement('div');
+		// 		card.className =
+		// 		'p-4 rounded shadow flex flex-col justify-between';
+		// 		if (!p) {
+		// 		card.classList.add('bg-gray-200');
+		// 		card.innerHTML = `<p class="italic">${label} / ${
+		// 			dur === 1 ? 'Month' : 'Term'
+		// 		} not set.</p>`;
+		// 		} else {
+		// 		card.classList.add('bg-white');
+		// 		card.innerHTML = `
+		// 			<h4 class="font-semibold">${label}</h4>
+		// 			<p>Cost: $${parseFloat(p.cost).toFixed(2)}</p>
+		// 			<p>Age: ${p.min_age}–${p.max_age}</p>
+		// 			<p>Working: ${p.is_working ? 'Yes' : 'No'}</p>
+		// 		`;
+		// 		}
+		// 		const btn = document.createElement('button');
+		// 		btn.textContent = p ? 'Update' : 'Add';
+
+				// --- Payment Plans Module ---
+		// async function initPaymentPlansSection() {
+		// await Promise.all([
+		// 	renderUserMemberships(),
+		// 	renderPurchasablePlans()
+		// ]);
+
+		// if (IS_ADMIN === 1) {
+		// 	document.getElementById('adminPaymentPlansSection').style.display =
+		// 	'block';
+		// 	await renderAdminPaymentPlans();
+		// }
+		// }
+
+		// async function renderUserMemberships() {
+		// const container = document.getElementById('userMemberships');
+		// container.innerHTML = '<p>Loading your memberships…</p>';
+		// try {
+		// 	const res = await fetch('/api/user/get_memberships', {
+		// 	method: 'POST'
+		// 	});
+		// 	const { memberships } = await res.json(); // assume { memberships: [...] }
+		// 	if (!memberships || memberships.length === 0) {
+		// 	container.innerHTML =
+		// 		'<p class="text-gray-600 italic">No active memberships.</p>';
+		// 	return;
+		// 	}
+		// 	container.innerHTML = '';
+		// 	memberships.forEach((m) => {
+		// 	const exp = new Date(m.expires_at).toLocaleString();
+		// 	const card = document.createElement('div');
+		// 	card.className =
+		// 		'inline-block bg-white p-4 m-2 rounded shadow text-left';
+		// 	card.innerHTML = `
+		// 		<h4 class="font-semibold">${m.title}</h4>
+		// 		<p>Expires: ${exp}</p>
+		// 		<p>
+		// 		Auto-renew:
+		// 		${m.auto_renew ? 'Yes' : 'No'}
+		// 		</p>
+		// 		<button
+		// 		class="mt-2 px-3 py-1 bg-red-500 text-white rounded text-sm cancel-pp"
+		// 		data-plan-id="${m.payment_plan_id}"
+		// 		>
+		// 		Cancel
+		// 		</button>
+		// 	`;
+		// 	container.appendChild(card);
+		// 	});
+		// 	container
+		// 	.querySelectorAll('.cancel-pp')
+		// 	.forEach((btn) =>
+		// 		btn.addEventListener('click', async () => {
+		// 		await fetch('/api/user/cancel_payment_plan', { method: 'POST' });
+		// 		await renderUserMemberships();
+		// 		})
+		// 	);
+		// } catch (e) {
+		// 	console.error(e);
+		// 	container.innerHTML =
+		// 	'<p class="text-red-600">Error loading memberships.</p>';
+		// }
+		// }
+
+		// async function renderPurchasablePlans() {
+		// const grid = document.getElementById('purchasablePlansGrid');
+		// grid.innerHTML = '<p>Loading plans…</p>';
+		// try {
+		// 	const res = await fetch(
+		// 	'/api/user/get_purchasable_payment_plans',
+		// 	{ method: 'POST' }
+		// 	);
+		// 	const { payment_plans } = await res.json(); // { payment_plans: [...] }
+		// 	if (!payment_plans.length) {
+		// 	grid.innerHTML =
+		// 		'<p class="col-span-2 text-gray-600 italic">No plans available.</p>';
+		// 	return;
+		// 	}
+		// 	// bucket by duration×type
+		// 	const byCell = {};
+		// 	payment_plans.forEach((p) => {
+		// 	byCell[`${p.duration_id}_${p.type_id}`] = p;
+		// 	});
+		// 	grid.innerHTML = '';
+		// 	// durations: 1→col1, 2→col2; types: 0 row1, 1 row2
+		// 	[0, 1].forEach((type) => {
+		// 	[1, 2].forEach((dur) => {
+		// 		const p = byCell[`${dur}_${type}`];
+		// 		const card = document.createElement('div');
+		// 		card.className =
+		// 		'bg-white p-4 rounded shadow flex flex-col justify-between';
+		// 		if (!p) {
+		// 		card.classList.add('bg-gray-200');
+		// 		card.innerHTML = '<p class="italic">Not offered.</p>';
+		// 		} else {
+		// 		card.innerHTML = `
+		// 			<h4 class="font-semibold">${p.title}</h4>
+		// 			<p class="text-sm mb-2">${p.description}</p>
+		// 			<p>Cost: $${parseFloat(p.cost).toFixed(2)}</p>
+		// 			<p>Duration: ${
+		// 			dur === 1 ? 'Calendar Month' : 'School Term'
+		// 			}</p>
+		// 			<p>Type: ${type === 0 ? 'Individual' : 'Family'}</p>
+		// 		`;
+		// 		if (p.purchasable) {
+		// 			const btn = document.createElement('button');
+		// 			btn.textContent = 'Subscribe';
+		// 			btn.className =
+		// 			'mt-3 px-3 py-1 bg-green-500 text-white rounded text-sm';
+		// 			btn.addEventListener('click', async () => {
+		// 			await fetch('/api/user/subscribe_payment_plan', {
+		// 				method: 'POST',
+		// 				headers: { 'Content-Type': 'application/json' },
+		// 				body: JSON.stringify({ payment_plan_id: p.payment_plan_id })
+		// 			});
+		// 			await renderUserMemberships();
+		// 			});
+		// 			card.appendChild(btn);
+		// 		}
+		// 		}
+		// 		grid.appendChild(card);
+		// 	});
+		// 	});
+		// } catch (e) {
+		// 	console.error(e);
+		// 	grid.innerHTML =
+		// 	'<p class="col-span-2 text-red-600">Error loading plans.</p>';
+		// }
+		// }
+
+		async function renderAdminPaymentPlans() {
+		const grid = document.getElementById('adminPlansGrid');
+		grid.innerHTML = '<p>Loading admin plans…</p>';
+		try {
+			const res = await fetch('/api/school/current_payment_plans', {
+			method: 'POST'
+			});
+			const { payment_plans } = await res.json();
+			// bucket by duration×type×age×working
+			const byCell = {};
+			payment_plans.forEach((p) => {
+			// determine rowKey
+			let row;
+			if (p.type_id === 1) row = 'family';
+			else if (p.is_working) row = 'ind_adult';
+			else if (p.max_age <= 18) row = 'ind_child';
+			else row = 'ind_nonworking';
+			byCell[`${p.duration_id}_${row}`] = p;
+			});
+			grid.innerHTML = '';
+			const rows = [
+			['ind_adult', 'Individual Adult'],
+			['ind_child', 'Individual Child'],
+			['ind_nonworking', 'Individual Adult Non-working'],
+			['family', 'Family']
+			];
+			rows.forEach(([rowKey, label]) => {
+			[1, 2].forEach((dur) => {
+				const p = byCell[`${dur}_${rowKey}`];
+				const card = document.createElement('div');
+				card.className =
+				'p-4 rounded shadow flex flex-col justify-between';
+				if (!p) {
+				card.classList.add('bg-gray-200');
+				card.innerHTML = `<p class="italic">${label} / ${
+					dur === 1 ? 'Month' : 'Term'
+				} not set.</p>`;
+				} else {
+				card.classList.add('bg-white');
+				card.innerHTML = `
+					<h4 class="font-semibold">${label}</h4>
+					<p>Cost: $${parseFloat(p.cost).toFixed(2)}</p>
+					<p>Age: ${p.min_age}–${p.max_age}</p>
+					<p>Working: ${p.is_working ? 'Yes' : 'No'}</p>
+				`;
+				}
+				const btn = document.createElement('button');
+				btn.textContent = p ? 'Update' : 'Add';
+				btn.className =
+				'mt-2 px-2 py-1 bg-blue-500 text-white rounded text-sm';
+				btn.addEventListener('click', () =>
+				openEditPPModal(p || { duration_id: dur, type_id: rowKey })
+				);
+				card.appendChild(btn);
+				grid.appendChild(card);
+			});
+			});
+		} catch (e) {
+			console.error(e);
+			grid.innerHTML =
+			'<p class="col-span-2 text-red-600">Error loading admin plans.</p>';
+		}
+		}
+
+		function openEditPPModal(pp) {
+            const modal = document.getElementById('edit-paymentplan-modal');
+            document.getElementById('edit-pp-id').value =
+                pp.payment_plan_id || '';
+            document.getElementById('edit-pp-title').value = pp.title || '';
+            document.getElementById('edit-pp-desc').value = pp.description || '';
+            document.getElementById('edit-pp-cost').value = pp.cost || '';
+            document.getElementById('edit-pp-duration').value =
+                pp.duration_id || '';
+            document.getElementById('edit-pp-type').value = pp.type_id || '';
+            document.getElementById('edit-pp-min-age').value = pp.min_age || '';
+            document.getElementById('edit-pp-max-age').value = pp.max_age || '';
+            document.getElementById('edit-pp-is-working').checked =
+                pp.is_working || false;
+            modal.style.display = 'block';
+		}
+
+		document
+		.getElementById('submit-edit-paymentplan')
+		.addEventListener('click', async () => {
+			const body = {
+                title: document.getElementById('edit-pp-title').value,
+                description: document.getElementById('edit-pp-desc').value,
+                payment_plan_id: document.getElementById('edit-pp-id').value,
+                duration_id: parseInt(document.getElementById('edit-pp-duration').value, 10),
+                grouping_id: parseInt(document.getElementById('edit-pp-type').value, 10),
+                cost: parseFloat(
+                    document.getElementById('edit-pp-cost').value
+                ),
+                min_age: parseInt(
+                    document.getElementById('edit-pp-min-age').value,
+                    10
+                ),
+                max_age: parseInt(
+                    document.getElementById('edit-pp-max-age').value,
+                    10
+                ),
+                is_working: document.getElementById('edit-pp-is-working').checked
+			};
+			try {
+			await fetch('/api/school/update_payment_plan', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			});
+			document.getElementById('edit-paymentplan-modal').style.display =
+				'none';
+			await renderAdminPaymentPlans();
+			} catch (e) {
+			console.error(e);
+			document.getElementById('edit-pp-message').textContent =
+				'Error updating plan';
+			}
+		});
+        
+//         );rd.appendChild(btn);
+//         grid.appendChild(card);
+//       });
+//     });
+//   } catch (e) {
+//     console.error(e);
+//     grid.innerHTML =
+//       '<p class="col-span-2 text-red-600">Error loading admin plans.</p>';
+//   }
+// }
+
+function openEditPPModal(pp) {
+  const modal = document.getElementById('edit-paymentplan-modal');
+  document.getElementById('edit-pp-id').value =
+    pp.payment_plan_id || '';
+  document.getElementById('edit-pp-title').value = pp.title || '';
+  document.getElementById('edit-pp-desc').value = pp.description || '';
+  document.getElementById('edit-pp-cost').value = pp.cost || '';
+  document.getElementById('edit-pp-duration').value =
+    pp.duration_id || '';
+  document.getElementById('edit-pp-type').value = pp.type_id || '';
+  document.getElementById('edit-pp-min-age').value = pp.min_age || '';
+  document.getElementById('edit-pp-max-age').value = pp.max_age || '';
+  document.getElementById('edit-pp-is-working').checked =
+    pp.is_working || false;
+  modal.style.display = 'block';
+}
+
+document
+  .getElementById('submit-edit-paymentplan')
+  .addEventListener('click', async () => {
+    const body = {
+      payment_plan_id: document.getElementById('edit-pp-id').value,
+      cost: parseFloat(
+        document.getElementById('edit-pp-cost').value
+      ),
+      min_age: parseInt(
+        document.getElementById('edit-pp-min-age').value,
+        10
+      ),
+      max_age: parseInt(
+        document.getElementById('edit-pp-max-age').value,
+        10
+      ),
+      is_working: document.getElementById('edit-pp-is-working').checked
+    };
+    try {
+      await fetch('/api/school/update_payment_plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      document.getElementById('edit-paymentplan-modal').style.display =
+        'none';
+      await renderAdminPaymentPlans();
+    } catch (e) {
+      console.error(e);
+      document.getElementById('edit-pp-message').textContent =
+        'Error updating plan';
+    }
+  });
+		
+		//Payment Plans -- Section -- END //
 
 
+
+    // Stripe Admin - edit users - START //
+    // Initialize Stripe for admin modal
+    var stripeAdmin = null;
+    var cardElementAdmin = null;
+
+    function initStripeForAdmin(userId, email, cardholderName) {
+        if (stripeAdmin) return; // Don't re-initialize
+
+        stripeAdmin = Stripe('pk_test_51RW5mIP9izC6CZUZ9SqPTU177jhpSRM7NLdGRTjhUmAqILMy5YYP7vbuMxVGEh4XUj9spa9MdbeoAeAxqX5bNVBc00iDtJHDgv');
+        const elements = stripeAdmin.elements();
+
+        cardElementAdmin = elements.create('card', { hidePostalCode: true });
+        cardElementAdmin.mount('#card-element-admin');
+
+        cardElementAdmin.on('change', ({ error }) => {
+            document.getElementById('card-errors-admin').textContent = error ? error.message : '';
+        });
+
+        const stripeFormAdmin = document.getElementById('stripe-card-form-admin');
+        const stripeSubmitBtnAdmin = document.getElementById('stripe-submit-btn-admin');
+        const stripeLoadingAdmin = document.getElementById('stripe-loading-admin');
+        const stripeResultAdmin = document.getElementById('stripe-result-admin');
+        const stripeCardholderNameAdmin = document.getElementById('stripe-cardholder-name-admin');
+
+        stripeCardholderNameAdmin.value = cardholderName;
+
+        stripeFormAdmin.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            stripeSubmitBtnAdmin.disabled = true;
+            stripeLoadingAdmin.classList.remove('hidden');
+            stripeResultAdmin.innerHTML = '';
+
+            try {
+            const name = stripeCardholderNameAdmin.value.trim();
+            if (!name) throw new Error('Cardholder name is required');
+
+            const res = await fetch('/api/admin/create_setup_intent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId })
+            });
+
+            if (!res.ok) throw new Error('Failed to create setup intent');
+            const { client_secret } = await res.json();
+
+            const { error } = await stripeAdmin.confirmCardSetup(client_secret, {
+                payment_method: {
+                card: cardElementAdmin,
+                billing_details: { name, email }
+                }
+            });
+
+            if (error) throw error;
+
+                showStripeAdminMessage('Payment method saved successfully.', 'success');
+                cardElementAdmin.clear();
+                stripeCardholderNameAdmin.value = '';
+                loadSavedCardsForAdmin(userId);
+            } catch (err) {
+                console.error(err);
+                showStripeAdminMessage(err.message, 'error');
+            } finally {
+                stripeSubmitBtnAdmin.disabled = false;
+                stripeLoadingAdmin.classList.add('hidden');
+            }
+        });
+
+        document.getElementById('refresh-cards-admin').addEventListener('click', () => {
+            loadSavedCardsForAdmin(userId);
+        });
+
+        // Initial load
+        // console.log("ad");
+        loadSavedCardsForAdmin(userId);
+    }
+
+    function showStripeAdminMessage(message, type) {
+    const result = document.getElementById('stripe-result-admin');
+    const className = type === 'success'
+        ? 'p-4 bg-green-100 border border-green-400 text-green-700 rounded-md'
+        : 'p-4 bg-red-100 border border-red-400 text-red-700 rounded-md';
+
+    result.innerHTML = `<div class="${className}">${message}</div>`;
+    if (type === 'success') {
+        setTimeout(() => result.innerHTML = '', 5000);
+    }
+    }
+
+    async function loadSavedCardsForAdmin(userId) {
+        const list = document.getElementById('saved-cards-list-admin');
+
+        try {
+            const res = await fetch('/api/user/get_stripe_saved_payment_methods', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    user_id: userId
+                }),
+            });
+
+            if (!res.ok) throw new Error('Could not load payment methods');
+            const { payment_methods } = await res.json();
+
+            if (!payment_methods || payment_methods.length === 0) {
+                list.innerHTML = '<p class="text-gray-500">No saved cards found.</p>';
+            } else {
+                list.innerHTML = payment_methods.map(pm => `
+                    <div class="flex justify-between items-center p-3 border border-gray-200 rounded-md bg-white" data-pm-id="${pm.id}">
+                    <div>
+                        <div class="font-medium capitalize">${pm.card.brand} •••• ${pm.card.last4}</div>
+                        <div class="text-sm text-gray-500">Expires ${pm.card.exp_month}/${pm.card.exp_year}</div>
+                    </div>
+                    <button class="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                            onclick="deletePaymentMethodForAdmin('${pm.id}', '${userId}')">
+                        Delete
+                    </button>
+                    </div>
+                `).join('');
+            }
+        } catch (err) {
+            console.error(err);
+            list.innerHTML = `<p class="text-red-600">Error: ${err.message}</p>`;
+        }
+    }
+
+    window.deletePaymentMethodForAdmin = async function(paymentMethodId, userId) {
+        if (!confirm('Are you sure you want to delete this payment method?')) return;
+
+        try {
+            const res = await fetch('/api/admin/delete_payment_method', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, payment_method_id: paymentMethodId })
+            });
+
+            if (!res.ok) throw new Error('Failed to delete card');
+            document.querySelector(`[data-pm-id="${paymentMethodId}"]`)?.remove();
+            showStripeAdminMessage('Payment method deleted.', 'success');
+        } catch (err) {
+            console.error(err);
+            showStripeAdminMessage(err.message, 'error');
+        }
+    };
+    // Stripe Admin - edit users - END //
 
 
     </script>

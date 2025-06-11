@@ -282,7 +282,7 @@ impl StripeClient {
         currency: &str,
         payment_method_id: &String,
         customer_id: &String,
-        transaction_id: &Uuid,
+        user_payment_id: &Uuid,
         school_id: &Uuid,
         user_id: &Uuid,
         description: Option<&String>,
@@ -305,7 +305,7 @@ impl StripeClient {
         }
 
         // Add metadata
-        form_data.insert("metadata[transaction_id]".to_string(), transaction_id.to_string());
+        form_data.insert("metadata[user_payment_id]".to_string(), user_payment_id.to_string());
         form_data.insert("metadata[school_id]".to_string(), school_id.to_string());
         form_data.insert("metadata[user_id]".to_string(), user_id.to_string());
 

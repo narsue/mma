@@ -3,6 +3,7 @@
 # Cleanup function
 cleanup() {
     echo "Cleaning up..."
+    podman container logs mma
     podman pod stop mmapod 2>/dev/null || true
     podman pod rm mmapod 2>/dev/null || true
 }
@@ -43,6 +44,7 @@ run_command podman build -f CI/Dockerfile.dev -t mma_dev \
 
 echo "Running mma rust web app in CI mode..."
 run_command podman run -d --pod mmapod --rm --name mma mma_dev
+# run_command podman run -d --pod mmapod --rm --name mma testa
 
 sleep 5
 

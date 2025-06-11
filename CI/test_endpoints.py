@@ -1,8 +1,9 @@
 import time
 import requests
 import json
+import uuid
 from uuid import UUID
-
+from decimal import Decimal
 
 BASE_URL = "http://localhost:1227"
 from cassandra.cluster import Cluster
@@ -13,10 +14,10 @@ def wipe_db():
     # print("🔁 Connecting to ScyllaDB to truncate all tables in `mma`...")
     
     auth_provider = PlainTextAuthProvider(username='cassandra', password='cassandra')
-    cluster = Cluster(['mmapod'], auth_provider=auth_provider, port=9042)
+    cluster = Cluster(['127.0.0.1'], auth_provider=auth_provider, port=9042)
     session = cluster.connect()
 
-    keyspace = 'ci_mma'
+    keyspace = 'mma'
     session.set_keyspace(keyspace)
 
     # Get list of tables in keyspace
@@ -119,6 +120,26 @@ def wait_for_server():
             pass
         time.sleep(1)
     raise Exception("Server did not start in time.")
+
+def check_update_payment_plan(session: requests.Session, payload: dict):
+    url = f"{BASE_URL}/api/school/update_payment_plan"
+
+    # Convert UUIDs and Decimal to strings if needed (JSON serialization)
+    def serialize_value(v):
+        if isinstance(v, uuid.UUID):
+            return str(v)
+        if isinstance(v, Decimal):
+            return str(v)
+        return v
+
+    serialized_payload = {k: serialize_value(v) for k, v in payload.items()}
+
+    resp = session.post(url, json=serialized_payload)
+    resp.raise_for_status()
+
+    data = resp.json()
+    assert data["success"], f"Expected success=True, got: {data}"
+    print("✔ Payment plan update succeeded")
 
 def create_venue(session: requests.Session):
     url = f"{BASE_URL}/api/venue/create"
@@ -239,6 +260,60 @@ def get_venue(session: requests.Session, venue_id: str, expect_success: bool):
         data = resp.json()
         assert data.get("success") is False
 
+
+#[post("/api/school/get_current_payment_plans")]
+def check_get_school_current_payment_plans(session: requests.Session, expected_plan_count: int):
+    url = f"{BASE_URL}/api/school/get_current_payment_plans"
+    
+    resp = session.post(url)
+    resp.raise_for_status()  # Raises HTTPError if status is 4xx/5xx
+
+    data = resp.json()
+    assert data["success"], "API returned success=False"
+    
+    plans = data.get("payment_plans", [])
+    assert isinstance(plans, list), "Expected school current payment_plans to be a list"
+    assert len(plans) == expected_plan_count, (
+        f"Expected {expected_plan_count} school current  payment plans, got {len(plans)}"
+    )
+    
+    print(f"✅ Retrieved {len(plans)} school current payment plans (as expected)")
+
+
+def check_get_user_purchasable_payment_plans(session: requests.Session, expected_plan_count: int):
+    url = f"{BASE_URL}/api/user/get_purchasable_payment_plans"
+    
+    resp = session.post(url)
+    resp.raise_for_status()  # Raises HTTPError if status is 4xx/5xx
+
+    data = resp.json()
+    assert data["success"], "API returned success=False"
+    
+    plans = data.get("payment_plans", [])
+    assert isinstance(plans, list), "Expected payment_plans to be a list"
+    assert len(plans) == expected_plan_count, (
+        f"Expected {expected_plan_count} user purchasable payment plans, got {len(plans)}"
+    )
+    
+    print(f"✅ Retrieved {len(plans)} school purchasable payment plans (as expected)")
+
+def check_get_user_payment_plans(session: requests.Session, expected_plan_count: int):
+    url = f"{BASE_URL}/api/user/get_payment_plans"
+    
+    resp = session.post(url)
+    resp.raise_for_status()  # Raises HTTPError if status is 4xx/5xx
+
+    data = resp.json()
+    assert data["success"], "API returned success=False"
+    
+    plans = data.get("payment_plans", [])
+    assert isinstance(plans, list), "Expected payment_plans to be a list"
+    assert len(plans) == expected_plan_count, (
+        f"Expected {expected_plan_count} user payment plans, got {len(plans)}"
+    )
+    
+    print(f"✅ Retrieved {len(plans)} user purchasable payment plans (as expected)")
+
 def test_visibility_across_schools():
     wipe_db()
 
@@ -277,6 +352,35 @@ def test_visibility_across_schools():
     get_venue(s2, venue1, expect_success=False)
 
     print("✅ Venue visibility test passed")
+
+    check_get_user_purchasable_payment_plans(s1, 0)
+    check_get_user_purchasable_payment_plans(s2, 0)
+    print("✅ Checked empty school payment plans for both schools")
+
+    check_get_user_payment_plans(s1, 0)
+    check_get_user_payment_plans(s2, 0)
+    print("✅ Checked empty user payment plans for both schools")
+
+
+    payload = {
+        "base_payment_plan_id": None,  # or None
+        "min_age": None,
+        "max_age": None,
+        "working": False,
+        "title": "Adult working school1",
+        "description": "This is a test update.",
+        "cost": Decimal("49.99"),
+        "duration_id": 2,
+        "grouping_id": 1,
+    }
+    check_update_payment_plan(s1, payload)
+
+    check_get_user_purchasable_payment_plans(s1, 1)
+    check_get_user_purchasable_payment_plans(s2, 0)
+    print("✅ Checked new payment plan - Only visibile from one school")
+
+
+
 
 def setup_school_with_class(session: requests.Session, school_name: str) -> str:
     create_school_user(session, school_name)

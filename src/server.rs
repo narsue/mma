@@ -1,8 +1,9 @@
 pub mod handlers {
     use actix_web::{post, get, put, delete, web, http::header::{LOCATION, CONTENT_TYPE}, HttpRequest, HttpResponse, cookie::{Cookie, SameSite}};
+    use tracing::trace;
     // use argon2::password_hash;
     // use mma::api::GenericResponse;
-    use std::sync::Arc;
+    use std::{any::Any, sync::Arc};
     use uuid::Uuid;
     use crate::{db, stripe_client::StripeClient};
     use crate::{api::{GetClassRequest, GetClassResponse}, auth, state::{self, StoreStateManager}};
@@ -18,14 +19,14 @@ pub mod handlers {
         SignupResponse, SignupRequest, VerifyAccountQuery, GetVenueRequest, GetVenueResponse, UpdateClassRequest, ClassFrequencyId,
         GetVenueListResponse, GenericResponse, GetStlyeListResponse, GetStyleRequest, GetStyleResponse,
         GetClassStudentsRequest, GetClassStudentsResponse, StudentClassAttendance, SetClassStudentsAttendanceRequest,
-        CreateSetupIntentRequest, CreateSetupIntentResponse, GetStripeSavedPaymentMethodsResponse, DeletePaymentMethodRequest
-
-
+        CreateSetupIntentRequest, CreateSetupIntentResponse, GetStripeSavedPaymentMethodsResponse, DeletePaymentMethodRequest,
+        PayablePaymentPlansResponse, SchoolUpdatePaymentPlanRequest, GenericSuccessResponse, UserSubscribePaymentPlan,
+        ChangeUserSubscribePaymentPlan, SchoolUser, UserIdRequest, UserInviteRequest
     };
     use chrono::{NaiveDate, NaiveTime};
     use bigdecimal::BigDecimal;
     use crate::auth::LoggedUser;
-    use crate::db::{verify_password, hash_password};
+    use crate::db::{verify_password, hash_password, get_age};
     use crate::templates::{TemplateCache, get_template_content};
     use actix_web::error::Error as ActixError;
     use crate::error::{AppError, Result as AppResult};
@@ -92,6 +93,382 @@ pub mod handlers {
         }
     }
 
+    #[post("/api/user/get_permissions")]
+    pub async fn get_my_permissions(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser, // Authenticate the request
+    ) -> Result<HttpResponse, actix_web::Error> {
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let user_id = school_user_id.user_id;
+
+        let result = state_manager.db.get_school_user_titles(&user.school_user_ids).await;
+        let accounts = match result {
+            Ok(accounts) => accounts,
+            Err(e) => {
+                tracing::error!("Error getting user account data {}", e);
+                return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                    "success": false,
+                    "error_message": "Error getting accounts."
+                }))); 
+            }
+        };
+
+        let result = state_manager.db.get_user_permissions(&user_id).await;
+        let permissions = match result {
+            Ok(permissions) => permissions,
+            Err(e) => {
+                tracing::error!("Error getting user permissions {}", e);
+                return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                    "success": false,
+                    "error_message": "Error getting permissions."
+                }))); 
+            }
+        };
+
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "success": true,
+            "permissions": permissions,
+            "accounts": accounts,
+            "user_id": user_id,
+            "school_id": school_id,
+        })));
+        
+    }
+
+    #[post("/api/user/invite")]
+    pub async fn admin_invite_logged_user(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser, // Authenticate the request
+        view_user: web::Json<UserInviteRequest>,
+    ) -> Result<HttpResponse, actix_web::Error> {
+       
+
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+
+
+        let email = view_user.email.clone();
+        let result = state_manager.db.get_logged_user_by_email(&email).await;
+        let mut new_logged_user = false;
+        let result= match result {
+            Ok(result) => {
+                result
+            },
+            Err(e) => {
+                tracing::error!("Error get_logged_user_by_email: {:?}", e);
+                return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some(String::from("An error occurred while processing your request.")),
+                }));
+            }
+        };
+
+        match result {
+            Some((logged_user_id, _)) => {
+                new_logged_user = false;
+                
+                let result = state_manager.db.adjust_logged_user_school_user_id(&school_id, &logged_user_id, &view_user.user_id, true).await;
+
+                let result= match result {
+                    Ok(result) => {
+                        result
+                    },
+                    Err(e) => {
+                        tracing::error!("Error adjust logged_user to add user: {:?}", e);
+                        return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                            success: false,
+                            message: None,
+                            error_message: Some(String::from("An error occurred while processing your request.")),
+                        }));
+                    }
+                };
+
+            },
+            None => {
+                new_logged_user = true;
+            }
+        };
+        
+        // Generate a verification code
+        let verification_code = uuid::Uuid::new_v4().to_string();
+        let temporary_password = uuid::Uuid::new_v4().to_string();
+        
+        
+        let password_hash = match hash_password(&temporary_password) {
+            Ok(hash) => hash,
+            Err(e) => {
+                tracing::error!("Error hashing password: {:?}", e);
+                return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some(String::from("An error occurred while processing your request.")),
+                }));
+            }
+        };
+
+        let user_prof = state_manager.db.get_user_profile(view_user.user_id).await;
+        let user_prof= match user_prof {
+            Ok(result) => {
+                result
+            },
+            Err(e) => {
+                tracing::error!("Error getting user profile: {:?}", e);
+                return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some(String::from("An error occurred while processing your request.")),
+                }));
+            }
+        };
+        let user_prof= match user_prof {
+            Some(result) => {
+                result
+            },
+            None => {
+                tracing::error!("Error getting user profile- was not found");
+                return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some(String::from("An error occurred while processing your request.")),
+                }));
+            }
+        };
+
+        // let school_id = uuid::Uuid::new_v4();
+        let new_school = false;
+        let result = state_manager.db.get_school_title(&school_id).await;
+        let school_title = match result {
+            Ok(title) => {
+                title
+            },
+            Err(e) => {
+                tracing::error!("Error getting school title: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some(String::from("An error occurred while processing your request.")),
+                }));
+            }
+        };
+        // For existing users - just tell them it was linked
+        if !new_logged_user {
+            
+            // Create personalized email with the user's name
+            let html_body = format!(
+                r#"<html>
+                <body>
+                    <h1>Your account has been linked to a {}: {} {} </h1>
+                    <p>When you next login you can now access a new account.</p>
+                    <p><a href="{}">Access your account</a></p>
+                    <p>Regards,<br>MMA Gym Management</p>
+                </body>
+                </html>"#,
+                school_title,
+                user_prof.first_name,
+                user_prof.surname,
+                "https://narsue.com/"
+            );
+
+            match send_custom_email(
+                "narsue@narsue.com", // Use your system email address
+                &email,
+                &html_body,
+                "MMA account linked"
+            ).await {
+                Ok(true) => {
+                    tracing::info!("Verification email sent successfully to {}", email);
+                    
+                    // Store user info temporarily or hash the password now
+                    // Note: You would typically want to store this information somewhere temporary
+                    // or securely until the user verifies their email
+                    
+                    // For now, we'll just return success
+                    return Ok(HttpResponse::Ok().json(SignupResponse {
+                        success: true,
+                        message: Some(String::from("Please check your email to verify your account.")),
+                        error_message: None,
+                    }));
+                },
+                Ok(false) => {
+                    tracing::error!("Failed to send verification email to {}", email);
+                    return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                        success: false,
+                        message: None,
+                        error_message: Some(String::from("Failed to send verification email. Please try again later.")),
+                    }));
+                },
+                Err(e) => {
+                    tracing::error!("Error sending verification email: {}", e);
+                    return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                        success: false,
+                        message: None,
+                        error_message: Some(String::from("An error occurred while sending verification email. Please try again later.")),
+                    }));
+                }
+            }
+
+        }
+
+        // Store the verification code in the database with a 24-hour expiry
+        match state_manager.db.add_sign_up_invite_code(&email, &verification_code, 24, &user_prof.first_name, &user_prof.surname, &password_hash, &Some(school_id), new_school, &Some(view_user.user_id)).await {
+            Ok(_) => {
+                tracing::info!("Added verification code for new user: {}", email);
+                
+                // Generate the verification URL
+                let verification_url = format!(
+                    "https://narsue.com/verify-account?email={}&code={}", 
+                    urlencoding::encode(&email), 
+                    verification_code
+                );
+                
+                // Create personalized email with the user's name
+                let greeting = format!("Hello {},", user_prof.first_name);
+                
+                let mut temp_password_section = "".to_string();
+                if new_logged_user {
+                    temp_password_section = format!("<p>Your temporary password is: {}. Please change this when logged in.</p>", temporary_password);
+                }
+
+                let html_body = format!(
+                    r#"<html>
+                    <body>
+                        <h1>Verify Your Email Address</h1>
+                        <p>{}</p>
+                        <p>Thank you for registering with MMA Gym Management. To complete your registration, please verify your email address by clicking the link below:</p>
+                        <p><a href="{}">Verify Email Address</a></p>
+                        <p>This link will expire in 24 hours.</p>
+                        <p>If you didn't create this account, you can safely ignore this email.</p>
+                        {}
+                        <p>Regards,<br>MMA Gym Management</p>
+                    </body>
+                    </html>"#,
+                    greeting,
+                    verification_url,
+                    temp_password_section,
+                );
+                
+                // Send the verification email
+                match send_custom_email(
+                    "narsue@narsue.com", // Use your system email address
+                    &email,
+                    &html_body,
+                    "Verify Your Email Address"
+                ).await {
+                    Ok(true) => {
+                        tracing::info!("Verification email sent successfully to {}", email);
+                        
+                        // Store user info temporarily or hash the password now
+                        // Note: You would typically want to store this information somewhere temporary
+                        // or securely until the user verifies their email
+                        
+                        // For now, we'll just return success
+                        return Ok(HttpResponse::Ok().json(SignupResponse {
+                            success: true,
+                            message: Some(String::from("Please check your email to verify your account.")),
+                            error_message: None,
+                        }));
+                    },
+                    Ok(false) => {
+                        tracing::error!("Failed to send verification email to {}", email);
+                        return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                            success: false,
+                            message: None,
+                            error_message: Some(String::from("Failed to send verification email. Please try again later.")),
+                        }));
+                    },
+                    Err(e) => {
+                        tracing::error!("Error sending verification email: {}", e);
+                        return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                            success: false,
+                            message: None,
+                            error_message: Some(String::from("An error occurred while sending verification email. Please try again later.")),
+                        }));
+                    }
+                }
+            },
+            Err(e) => {
+                tracing::error!("Failed to store verification code: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(SignupResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some(String::from("An error occurred while processing your request. Please try again later.")),
+                }));
+            }
+        }
+    }
+
+
+    // Get User Profile Handler ---
+    #[post("/api/user/get")]
+    pub async fn admin_get_user_data(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser, // Authenticate the request
+        view_user: web::Json<UserIdRequest>,
+    ) -> Result<HttpResponse, actix_web::Error> {
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        // let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
+
+        // Fetch the user profile from the database
+        match state_manager.db.get_user_profile(view_user.user_id).await {
+            Ok(Some(profile)) => {
+                Ok(HttpResponse::Ok().json(GetUserProfileResponse {
+                    success: true,
+                    error_message: None,
+                    user_profile: Some(profile),
+                }))
+            },
+            Ok(None) => {
+                // This case should ideally not happen if LoggedUser validation passed
+                tracing::error!("Authenticated user ID {} not found in profile data!", auth_user_id);
+                Ok(HttpResponse::InternalServerError().json(GetUserProfileResponse {
+                    success: false,
+                    error_message: Some("User profile not found.".to_string()),
+                    user_profile: None,
+                }))
+            },
+            Err(e) => {
+                tracing::error!("Database error fetching profile for {}: {:?}", auth_user_id, e);
+                Ok(HttpResponse::InternalServerError().json(GetUserProfileResponse {
+                    success: false,
+                    error_message: Some("Failed to retrieve user profile.".to_string()),
+                    user_profile: None,
+                }))
+            }
+        }
+    }
 
     // Update User Profile Handler ---
     #[post("/api/user/update_profile")]
@@ -99,7 +476,7 @@ pub mod handlers {
         state_manager: web::Data<Arc<StoreStateManager>>,
         mut user: LoggedUser, // Authenticate the request
         update_data: web::Json<UpdateUserProfileRequest>,
-    ) -> Result<HttpResponse, actix_web::Error> {
+    ) -> Result<HttpResponse, ActixError> {
         // Validate the session and get the creator user_id
         let logged_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
@@ -116,10 +493,26 @@ pub mod handlers {
         let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
 
 
-        let req_data = update_data.into_inner();
+        // Check dob format
+        let req_data = update_data;
+        match &req_data.dob {
+            Some (dob) => {
+                match get_age(&Some(dob.clone())) {
+                    Some(age) => {},
+                    None => {
+                        tracing::warn!("DOB is NOT in correct format: {}", dob);
+                        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                                "success": false,
+                                "error_message": "Invalid DOB format. Use yyyy/mm/dd.".to_string(),
+                            })));
+                    }
+                }
+            },
+            None => {}
+        }
 
         // Perform the update
-        match state_manager.db.update_user_profile(auth_user_id, &req_data).await {
+        match state_manager.db.update_user_profile(&req_data.user_id, &school_id, &req_data).await {
             Ok(_) => {
                 Ok(HttpResponse::Ok().json(UpdateUserProfileResponse {
                     success: true,
@@ -127,7 +520,7 @@ pub mod handlers {
                 }))
             },
             Err(e) => {
-                tracing::error!("Database error updating profile for {}: {:?}", auth_user_id, e);
+                tracing::error!("Database error updating profile for {}: {:?}", &req_data.user_id, e);
                 Ok(HttpResponse::InternalServerError().json(UpdateUserProfileResponse {
                     success: false,
                     error_message: Some("Failed to update user profile.".to_string()),
@@ -312,8 +705,19 @@ pub mod handlers {
         cache: web::Data<TemplateCache> // Needed to serve the template
     ) -> Result<HttpResponse, actix_web::Error> {
         // Validate the user's session. If invalid, it returns Unauthorized.
-        let _logged_user_id = user.validate(&state_manager).await?;
+        let _logged_user_id = user.validate(&state_manager).await;
+        match _logged_user_id {
+            Ok(user_id) => {
+            },
+            Err(e) => {
+                tracing::warn!("Unauthorized access to portal page: {:?}", e);
+                // Redirect user to / 
+                // or return an Unauthorized response
+                return Ok(HttpResponse::Found().append_header((LOCATION, "/")).finish());
 
+                // return Ok(HttpResponse::Unauthorized().finish());
+            }
+        }
 
         // If validation succeeds, serve the portal HTML
         match get_template_content(&cache, "portal.html") {
@@ -377,11 +781,12 @@ pub mod handlers {
             &req.surname,
             false,
             &Some(school_id),
-            &None
+            &None,
+            true
         ).await;
         
         match result {
-            Ok(user_id) => {
+            Ok((logged_user_id, user_id)) => {
                 HttpResponse::Created().json(CreateUserResponse {
                     success: true,
                     error_message: None,
@@ -466,7 +871,7 @@ pub mod handlers {
                 tracing::warn!("Login failed: {:?}", e);
                 HttpResponse::Unauthorized().json(LoginResponse {
                     success: false,
-                    error_message: Some(e.to_string()),
+                    error_message: Some("Invalid email or password".to_string()),
                     token: None,
                     logged_user_id: None,
                 })
@@ -1186,6 +1591,40 @@ pub mod handlers {
     }
 
 
+    #[post("/api/school/get_users")] // Define the GET endpoint path
+    pub async fn get_school_users_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+    ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
+
+        let auth_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        // Call the database function to get classes based on the provided filters
+        let users: AppResult<Vec<SchoolUser>> = state_manager.db.get_school_users(&school_id).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
+
+        // Handle the result of the database operation explicitly
+        match users {
+            Ok(users) => {
+                Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "success": true,
+                    "users": users,
+                })))
+            },
+            Err(app_err) => {
+                // A database error (AppError) occurred
+                tracing::error!("Database error fetching school user list: {:?}", app_err);
+                // Convert the AppError into an ActixError representing a 500 Internal Server Error
+                Err(ErrorInternalServerError(app_err))
+            }
+        }
+    }
+
+
     #[post("/api/class/get_students")] // Define the GET endpoint path
     pub async fn get_class_students_handler(
         state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
@@ -1325,14 +1764,14 @@ pub mod handlers {
                 tracing::error!("Database error setting class attendence list: {:?}", app_err);
 
                 // Check if error is AppError::User
-                // if app_err.type_id() == AppError::User::type_id() {
-                // if let crate::error::AppError::UserNoCreditCard = app_err {
-                //     Err(ErrorInternalServerError(app_err))
-                // } else {
-                //     // A database error (AppError) occurred
-                //     // Convert the AppError into an ActixError representing a 500 Internal Server Error
-                //     Err(ErrorInternalServerError(app_err))
-                // }
+                if crate::error::AppError::UserNoCreditCard.type_id() == app_err.type_id()  {
+                    return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                        success: false,
+                        error_message: Some("Requires credit card to pay for class".to_string()),
+                        message: None,
+                    }));
+                } 
+
                 Ok(HttpResponse::BadRequest().json(GenericResponse {
                     success: false,
                     error_message: Some("Error setting student attendance".to_string()),
@@ -1641,7 +2080,7 @@ pub mod handlers {
         match venue_result {
             Ok(Some(venue)) => {
                 // Database function succeeded and found the venue
-                tracing::info!("Successfully fetched venue: {}", venue_id);
+                // tracing::info!("Successfully fetched venue: {}", venue_id);
                 // Return the VenueData as JSON with 200 OK status
                 Ok(HttpResponse::Ok().json(GetVenueResponse {
                     success: true,
@@ -2361,8 +2800,12 @@ pub mod handlers {
         let code = query.code.clone();
     
         // Validate the verification code and retrieve user info
+        let mut new_school = false;
+        let mut verify_user_id = None;
         match state_manager.db.check_and_use_sign_up_invite_code(&email, &code).await {
-            Ok((valid,first_name, surname, password_hash, school_id, user_id, new_school)) => {
+            Ok((valid,first_name, surname, password_hash, school_id, user_id, db_new_school)) => {
+                verify_user_id = user_id;
+                new_school = db_new_school;
                 if !valid {
                     // Invalid or expired code
                     tracing::warn!("Invalid or expired verification code for email: {}", email);
@@ -2401,6 +2844,8 @@ pub mod handlers {
                     }
                 };
 
+                // let result = state_manager.db.get_logged_user_by_email(&email).await?;
+
                 // Create the user
                 let result = state_manager.db.create_user(
                     &email,
@@ -2410,55 +2855,66 @@ pub mod handlers {
                     &surname,
                     true,
                     &Some(school_id), // Use the school_id from the invite code
-                    &None, // user_id
+                    &verify_user_id, // user_id
+                    new_school
                 ).await;
     
                 match result {
-                    Ok(user_id) => {
-                        tracing::info!("User created successfully with ID: {}", user_id);
-    
-                        // Create a session for the new user
-                        let ip = None; // In a real app, get this from the request
-                        let user_agent = None; // In a real app, get this from the request
-    
-                        match state_manager.db.create_session(
-                            &user_id,
-                            ip,
-                            user_agent,
-                            24 // Session expiry in hours
-                        ).await {
-                            Ok(session_token) => {
-                                // Set session cookies
-                                let cookie = Cookie::build("session", session_token.clone())
-                                    .path("/")
-                                    .secure(true)
-                                    .http_only(true)
-                                    .same_site(SameSite::Strict)
-                                    .max_age(time::Duration::hours(24))
-                                    .finish();
-    
-                                // Note: Storing user_id in a non-http_only cookie might be risky
-                                // Consider alternative ways to identify the logged-in user client-side
-                                let user_id_cookie = Cookie::build("user_id", user_id.to_string())
-                                    .path("/")
-                                    .secure(true)
-                                    .http_only(false)
-                                    .same_site(SameSite::Strict)
-                                    .max_age(time::Duration::hours(24))
-                                    .finish();
-    
-                                // Redirect to the success page
-                                Ok(HttpResponse::Found()
-                                    .append_header((LOCATION, "/signup-success"))
-                                    .cookie(cookie)
-                                    .cookie(user_id_cookie)
-                                    .finish())
+                    Ok((logged_user_id, user_id)) => {
+                        match logged_user_id {
+                            Some(logged_user_id) => {
+                        
+                            tracing::info!("User created successfully with ID: {} Logged_user_id:{}", user_id, logged_user_id);
+        
+                            // Create a session for the new user
+                            let ip = None; // In a real app, get this from the request
+                            let user_agent = None; // In a real app, get this from the request
+        
+                                match state_manager.db.create_session(
+                                    &logged_user_id,
+                                    ip,
+                                    user_agent,
+                                    24 // Session expiry in hours
+                                ).await {
+                                    Ok(session_token) => {
+                                        // Set session cookies
+                                        let cookie = Cookie::build("session", session_token.clone())
+                                            .path("/")
+                                            .secure(true)
+                                            .http_only(true)
+                                            .same_site(SameSite::Strict)
+                                            .max_age(time::Duration::hours(24))
+                                            .finish();
+            
+                                        // Note: Storing user_id in a non-http_only cookie might be risky
+                                        // Consider alternative ways to identify the logged-in user client-side
+                                        let user_id_cookie = Cookie::build("logged_user_id", logged_user_id.to_string())
+                                            .path("/")
+                                            .secure(true)
+                                            .http_only(false)
+                                            .same_site(SameSite::Strict)
+                                            .max_age(time::Duration::hours(24))
+                                            .finish();
+            
+                                        // Redirect to the success page
+                                        Ok(HttpResponse::Found()
+                                            .append_header((LOCATION, "/signup-success"))
+                                            .cookie(cookie)
+                                            .cookie(user_id_cookie)
+                                            .finish())
+                                    },
+                                    Err(e) => {
+                                        tracing::error!("Failed to create session after verification: {:?}", e);
+                                        Ok(HttpResponse::InternalServerError().body("Failed to create session after verification. Please try again later."))
+                                    }
+                                }
                             },
-                            Err(e) => {
-                                tracing::error!("Failed to create session after verification: {:?}", e);
+                            None  => {
+                                tracing::error!("Verify didnt create a logged in user");
                                 Ok(HttpResponse::InternalServerError().body("Failed to create session after verification. Please try again later."))
                             }
                         }
+
                     },
                     Err(e) => {
                         tracing::error!("Failed to create user after verification: {:?}", e);
@@ -2904,10 +3360,95 @@ pub mod handlers {
         }))
     }
 
-    #[get("/api/user/get_stripe_saved_payment_methods")]
-    pub async fn get_stripe_saved_payment_methods_handler(
+
+    #[post("/api/school/update_payment_plan")]
+    pub async fn update_school_payment_plan_handler(
         state_manager: web::Data<Arc<StoreStateManager>>,
         mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+        req: web::Json<SchoolUpdatePaymentPlanRequest>, // Extract JSON request body
+    ) -> Result<HttpResponse, ActixError> {
+
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        let school_user_ids = user.school_user_ids;
+        if school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("User is not associated with any school.".to_string()),
+            }));
+        }
+        let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        match state_manager.db.update_payment_plan(&school_id, &req).await {
+            Ok(result) => {
+            },
+            Err(e) => {
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Error updating payment plan".to_string()),
+                }));  
+            }
+        }
+
+        return Ok(HttpResponse::Ok().json(GenericResponse {
+            success: true,
+            message: None,
+            error_message: None,
+        }));
+    }
+
+    //change_user_subscribe_payment_plan
+    #[post("/api/user/change_subscribe_user_payment_plan")]
+    pub async fn change_subscribe_user_payment_plan(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser,
+        req: web::Json<ChangeUserSubscribePaymentPlan>,
+    ) -> Result<HttpResponse, ActixError> {
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        let school_user_ids = user.school_user_ids;
+        if school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("User is not associated with any school.".to_string()),
+            }));
+        }
+        let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        match state_manager.db.change_user_subscribe_payment_plan(&auth_user_id, &req).await {
+            Ok(result) => {},
+            Err(_) => {
+                return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Error subscribing to payment plan".to_string()),
+                }));
+            }
+        };
+
+        Ok(HttpResponse::Ok().json(GenericSuccessResponse{
+            success: true,
+        }))
+
+    }
+
+
+    #[post("/api/user/subscribe_payment_plan")]
+    pub async fn user_subscribe_payment_plan(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser,
+        req: web::Json<UserSubscribePaymentPlan>,
         stripe_client: web::Data<StripeClient>,
     ) -> Result<HttpResponse, ActixError> {
         // Validate the session and get the creator user_id
@@ -2925,6 +3466,177 @@ pub mod handlers {
         let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
         let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
         let auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        match state_manager.db.user_subscribe_payment_plan(&stripe_client, &auth_user_id, &school_id, &req).await {
+            Ok(result) => {},
+            Err(_) => {
+                return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Error subscribing to payment plan".to_string()),
+                }));
+            }
+        };
+
+        Ok(HttpResponse::Ok().json(GenericSuccessResponse{
+            success: true,
+        }))
+    }
+
+    #[post("/api/user/get_purchasable_payment_plans")]
+    pub async fn get_user_purchasable_payment_plans_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser,
+    ) -> Result<HttpResponse, ActixError> {
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        let school_user_ids = user.school_user_ids;
+        if school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("User is not associated with any school.".to_string()),
+            }));
+        }
+        let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        // Retrieve purchasable payment plans from database
+        let plans = match state_manager.db.get_purchasable_payment_plans(&auth_user_id, &school_id).await {
+            Ok(plans) => plans,
+            Err(e) => {
+                tracing::error!("Failed to retrieve purchasable payment plans: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to retrieve payment plans".to_string()),
+                }));
+            }
+        };
+        
+        Ok(HttpResponse::Ok().json(PayablePaymentPlansResponse{
+            success: true,
+            payment_plans: plans,
+        }))
+
+    }
+
+
+    
+    #[post("/api/school/current_payment_plans")]
+    pub async fn get_school_current_payment_plans_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+    ) -> Result<HttpResponse, ActixError> {
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        let school_user_ids = user.school_user_ids;
+        if school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("User is not associated with any school.".to_string()),
+            }));
+        }
+        let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        
+        // Retrieve purchasable payment plans from database
+        let plans = match state_manager.db.get_school_current_payment_plans(&school_id).await {
+            Ok(plans) => plans,
+            Err(e) => {
+                tracing::error!("Failed to retrieve school payment plans: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to retrieve school payment plans".to_string()),
+                }));
+            }
+        };
+
+        Ok(HttpResponse::Ok().json(serde_json::json!({
+            "success": true,
+            "payment_plans": plans
+        })))
+
+    }
+
+
+    #[post("/api/user/get_payment_plans")]
+    pub async fn get_payment_plans_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+    ) -> Result<HttpResponse, ActixError> {
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        let school_user_ids = user.school_user_ids;
+        if school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("User is not associated with any school.".to_string()),
+            }));
+        }
+        let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        // Retrieve purchasable payment plans from database
+        let plans = match state_manager.db.get_user_active_payment_plans(&auth_user_id, &school_id).await {
+            Ok(plans) => plans,
+            Err(e) => {
+                tracing::error!("Failed to retrieve purchasable payment plans: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to retrieve payment plans".to_string()),
+                }));
+            }
+        };
+
+        Ok(HttpResponse::Ok().json(serde_json::json!({
+            "success": true,
+            "payment_plans": plans
+        })))
+
+    }
+
+
+
+
+    #[post("/api/user/get_stripe_saved_payment_methods")]
+    pub async fn get_stripe_saved_payment_methods_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+        stripe_client: web::Data<StripeClient>,
+        view_user: Option<web::Json<UserIdRequest>>,
+    ) -> Result<HttpResponse, ActixError> {
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        let school_user_ids = user.school_user_ids;
+        if school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("User is not associated with any school.".to_string()),
+            }));
+        }
+        let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let mut auth_user_id = school_user_id.user_id; // Use the validated user ID
+        if view_user.is_some() {
+            auth_user_id = view_user.unwrap().user_id;
+        }
 
         // Retrieve Stripe customer ID from database
         let stripe_customer_id = match state_manager.db.get_stripe_customer_id(&auth_user_id).await {

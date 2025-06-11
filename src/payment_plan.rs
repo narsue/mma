@@ -6,6 +6,7 @@ pub enum PaymentPlanDuration {
     SingleClass=0,
     CalenderMonth=1,
     SchoolTerm=2,
+    END=3,
 }
 
 #[repr(i32)]
@@ -13,4 +14,5 @@ pub enum PaymentPlanDuration {
 pub enum PaymentGroupType {
     Individual=0,
     Family=1,
+    END=2,
 }

@@ -155,7 +155,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             // Public routes
             .service(handlers::user_login)
 
-            // Protected routes
+            // Protected routes - user authentication required
             .service(handlers::portal_page)
             .service(handlers::user_logout)
             .service(handlers::user_profile)
@@ -171,6 +171,11 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::get_user_profile_data)
             .service(handlers::update_user_profile)
             .service(handlers::change_password)
+            .service(handlers::get_user_purchasable_payment_plans_handler)
+            .service(handlers::get_payment_plans_handler)
+            .service(handlers::user_subscribe_payment_plan)
+            .service(handlers::change_subscribe_user_payment_plan)
+            .service(handlers::get_my_permissions) // Gets permissions for current user, as well as other profiles to access
 
             // Waiver routes
             .service(handlers::get_latest_waiver)
@@ -201,6 +206,14 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::create_setup_intent_handler)
             .service(handlers::get_stripe_saved_payment_methods_handler)
             .service(handlers::delete_payment_method_handler)
+
+            // School routes - protected for admin
+            .service(handlers::get_school_current_payment_plans_handler)
+            .service(handlers::update_school_payment_plan_handler)
+            .service(handlers::get_school_users_handler)
+            .service(handlers::admin_get_user_data)
+            .service(handlers::admin_invite_logged_user)
+
             
     })
     .bind(format!("0.0.0.0:{}", port))?

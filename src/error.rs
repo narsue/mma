@@ -18,7 +18,9 @@ pub enum AppError {
 
     #[error("Database prepare error: {0}")]
     DatabasePrepare(#[from] scylla::errors::PrepareError),
-
+    
+    #[error("BadRequest error: {0}")]
+    BadRequest(String),
 
     #[error("JSON serialization error: {0}")]
     Serialization(#[from] serde_json::Error),

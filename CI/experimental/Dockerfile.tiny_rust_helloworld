@@ -1,0 +1,25 @@
+# Stage 1: Build the binary using official Rust image
+FROM docker.io/rust:1.78-alpine as builder
+
+# Install build dependencies
+RUN apk add --no-cache musl-dev
+
+# Create a dummy project
+WORKDIR /app
+RUN cargo new --bin hello
+WORKDIR /app/hello
+
+# Ensure .cargo directory exists and configure static linking
+RUN echo 'fn main() { println!("Hello, World!"); }' > src/main.rs
+
+# Configure static linking
+RUN mkdir -p .cargo && \
+    printf '[target.x86_64-unknown-linux-musl]\nrustflags = ["-C", "target-feature=+crt-static"]\n' > .cargo/config.toml
+
+# Build statically-linked binary
+RUN cargo build --release --target x86_64-unknown-linux-musl
+
+# Stage 2: Copy binary into a minimal scratch image
+FROM scratch
+COPY --from=builder /app/hello/target/x86_64-unknown-linux-musl/release/hello /hello
+ENTRYPOINT ["/hello"]

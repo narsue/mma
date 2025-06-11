@@ -1,83 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign Up Successful</title>
-    <link rel="stylesheet" href="/style.css">
-    <style>
-        .success-container {
-            max-width: 600px;
-            margin: 50px auto;
-            padding: 30px;
-            text-align: center;
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .success-icon {
-            font-size: 80px;
-            color: #28a745;
-            margin-bottom: 20px;
-        }
-        
-        h1 {
-            color: #333;
-            margin-bottom: 20px;
-        }
-        
-        p {
-            color: #666;
-            font-size: 18px;
-            line-height: 1.6;
-            margin-bottom: 15px;
-        }
-        
-        .countdown {
-            font-weight: bold;
-            color: #007bff;
-        }
-    </style>
-    <meta http-equiv="refresh" content="3;url=/portal">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Up Successful</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta http-equiv="refresh" content="3;url=/portal" />
 </head>
-<body>
-    <nav>
-        <ul>
-            <li><a href="/">Home</a></li>
-            <li><a href="/login">Login/Sign Up</a></li>
-            <li><a href="/gym-signup">Gym Sign Up</a></li>
-            <li><a href="/contact">Contact Us</a></li>
-            <!-- Add more links as needed -->
-        </ul>
-    </nav>
+<body class="bg-gray-100 text-gray-800 font-sans">
 
-    <div class="success-container">
-        <div class="success-icon">✓</div>
-        <h1>Account Verified Successfully</h1>
-        <p>Thank you for verifying your email address. Your account has been activated.</p>
-        <p>You will be redirected to the portal in <span id="countdown" class="countdown">3</span> seconds...</p>
-        <p>If you are not redirected automatically, <a href="/portal">click here</a> to continue to the portal.</p>
-    </div>
+  <div class="max-w-xl mx-auto bg-white p-8 rounded-lg shadow text-center">
+    <div class="text-green-500 text-6xl mb-4">✓</div>
+    <h1 class="text-2xl font-semibold mb-4">Account Verified Successfully</h1>
+    <p class="text-gray-700 mb-2">
+      Thank you for verifying your email address. Your account has been activated.
+    </p>
+    <p class="text-gray-700 mb-4">
+      You will be redirected to the portal in <span id="countdown" class="font-bold text-blue-600">3</span> seconds...
+    </p>
+    <p class="text-gray-600">
+      If you are not redirected automatically, <a href="/portal" class="text-blue-500 underline">click here</a> to continue to the portal.
+    </p>
+  </div>
 
-    <script>
-        // Countdown timer
-        let secondsLeft = 3;
-        const countdownElement = document.getElementById('countdown');
-        
-        const countdownInterval = setInterval(() => {
-            secondsLeft--;
-            countdownElement.textContent = secondsLeft;
-            
-            if (secondsLeft <= 0) {
-                clearInterval(countdownInterval);
-                window.location.href = '/portal';
-            }
-        }, 1000);
-    </script>
+  <footer class="text-center text-gray-500 mt-12 text-sm">
+    <p>&copy; 2025 MMA Gym Management</p>
+  </footer>
 
-    <footer>
-        <p>&copy; 2025 MMA Gym Management</p>
-    </footer>
+  <script>
+    // Countdown timer
+    let secondsLeft = 3;
+    const countdownElement = document.getElementById('countdown');
+    
+    const countdownInterval = setInterval(() => {
+      secondsLeft--;
+      countdownElement.textContent = secondsLeft;
+      
+      if (secondsLeft <= 0) {
+        clearInterval(countdownInterval);
+        window.location.href = '/portal';
+      }
+    }, 1000);
+  </script>
 </body>
 </html>

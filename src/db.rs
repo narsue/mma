@@ -1,14 +1,20 @@
 use bigdecimal::num_bigint::BigInt;
+use futures::future::Map;
 // use argon2::password_hash;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
+use scylla::response::query_result::QueryResult;
 use scylla::{DeserializeRow};
 use scylla::statement::Statement;
 use scylla::statement::prepared::PreparedStatement;
 use scylla::statement::Consistency;
+use std::collections::HashMap;
 use std::fs;
+use std::hash::Hash;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use crate::db_migrate::MigrationTool;
+use crate::models::Permissions;
 use crate::payment_plan::{self, PaymentGroupType, PaymentPlanDuration};
 use bigdecimal::ToPrimitive;
 
@@ -16,24 +22,177 @@ use std::sync::Arc;
 use uuid::Uuid;
 use std::time::SystemTime;
 use rand::{distributions::Alphanumeric, Rng};
-use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc, Weekday};
+use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, DateTime, TimeZone, Utc, Weekday};
 use chrono_tz::Tz;
 use scylla::value::CqlTimestamp;
 use bigdecimal::BigDecimal;
 use crate::db;
 use crate::error::{AppError, Result, Result as AppResult, TraceErr};
-use crate::api::{UserProfileData, UpdateUserProfileRequest, ClassData, ClassFrequency, VenueData, StyleData, ClassFrequencyId, SchoolUserId, StudentClassAttendance}; 
+use crate::api::{ActivePaymentPlanData, ClassData, ClassFrequency, ClassFrequencyId, 
+    PurchasablePaymentPlanData, SchoolUserId, StudentClassAttendance, StyleData, UpdateUserProfileRequest, 
+    UserProfileData, UserWithName, VenueData, SchoolUpdatePaymentPlanRequest, UserSubscribePaymentPlan,
+    ChangeUserSubscribePaymentPlan, SchoolUser, UserSchoolPermission, DetailedSchoolUserId}; 
 use crate::stripe_client::StripeClient;
+use ammonia::clean;
+use lazy_static::lazy_static;
+use regex::Regex;
+use email_address::EmailAddress;
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
 
+
+/// First strip any HTML/JS/etc tags, attributes, entities, etc.
+fn strip_html(input: &str) -> String {
+    clean(input)
+}
+
+/// Sanitize a person’s name: allow letters, spaces, hyphens and apostrophes.
+fn sanitize_name(input: &str, max_len: usize) -> String {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r#"[^A-Za-z\s\-']"#).unwrap();
+    }
+    let s = strip_html(input);
+    let filtered = RE.replace_all(&s, "");
+    let trimmed = filtered.trim();
+    trimmed.chars().take(max_len).collect()
+}
+
+/// Sanitize an address: allow letters, digits, spaces, “.,-#/” and apostrophes.
+fn sanitize_address(input: &str, max_len: usize) -> String {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r#"[^A-Za-z0-9\s\.\,\-\'\#\/]"#).unwrap();
+    }
+    let s = strip_html(input);
+    let filtered = RE.replace_all(&s, "");
+    let trimmed = filtered.trim();
+    trimmed.chars().take(max_len).collect()
+}
+
+/// Sanitize a phone number: allow digits, spaces, “()+-”
+fn sanitize_phone(input: &str, max_len: usize) -> String {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r#"[^0-9\s\+\-\(\)]"#).unwrap();
+    }
+    let s = strip_html(input);
+    let filtered = RE.replace_all(&s, "");
+    let trimmed = filtered.trim();
+    trimmed.chars().take(max_len).collect()
+}
+
+/// Sanitize a phone number: allow digits, spaces, “()+-”
+fn sanitize_gender(input: &str) -> String {
+    if input.to_lowercase() == "male" {
+        return "male".to_string();
+    }
+    if input.to_lowercase() == "female" {
+        return "female".to_string();
+    }
+    return "".to_string();
+}
+
+fn sanitize_email(input: &String) -> Option<String> {
+    let s = strip_html(input);
+    let t = s.trim();
+    let email = EmailAddress::from_str(s.as_str());
+    match email {
+        Ok(email) => Some(email.to_string()),
+        Err(_) => None, // Return None if parsing fails
+    }
+
+    // EmailAddress::parse enforces RFC-compliance and lowercases the domain
+    // EmailAddress::parse(t).ok().map(|e| e.to_string())
+}
+
+pub fn age_check(age_years: Option<i32>, min_age: Option<i32> , max_age: Option<i32>) -> bool 
+{
+    match age_years {
+        Some(age_years) => {
+            if min_age.is_some() && max_age.is_some() {
+                if min_age.unwrap() <= age_years && age_years <= max_age.unwrap() {
+                    return true;
+                }
+                return false;
+            } else if min_age.is_some() {
+                if min_age.unwrap() <= age_years {
+                    return true;
+                }
+                return false;    
+            } else if max_age.is_some() {
+                if age_years <= max_age.unwrap() {
+                    return true;
+                } 
+                else {
+                    return false;
+                }      
+            } else {
+                return true;
+            }
+            return false;
+        },
+        None => {
+            if min_age.is_none() && max_age.is_none() {
+                return true;
+            }
+            return false
+        },
+    };
+}
+
+pub fn get_age(dob_str: &Option<String>) -> Option<i32> {
+    match dob_str {
+        Some(dob_str) => {
+            match NaiveDate::parse_from_str(&dob_str, "%Y/%m/%d") {
+                Ok(dob) => {
+                    // Valid format
+                    let today = Utc::now().date_naive();
+    
+                    let mut age = today.year() - dob.year();
+                    if age < 0 {
+                        return None;
+                    }
+                    return Some(age);
+                },
+                Err(_) => {
+                    return None;
+                }
+            }
+        },
+        None => { None }
+    }
+}
+
+pub struct UserPaymentPlan {
+    pub user_payment_plan_id: Uuid,
+    pub base_payment_plan_id: Uuid,
+    pub payment_plan_id: Uuid,
+    pub group_user_ids: Vec<Uuid>,
+    pub next_group_user_ids: Vec<Uuid>, 
+    pub expiration_ts: i64, 
+    pub subscribed: bool
+}
+
+
+#[derive(DeserializeRow)]
+pub struct PaymentPlanData {
+    payment_plan_id: Uuid,
+    base_payment_plan_id: Uuid,
+    grouping_id: i32,
+    min_age: Option<i32>,
+    max_age: Option<i32>,
+    working: Option<bool>,
+    title: String,
+    description: String,
+    cost: BigDecimal,
+    duration_id: i32,
+}
+
 #[derive(DeserializeRow)]
 struct UserRow {
     user_id: Uuid,           // 0: uuid (PK, assumed non-null by deserializer)
-    email: String,           // 1: text (assumed non-null)
+    email: Option<String>,           // 1: text (assumed non-null)
     first_name: String,      // 3: text (assumed non-null)
     surname: String,         // 4: text (assumed non-null)
     gender: Option<String>,  // 5: text (nullable)
@@ -41,7 +200,7 @@ struct UserRow {
     dob: Option<String>,     // 7: text (nullable - consider Date type if stored as such)
     dev_stripe_payment_method_ids: Option<Vec<String>>, // 8: text (nullable)
     prod_stripe_payment_method_ids: Option<Vec<String>>, // 8: text (nullable)
-    email_verified: bool,    // 10: boolean (assumed non-null)
+    email_verified: Option<bool>,    // 10: boolean (assumed non-null)
     photo_id: Option<String>,// 11: text (nullable)
     address: Option<String>, // 12: text (nullable)
     suburb: Option<String>,  // 13: text (nullable)
@@ -73,6 +232,29 @@ pub struct ClassDataRow {
     pub deleted_ts: Option<CqlTimestamp>,
     pub free_lessons: Option<i32>,
 }
+
+fn calculate_age(dob_str: &String) -> Option<i32> {
+    let dob = NaiveDate::parse_from_str(dob_str, "%Y/%m/%d").ok();
+    let dob = match dob {
+        Some(dob) => dob,
+        None => {
+            tracing::error!("Dob string for user is invalid: {}", dob_str);
+            return None;
+        }
+    };
+
+    let today = Utc::now().date_naive();
+
+    let mut age = today.year() - dob.year();
+
+    // Subtract one if birthday hasn't occurred yet this year
+    if (today.month(), today.day()) < (dob.month(), dob.day()) {
+        age -= 1;
+    }
+
+    Some(age)
+}
+
 
 pub fn get_time() -> i64
 {
@@ -167,7 +349,7 @@ impl ScyllaConnector {
         })
     }
 
-    pub async fn get_logged_user_by_email(&self, email: &str) -> Result<Option<(Uuid, String)>> {
+    pub async fn get_logged_user_by_email(&self, email: &String) -> Result<Option<(Uuid, String)>> {
         // First, get the user_id from the email lookup table
         let email_result = self.session
             .execute_unpaged(
@@ -246,18 +428,132 @@ impl ScyllaConnector {
                 "SELECT school_user_ids FROM mma.logged_user WHERE logged_user_id = ?",
                 (logged_user_id,),
             )
-            .await?
+            .await.trace()?
             .into_rows_result().trace()?;
         
         let mut school_ids = Vec::new();
-        for row in result.rows::<(Vec<(Uuid, Uuid)>,)>()? {
+        for row in result.rows::<(Vec<(Uuid, Uuid)>,)>().trace()? {
             let (schools,): (Vec<(Uuid, Uuid)>,) = row.trace()?;
             school_ids.extend(schools.into_iter().map(|(school_id, user_id)| SchoolUserId { school_id, user_id }));
         }
         return Ok(school_ids);
     }
 
+    pub async fn get_school_user_titles(&self, school_users: &Vec<SchoolUserId>) -> Result<Vec<DetailedSchoolUserId>> {
+        let mut school_ids = Vec::new();
+        let mut user_ids = Vec::new();
+        let mut return_val = Vec::new();
 
+        for school_user in school_users {
+            school_ids.push(&school_user.school_id);
+            user_ids.push(&school_user.user_id);
+        }
+        let mut user_name_map = HashMap::new();
+        let mut school_title_map = HashMap::new();
+
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT school_id, title FROM mma.school WHERE school_id in ?",
+                (&school_ids,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        for row in result.rows().trace()? {
+            let (school_id, title): (Uuid, Option<String>) = row.trace()?;
+            let title = match title {
+                Some(title) => title,
+                None => "Unnamed school".to_string()
+            };
+            school_title_map.insert(school_id, title);
+        }
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT user_id, first_name, surname FROM mma.user WHERE user_id in ?",
+                (&user_ids,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        for row in result.rows().trace()? {
+            let (user_id, first_name, surname): (Uuid, Option<String>, Option<String>) = row.trace()?;
+            let first_name = match first_name {
+                Some(first_name) => first_name,
+                None => "n/a".to_string()
+            };
+            let surname = match surname {
+                Some(surname) => surname,
+                None => "n/a".to_string()
+            };
+            let mut name = first_name;
+            name.push_str(" ");
+            name.push_str(&surname);
+
+            user_name_map.insert(user_id, name);
+        }
+
+
+        for school_user in school_users {
+            school_ids.push(&school_user.school_id);
+            user_ids.push(&school_user.user_id);
+            let name = user_name_map.get(&school_user.user_id);
+            let name = match name {
+                Some(name) => name,
+                None => &"n/a".to_string()
+            };
+            let title = school_title_map.get(&school_user.school_id);
+            let title = match title {
+                Some(title) => title,
+                None => &"n/a".to_string()
+            };
+
+            return_val.push(DetailedSchoolUserId{
+                school_id: school_user.school_id,
+                user_id: school_user.user_id,
+                user_name: name.clone(),
+                school_title: title.clone()
+            });
+        }            
+
+        return Ok(return_val);
+    }
+
+
+    pub async fn get_user_permissions(&self, user_id: &Uuid) -> Result<Vec<UserSchoolPermission>> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT club_id, class_id, permission FROM mma.user_permission WHERE user_id = ?",
+                (user_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+        
+        let mut permissions = Vec::new();
+        let zero_guuid = Uuid::nil();
+
+        for row in result.rows().trace()? {
+            let (club_id, class_id, permission): (Uuid, Uuid, i32) = row.trace()?;
+            let matcha= (club_id == zero_guuid);
+            let club_id = match club_id {
+                matcha => {None},
+                _ => Some(club_id)
+            };
+            let matcha= (class_id == zero_guuid);
+            let class_id: Option<Uuid> = match class_id {
+                matcha => {None},
+                _ => Some(class_id)
+            };
+
+            permissions.push(UserSchoolPermission{
+                club_id,
+                class_id,
+                permission
+            });
+        }
+        return Ok(permissions);
+    }
 
     // Verify a session token and return the user ID if valid
     pub async fn verify_session(&self, logged_user_id: &Uuid, session_token: &str) -> Result<(bool, i64, Option::<Vec<SchoolUserId>>)> {
@@ -267,7 +563,7 @@ impl ScyllaConnector {
                 "SELECT expires_ts, is_active FROM mma.session WHERE session_token = ? and logged_user_id = ?",
                 (session_token, logged_user_id),
             )
-            .await?
+            .await.trace()?
             .into_rows_result().trace()?;
 
         
@@ -289,10 +585,12 @@ impl ScyllaConnector {
                 if now > expires_ts.0 {
                     self.invalidate_session(logged_user_id, session_token).await.trace()?;
                 }
+                tracing::info!("Found expired session info for {} {} {}", logged_user_id, session_token, is_active);
+
                 return Ok((false, 0, None)); // Session expired or inactive
             }
         }
-
+        tracing::info!("Did not find session info for {} {}", logged_user_id, session_token);
         return Ok((false, 0, None));
 
     }
@@ -321,24 +619,44 @@ impl ScyllaConnector {
         Ok(())
     }
 
+
     // Add user creation method
     pub async fn create_user(
         &self, 
-        email: &str,
+        email: &String,
         password: Option<&str>,
         password_hash: Option<&str>,
         first_name: &str,
         surname: &str,
         email_verified: bool,
         school_id: &Option<Uuid>,
-        _user_id: &Option<Uuid>
-    ) -> Result<Uuid> {
+        _user_id: &Option<Uuid>,
+        new_school: bool
+    ) -> Result<(Option<Uuid>, Uuid)> {
 
 
         // if let Ok(_) = email_check.first_row() {
         //     return Err(AppError::Internal(format!("Email {} is already registered", email)));
         // }
         
+
+        let email = match sanitize_email(email) {
+            Some(email) => {
+                if email.len() == 0 {
+                    return Err(AppError::BadRequest("User email cannot be empty".to_string()));
+                }
+                email
+            },
+            None => {
+                return Err(AppError::BadRequest("User email is invalid".to_string()));
+            }
+        };
+
+        let first_name = sanitize_name(&first_name, 50);
+        let surname = sanitize_name(&surname, 50);
+
+
+
         // Hash the password
         let password_hash = if let Some(p) = password {
             hash_password(p)? // Handle the potential error from hashing
@@ -368,18 +686,20 @@ impl ScyllaConnector {
             None => Uuid::new_v4(), // Default to a new UUID if school_id is None
         };
 
+        let logged_user_id = self.get_logged_user_by_email(&email).await?;
+        let mut logged_user_id = match logged_user_id {
+            Some((logged_user_id, _)) => Some(logged_user_id),
+            None => None
+        };
 
         // Insert main user record
         match _user_id
             { Some(_user_id) => {
                 self.session
                 .query_unpaged(
-                    "update mma.user (password_hash, email_verified, school_id) \
-                     VALUES (?, ?, ?) where user_id = ?",
+                    "update mma.user set email_verified = ? where user_id = ?",
                     (
-                        &password_hash,
                         email_verified,
-                        school_id,
                         user_id,
                     ),
                 )
@@ -387,17 +707,17 @@ impl ScyllaConnector {
                 .trace_err("Updating db user")?;
             },
             None => {
-                // Check if email already exists using the email lookup table
+                // Check if email already exists using the email lookup table - should only trigger on creating a new school
                 let result = self.session
                     .query_unpaged(
                         "SELECT user_id FROM mma.user WHERE email = ?",
-                        (email,),
+                        (&email,),
                     )
-                    .await?
+                    .await.trace()?
                     .into_rows_result().trace()?;
 
                 
-                for row in result.rows()?
+                for row in result.rows().trace()?
                 {
                     let (user_id,): (Uuid,) = row.trace()?;
                     println!("User already exists ID: {}", user_id);
@@ -406,54 +726,57 @@ impl ScyllaConnector {
 
 
                 self.session
-                .query_unpaged(
-                    "INSERT INTO mma.user (user_id, email, first_name, surname, \
-                     created_ts, email_verified, school_id) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        user_id,
-                        email,
-                        first_name,
-                        surname,
-                        now,
-                        email_verified,
-                        school_id
-                    ),
-                )
-                .await
-                .trace_err("creating db user")?;
+                    .query_unpaged(
+                        "INSERT INTO mma.user (user_id, email, first_name, surname, \
+                        created_ts, email_verified, school_id) \
+                        VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            user_id,
+                            &email,
+                            first_name,
+                            surname,
+                            now,
+                            email_verified,
+                            school_id
+                        ),
+                    )
+                    .await
+                    .trace_err("creating db user")?;
 
-
-                let logged_user_id = Uuid::new_v4();
-                let mut school_user_ids = Vec::new();
-                school_user_ids.push((school_id, user_id));
-                self.session
-                .query_unpaged(
-                    "INSERT INTO mma.logged_user (logged_user_id, email, password_hash, \
-                     created_ts, email_verified, school_user_ids) \
-                     VALUES (?, ?, ?, ?, ?, ?)",
-                    (
-                        logged_user_id,
-                        email,
-                        &password_hash,
-                        now,
-                        email_verified,
-                        &school_user_ids
-                    ),
-                )
-                .await
-                .trace_err("creating db logged_user")?;
-
-
-                self.create_school(&user_id, &school_id, &None, &None).await.trace()?;
+                if new_school {
+                    self.create_school(&user_id, &school_id, &None, &None).await.trace()?;
+                }
             }
         }
 
         
+        match logged_user_id {
+            Some(logged_user_id) => {
+                self.adjust_logged_user_school_user_id(&school_id, &logged_user_id, &user_id, true).await.trace()?;
+            },
+            None => {
+                logged_user_id = Some(Uuid::new_v4());
+                let mut school_user_ids = Vec::new();
+                school_user_ids.push((school_id, user_id));
+                self.session
+                    .query_unpaged(
+                        "INSERT INTO mma.logged_user (logged_user_id, email, password_hash, \
+                        created_ts, email_verified, school_user_ids) \
+                        VALUES (?, ?, ?, ?, ?, ?)",
+                        (
+                            logged_user_id,
+                            email,
+                            &password_hash,
+                            now,
+                            email_verified,
+                            &school_user_ids
+                        ),
+                    )
+                    .await
+                    .trace_err("creating db logged_user")?;
+            }
+        };
 
-
-        
-        
         // Insert into email lookup table
         // self.session
         //     .query_unpaged(
@@ -462,7 +785,70 @@ impl ScyllaConnector {
         //     )
         //     .await.trace()?;
         
-        Ok(user_id)
+        Ok((logged_user_id, user_id))
+    }
+
+    pub async fn adjust_logged_user_school_user_id(
+        &self,
+        school_id: &Uuid,
+        logged_user_id: &Uuid,
+        user_id: &Uuid,
+        add_access: bool
+    ) -> AppResult<()> {
+        // Check the user id exists
+        let result = self.session
+            .query_unpaged(
+                "SELECT school_id FROM mma.user WHERE user_id = ?",
+                (user_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+        
+        for row in result.rows().trace()?
+        {
+            let (ref_shool_id,) : (Uuid, ) = row.trace()?;
+            if ref_shool_id != *school_id {
+                return Err(AppError::BadRequest("School user id has the wrong school id for adjustment".to_string()));
+            }
+        }
+        if result.rows_num() == 0 {
+            return Err(AppError::BadRequest("School user does not exist".to_string()));
+        }
+
+
+        // Check the logged user id exists
+        let result = self.session
+            .query_unpaged(
+                "SELECT logged_user_id FROM mma.logged_user WHERE logged_user_id = ?",
+                (logged_user_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+        
+        if result.rows_num() == 0 {
+            return Err(AppError::BadRequest("logged_user_id does not exist".to_string()));
+        }
+
+
+        let mut school_user_ids = Vec::new();
+        school_user_ids.push((school_id, user_id));
+        let add_symbol = match add_access {
+            true => "+",
+            false => "-"
+        };
+
+        self.session
+            .query_unpaged(
+                format!("update mma.logged_user SET school_user_ids = school_user_ids {} ? where logged_user_id = ?", add_symbol),
+                (
+                    &school_user_ids,
+                    logged_user_id,
+                ),
+            )
+            .await
+            .trace_err("Updating logged_user")?;
+
+        Ok(())
     }
 
     // Get User Profile Data by ID ---
@@ -477,12 +863,12 @@ impl ScyllaConnector {
                 FROM mma.user WHERE user_id = ?",
                 (user_id,),
             )
-            .await?
+            .await.trace()?
             .into_rows_result().trace()?;
         
-        for row in result.rows::<UserRow>()?
+        for row in result.rows::<UserRow>().trace()?
         {
-            let row = row.trace()?;
+            let row: UserRow = row.trace()?;
             let stripe_payment_method_id = if self.dev_mode {
                 row.dev_stripe_payment_method_ids
             } else {
@@ -491,6 +877,11 @@ impl ScyllaConnector {
             let stripe_payment_method_ids = match stripe_payment_method_id {
                 Some(ids) => ids,
                 None => Vec::new(), // Default to empty vector if None
+            };
+
+            let mut email_verified = match row.email_verified {
+                Some(email_verified) => email_verified,
+                None => false
             };
 
             // Check if the row is empty
@@ -504,7 +895,7 @@ impl ScyllaConnector {
                 phone: row.phone,
                 dob: row.dob,
                 stripe_payment_method_ids: stripe_payment_method_ids,
-                email_verified: row.email_verified, 
+                email_verified: email_verified, 
                 photo_id: row.photo_id,
                 address: row.address,
                 suburb: row.suburb,
@@ -526,32 +917,118 @@ impl ScyllaConnector {
     }
 
     // Update User Profile ---
-    pub async fn update_user_profile(&self, user_id: Uuid, update_data: &UpdateUserProfileRequest) -> Result<()> {
+    pub async fn update_user_profile(
+        &self, 
+        user_id: &Uuid, 
+        school_id: &Uuid, 
+        update_data: &UpdateUserProfileRequest
+    ) -> Result<()> {
+
+        let mut ref_user_id = *user_id;
+        if update_data.first_name.len() == 0 {
+            return Err(AppError::BadRequest("User first name cannot be empty".to_string()));
+        }
+        if update_data.surname.len() == 0 {
+            return Err(AppError::BadRequest("User surname cannot be empty".to_string()));
+        }
+        let email = match update_data.email {
+            Some(ref email) => {
+                let email = sanitize_email(&email);
+                match email {
+                    Some(email) => {
+                        if email.len() == 0 {
+                            return Err(AppError::BadRequest("User email cannot be empty".to_string()));
+                        }
+                        Some(email)
+                    },
+                    None => {
+                        return Err(AppError::BadRequest("User email is invalid".to_string()));
+                    }
+                }
+            },
+            None => {
+                None
+            }
+        };
+        
+        if *user_id == Uuid::nil() {
+            ref_user_id = Uuid::new_v4();
+        } else {
+            // Check the user exists before allowing an edit / Because update on scylla will add a user if it doesnt exist
+            let result = self.session
+                .query_unpaged(
+                    "SELECT school_id FROM mma.user WHERE user_id = ?",
+                    (ref_user_id,),
+                )
+                .await.trace()?            
+                .into_rows_result().trace()?;
+            
+            if result.rows_num() != 1 {
+                return Err(AppError::BadRequest("User does not exist".to_string()));
+            }
+
+            for row in result.rows()?
+            {
+                let (ref_school_id,): (Uuid,) = row.trace()?;
+                if ref_school_id != *school_id {
+                    return Err(AppError::BadRequest("User does not have the school id of the change".to_string()));
+                }
+            }
+
+        }
+
+        let first_name = sanitize_name(&update_data.first_name, 50);
+        let surname = sanitize_name(&update_data.surname, 50);
+        let address = sanitize_address(&update_data.address.as_deref().unwrap_or_default(), 150);
+        let suburb = sanitize_address(&update_data.suburb.as_deref().unwrap_or_default(), 50);
+        let phone = sanitize_phone(&update_data.phone.as_deref().unwrap_or_default(), 20);
+        let emergency_name = sanitize_name(&update_data.emergency_name.as_deref().unwrap_or_default(), 50);
+        let emergency_phone = sanitize_phone(&update_data.emergency_phone.as_deref().unwrap_or_default(), 20);
+        let emergency_medical = sanitize_address(&update_data.emergency_medical.as_deref().unwrap_or_default(), 150);
+        let belt_size = sanitize_address(&update_data.belt_size.as_deref().unwrap_or_default(), 30);
+        let uniform_size = sanitize_address(&update_data.uniform_size.as_deref().unwrap_or_default(), 30);
+        let emergency_relationship = sanitize_address(&update_data.emergency_relationship.as_deref().unwrap_or_default(), 50);
+        let gender = sanitize_gender(update_data.gender.as_deref().unwrap_or_default());
+
+        let dob = match get_age(&update_data.dob){
+            Some(age_years) => {
+                update_data.dob.clone()
+            },
+            None => {
+                None
+            }
+        };
+
+
         self.session
             .query_unpaged(
                 "UPDATE mma.user \
                 SET first_name = ?, surname = ?, gender = ?, phone = ?, dob = ?, \
                 address = ?, suburb = ?, emergency_name = ?, emergency_relationship = ?, \
-                emergency_phone = ?, emergency_medical = ?, belt_size = ?, uniform_size = ? \
-                WHERE user_id = ?",
+                emergency_phone = ?, emergency_medical = ?, belt_size = ?, uniform_size = ?, \
+                school_id = ?, email = ? WHERE user_id = ?",
                 (
-                    &update_data.first_name,
-                    &update_data.surname,
-                    update_data.gender.as_deref().unwrap_or_default(), // Send "" for None
-                    update_data.phone.as_deref().unwrap_or_default(),
-                    update_data.dob.as_deref().unwrap_or_default(),
-                    update_data.address.as_deref().unwrap_or_default(),
-                    update_data.suburb.as_deref().unwrap_or_default(),
-                    update_data.emergency_name.as_deref().unwrap_or_default(),
-                    update_data.emergency_relationship.as_deref().unwrap_or_default(),
-                    update_data.emergency_phone.as_deref().unwrap_or_default(),
-                    update_data.emergency_medical.as_deref().unwrap_or_default(),
-                    update_data.belt_size.as_deref().unwrap_or_default(),
-                    update_data.uniform_size.as_deref().unwrap_or_default(),
-                    user_id,
+                    &first_name,
+                    &surname,
+                    gender, // Send "" for None
+                    phone,
+                    dob,
+                    address,
+                    suburb,
+                    emergency_name,
+                    emergency_relationship,
+                    emergency_phone,
+                    emergency_medical,
+                    belt_size,
+                    uniform_size,
+                    school_id,
+                    &email,
+                    ref_user_id,
                 ),
             )
             .await.trace()?;
+
+        
         Ok(())
     }
 
@@ -562,7 +1039,7 @@ impl ScyllaConnector {
                 "SELECT password_hash FROM mma.logged_user WHERE logged_user_id = ?",
                 (logged_user_id,),
             )
-            .await?            
+            .await.trace()?            
             .into_rows_result().trace()?;
 
         for row in result.rows()?
@@ -595,7 +1072,7 @@ impl ScyllaConnector {
                 "SELECT waiver_id FROM mma.latest_waiver where school_id = ?",
                 (school_id, )
             )
-            .await?            
+            .await.trace()?            
             .into_rows_result().trace()?;
 
         for row in result.rows()?
@@ -621,7 +1098,7 @@ impl ScyllaConnector {
                 "SELECT title, waiver FROM mma.waiver WHERE waiver_id = ? and school_id = ?",
                 (waiver_id, school_id),
             )
-            .await?
+            .await.trace()?
             .into_rows_result().trace()?;          
             
         if result.rows_num() == 0 {
@@ -696,11 +1173,13 @@ impl ScyllaConnector {
         let now = scylla::value::CqlTimestamp(now);
         // let price: Option<CqlDecimal> = price
         //     .map(|p| CqlDecimal::from(p));
+        let timezone_str = self.get_timezone(school_id, None).await.trace()?;
+
         let zero_ts = scylla::value::CqlTimestamp(0);
         self.session
             .query_unpaged(
                 "INSERT INTO mma.class (school_id, creator_user_id, class_id, title, description, created_ts, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, styles, grades, deleted_ts, timezone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (school_id, creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids, zero_ts, "Australia/Sydney"), 
+                (school_id, creator_user_id, class_id, title, description, now, venue_id, publish_mode, capacity, notify_booking, price, waiver_id, style_ids, grading_ids, zero_ts, timezone_str), 
             )
             .await.trace()?;
 
@@ -1060,6 +1539,33 @@ impl ScyllaConnector {
     }
 
 
+
+    // pub async fn get_class_attendance_count(
+    //     &self,
+    //     class_id: &Uuid,
+    //     class_start_ts: i64
+    // } -> AppResult<i32> { 
+
+    //     let cql_class_start_ts = scylla::value::CqlTimestamp(class_start_ts);
+    //     let result = self.session
+    //         .query_unpaged(
+    //             "SELECT count(user_id) FROM mma.attendance WHERE class_id = ? and class_start_ts = ?",
+    //             (class_id, query_class_start_ts_cql),
+    //         )
+    //         .await.trace()?
+    //         .into_rows_result().trace()?;
+
+
+    //     let mut student_attend_count: i64 = 0;
+    //     for row in result.rows()? {
+    //         let (count,): (i64,) = row.trace()?;
+    //         student_attend_count = count;
+    //     }
+    //     return 
+    // }
+
+
+
     pub async fn get_user_class_attendance_count(
         &self,
         user_id: &Uuid,
@@ -1074,7 +1580,7 @@ impl ScyllaConnector {
             .into_rows_result()
             .trace_err("Getting db attending_count")?;
 
-        for row in result.rows::<(i32,)>()? {
+        for row in result.rows::<(i32,)>().trace()? {
             let (count,) = row.trace()?;
             return Ok(count);
         }
@@ -1113,6 +1619,340 @@ impl ScyllaConnector {
 
 
 
+    pub async fn pay_with_user_method (
+        &self,
+        user_id: &Uuid,
+        school_id: &Uuid,
+        class_id: Option<&Uuid>,
+        stripe_payment_method_ids: Option<Vec<String>>, 
+        stripe_customer_id: Option<String>,
+        description: String,
+        price: &BigDecimal,
+        now: i64,
+        class_start_ts: Option<i64>,
+        stripe_client: &StripeClient,
+        expiration_ts: Option<i64>,
+        group_members: &Vec<&Uuid>,
+        base_payment_plan_id: Option<&Uuid>,
+        payment_plan_id: Option<&Uuid>,
+    ) -> AppResult<bool> {
+        let is_pass = class_id.is_none();
+        if is_pass {
+            if expiration_ts.is_none() {
+                tracing::error!("Attempting to use a expiration_ts that has no value");
+                return Ok(false);
+            }
+        }
+        // Try individuals payment methods first
+        match stripe_customer_id {
+            Some(stripe_customer_id) => {
+                match stripe_payment_method_ids {
+                    Some(stripe_payment_method_ids) => {
+                        for payment_method_id in stripe_payment_method_ids {
+                            let transaction_id = Uuid::new_v4();
+                            // let description = format!("Casual attendance of class:{}", class_id);
+                            let currency = "aud";
+                            // let amount = price*BigDecimal::from(100);
+                            let cents_i64 = (price * BigDecimal::from(100))
+                                .round(0)
+                                .to_i64()
+                                .unwrap();
+
+                            let mut stripe_payment_id = None;
+                            if *price > BigDecimal::from(0) { 
+                                // return Ok(true);
+
+                                let result = stripe_client.charge_payment_method(cents_i64, currency, &payment_method_id, &stripe_customer_id, &transaction_id, school_id, user_id, Some(&description)).await.trace()?;
+                                // result.id
+                                stripe_payment_id = Some(result.id);
+                            }
+
+                            // let duration = PaymentPlanDuration::SingleClass as i32;
+                            let payment_status = 1; // captured
+
+                            let zero_guuid = Uuid::nil();
+                            let now = scylla::value::CqlTimestamp(now);
+
+                            let class_start_ts = match class_start_ts {
+                                Some(class_start_ts) => Some(scylla::value::CqlTimestamp(class_start_ts)),
+                                None => None
+                            };
+
+                            let base_payment_plan_id = match base_payment_plan_id {
+                                Some(base_payment_plan_id) => {base_payment_plan_id},
+                                None => &zero_guuid
+                            };
+                            
+                            
+                            let user_payment_plan_id = match class_id {
+                                Some(_) => None,
+                                None => {Some(Uuid::new_v4())}
+                            };
+
+                            let payment_plan_id = match payment_plan_id {
+                                Some(payment_plan_id) => {payment_plan_id},
+                                None => &zero_guuid
+                            };
+
+                            let class_id = match class_id {
+                                Some(class_id) => class_id,
+                                None => &zero_guuid
+                            };
+
+                            let class_start_ts = match class_start_ts {
+                                Some(class_start_ts) => class_start_ts,
+                                None => {scylla::value::CqlTimestamp(0)}
+                            };
+
+                            let _result = self.session
+                                .query_unpaged("insert into mma.user_payment (user_id, base_payment_plan_id, payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                                (user_id, base_payment_plan_id, payment_plan_id, class_id, class_start_ts, now, stripe_payment_id, now, price, payment_status)) // Pass the query string and bound values
+                                .await.trace()?;
+
+
+                            if is_pass {
+                                //CREATE TABLE IF NOT EXISTS {}.user_payment_plan (user_payment_plan_id uuid, user_id uuid, base_payment_plan_id uuid, payment_plan_id uuid, group_user_ids set<uuid>, next_group_user_ids set<uuid>, created_ts timestamp, expiration_ts timestamp, subscribed boolean, PRIMARY KEY(user_id, user_payment_plan_id));
+                                let expiration_ts = match expiration_ts {
+                                    Some(ts) => scylla::value::CqlTimestamp(expiration_ts.unwrap()),
+                                    None => {
+                                        tracing::error!("Attempting to use a expiration_ts that has no value. This code should never run.");
+                                        scylla::value::CqlTimestamp(0)
+                                    }
+                                };
+
+                                let _result = self.session
+                                    .query_unpaged("insert into mma.user_payment_plan (user_payment_plan_id, user_id, base_payment_plan_id, payment_plan_id, group_user_ids, next_group_user_ids, created_ts, expiration_ts, subscribed) values (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                                    (user_payment_plan_id, user_id, base_payment_plan_id, payment_plan_id, group_members, group_members, now, expiration_ts, true)) // Pass the query string and bound values
+                                    .await.trace()?;
+
+                                let mut add_active = Vec::new();
+                                if user_payment_plan_id.is_some()
+                                {
+                                    add_active.push((user_payment_plan_id.unwrap(), expiration_ts));
+                                }
+                                // Lets add the pass to the active plans
+                                for ref_user_id in group_members {
+                                    let result = self.session
+                                        .query_unpaged("UPDATE mma.user SET active_payment_plans = active_payment_plans + ? WHERE user_id = ?", 
+                                        (&add_active, ref_user_id)) 
+                                        .await.trace()?;  
+                                }
+                            }
+                            tracing::warn!("Pay method - success");
+
+                            return Ok(true);
+                            // CREATE TABLE IF NOT EXISTS {}.user_payment (user_payment_id uuid, user_id uuid, class_id uuid, class_start_ts timestamp, base_payment_plan_id uuid, payment_plan_id uuid, status int, stripe_payment_id text, created_ts timestamp, paid decimal, amount decimal, refunded decimal, refunded_ts timestamp, paid_ts timestamp, processing_ts timestamp, processing_node text, captured_ts timestamp, captured decimal, PRIMARY KEY (user_id, base_payment_plan_id, class_id, class_start_ts));
+
+                        }
+                    }, 
+                    None => {}
+                }
+            }, 
+            None => {}
+        }
+        tracing::warn!("Pay method - failed");
+        Ok(false)
+    }
+
+    pub async fn get_timezone(
+        &self,
+        school_id: &Uuid,
+        class_id: Option<Uuid>,
+    ) -> AppResult<String> {
+        let (table_name, field_name, id) = match &class_id {
+            Some(class_id) => ("class", "class_id", class_id),
+            None => ("school", "school_id", school_id)
+        };
+
+        let result = self.session
+            .query_unpaged(
+                format!("SELECT timezone FROM mma.{} WHERE {} = ?", table_name, field_name),
+                (id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;   
+
+        // Check if the class exists and is not deleted
+        if result.rows_num() == 0 {
+            return Err(AppError::Internal("No class exists".to_string()));
+        }
+
+        for row in result.rows().trace()? {
+            let (db_timezone, ): (Option<String>, ) = row.trace()?;
+            let db_timezone = match db_timezone {
+                Some(db_timezone) => db_timezone,
+                None => "Australia/Sydney".to_string()
+            };
+            return Ok(db_timezone);
+        }
+
+        return Err(AppError::Internal("No class exists".to_string()));
+    }
+
+
+    pub async fn get_expiration_ts(
+        &self,
+        school_id: &Uuid,
+        class_id: Option<Uuid>,
+        now: i64,
+        duration_id: i32,
+    ) -> AppResult<i64> {
+
+        // Query the database
+        let timezone_str = self.get_timezone(school_id, class_id).await.trace()?;
+    
+        // Parse timezone string
+        let tz: Tz = timezone_str
+            .parse()
+            .map_err(|_| AppError::Internal(format!("Invalid timezone: {}", timezone_str)))?;
+    
+        // Convert `now` (timestamp) to `DateTime<Utc>` and then to local time
+        let now_dt_utc: DateTime<Utc> = Utc
+            .timestamp_opt(now / 1000, 0)
+            .single()
+            .ok_or_else(|| AppError::Internal("Invalid 'now' timestamp".to_string()))?;
+    
+        let now_local = now_dt_utc.with_timezone(&tz);
+        let current_date_local = now_local.date_naive();
+
+        if duration_id == PaymentPlanDuration::CalenderMonth as i32 {
+            // Get the year and month
+            let (year, month) = (current_date_local.year(), current_date_local.month());
+
+            // Determine the first day of the next month
+            let (next_year, next_month) = if month == 12 {
+                (year + 1, 1)
+            } else {
+                (year, month + 1)
+            };
+
+            // Construct the start of the next month at midnight
+            let start_of_next_month = tz
+                .with_ymd_and_hms(next_year, next_month, 1, 0, 0, 0)
+                .single()
+                .ok_or_else(|| AppError::Internal("Failed to create next month datetime".to_string()))?;
+
+            // Convert to UTC and get the timestamp (in seconds)
+            let expiration_ts = start_of_next_month.with_timezone(&Utc).timestamp() * 1000;
+            tracing::info!("Expiration ts calc {:?} {:?} {:?}",now,expiration_ts, start_of_next_month);
+
+            if expiration_ts < now {
+                return Err(AppError::Internal("Calculation of month end timestamp is before the now timestamp".to_string()))
+            }
+            return Ok(expiration_ts);
+        }
+
+        // Query the database
+        let result = self.session
+            .query_unpaged(
+                "SELECT end_dates FROM mma.time_span WHERE school_id = ? AND duration_id = ?",
+                (school_id, duration_id),
+            )
+            .await
+            .trace()?
+            .into_rows_result()
+            .trace()?;
+    
+        // Look for the first end_date > now
+        for row in result.rows().trace()? {
+            let (end_dates,): (Vec<NaiveDate>,) = row.trace()?;
+            if let Some(next_end_date) = end_dates.into_iter().find(|&d| d > current_date_local) {
+                // Convert NaiveDate to DateTime in local TZ
+                let local_dt = tz
+                    .from_local_datetime(&next_end_date.and_hms_opt(0, 0, 0).unwrap())
+                    .single()
+                    .ok_or_else(|| {
+                        AppError::Internal(format!(
+                            "Ambiguous or invalid local datetime: {} in {}",
+                            next_end_date, timezone_str
+                        ))
+                    })?;
+    
+                // println!("Expiration_ts: {}", local_dt.timestamp());
+
+                // Return Unix timestamp
+                return Ok(local_dt.timestamp() * 1000);
+            }
+        }
+    
+        Err(AppError::Internal(format!(
+            "No valid future time_spans defined for duration_id {}",
+            duration_id
+        )))
+    }
+
+
+    pub async fn pay_pass (
+        &self,
+        user_id: &Uuid,
+        school_id: &Uuid,
+        stripe_client: &StripeClient,
+        price: &BigDecimal,
+        base_payment_plan_id: &Uuid,
+        payment_plan_id: &Uuid,
+        duration_id: i32,
+        grouping_id: i32,
+        group_members: &Vec<&Uuid>,
+    ) -> AppResult<bool> {
+        
+        let stripe_payment_method_str = match self.dev_mode {
+            true => "dev_stripe_payment_method_ids", // Use a dummy ID in dev mode
+            false => "prod_stripe_payment_method_ids",
+        };
+
+        let stripe_customer_str = match self.dev_mode {
+            true => "dev_stripe_customer_id", // Use a dummy ID in dev mode
+            false => "prod_stripe_customer_id",
+        };
+
+        let result = self.session
+            .query_unpaged(format!("SELECT school_id, active_payment_plans, payment_provider, {}, {} FROM mma.user where user_id = ?", stripe_payment_method_str, stripe_customer_str), 
+            (user_id, )) // Pass the query string and bound values
+            .await.trace()?
+            .into_rows_result()
+            .trace_err("getting db user payment data")?;
+        
+        if result.rows_num() == 0 {
+            return Err(AppError::Internal(format!("User with ID {} does not exist", user_id)));
+        }
+
+        for row in result.rows().trace()? {
+            // let mut expired_active_plans = Vec::new();
+
+            let (ref_school_id, active_payment_plans, payment_provider, stripe_payment_method_ids, stripe_customer_id): (Uuid, Option<Vec<(Uuid, CqlTimestamp)>>, Option<Uuid>, Option<Vec<String>>, Option<String>) = row.trace()?;
+            if ref_school_id != *school_id {
+                return Err(AppError::Internal(format!("User Id {} has wrong school ID {} does not exist", user_id, school_id)));
+            }
+            let now = get_time();
+
+            let expiration_ts = self.get_expiration_ts(school_id, None, now, duration_id).await.trace()?;
+
+            let description = "Payment plan".to_string();
+            // let expiration_ts = now + 30 *1000;
+            let result = self.pay_with_user_method (
+                user_id,
+                school_id,
+                None,
+                stripe_payment_method_ids, 
+                stripe_customer_id,
+                description,
+                price,
+                now,
+                None,
+                stripe_client,
+                Some(expiration_ts),
+                group_members,
+                Some(base_payment_plan_id),
+                Some(payment_plan_id),
+            ).await.trace()?;
+            return Ok(result);
+
+        }
+
+        Ok(false)
+    }
+
+
     pub async fn pay_class (
         &self,
         user_id: &Uuid,
@@ -1122,14 +1962,14 @@ impl ScyllaConnector {
         stripe_client: &StripeClient,
         free_lessons: i32,
         price: &Option<BigDecimal>
-    ) -> AppResult<bool>
+    ) -> AppResult<(bool, Option<Uuid>, Option<Uuid>)>
     {
 
         match price {
             Some(price) => {
                 // Class is Free
-                if *price == BigDecimal::from(0) { 
-                    return Ok(true);
+                if *price <= BigDecimal::from(0) { 
+                    return Ok((true, None, None));
                 }
                 
                 let stripe_payment_method_str = match self.dev_mode {
@@ -1150,7 +1990,7 @@ impl ScyllaConnector {
                     .trace_err("getting db user payment data")?;
                 
                 if result.rows_num() == 0 {
-                    return Err(AppError::Internal(format!("User with ID {} does not exist", class_id)));
+                    return Err(AppError::Internal(format!("User with ID {} does not exist", user_id)));
                 }
 
                 for row in result.rows().trace()? {
@@ -1163,16 +2003,18 @@ impl ScyllaConnector {
 
                     let now = get_time();
                     let mut has_pass = false;
+                    let mut user_payment_plan_id = None;
                     // Check if active pass, also clean up expired passes
                     match active_payment_plans {
                         Some(active_payment_plans) => {
                             for active_payment_plan in active_payment_plans {
-                                let (payment_plan_id, expiration_ts) = active_payment_plan;
+                                let (ref_user_payment_plan_id, expiration_ts) = active_payment_plan;
                                 let expiration_ts = expiration_ts.0;
                                 if now > expiration_ts {
                                     expired_active_plans.push(active_payment_plan);
                                 } else {
                                     has_pass = true;
+                                    user_payment_plan_id = Some(ref_user_payment_plan_id);
                                 } 
                             }
                         },
@@ -1182,18 +2024,10 @@ impl ScyllaConnector {
 
 
                     // Clean up expired active plans
-                    for explired_plan in expired_active_plans {
-                        tracing::info!("expiring active_payment_plan");
-
-                        let result = self.session
-                            .query_unpaged("update mma.user set active_payment_plans = active_payment_plans - ? where user_id = ?", 
-                            (explired_plan, user_id)) // Pass the query string and bound values
-                            .await.trace()?
-                            .into_rows_result().trace()?;
-                    }
+                    self.remove_expired_payment_plans(user_id, &expired_active_plans);
 
                     if has_pass {
-                        return Ok(true);
+                        return Ok((true, None, user_payment_plan_id));
                     }
                     
                     
@@ -1203,7 +2037,7 @@ impl ScyllaConnector {
                             match stripe_payment_method_ids {
                                 Some(stripe_payment_method_ids) => {
                                     for payment_method_id in stripe_payment_method_ids {
-                                        let transaction_id = Uuid::new_v4();
+                                        let user_payment_id = Uuid::new_v4();
                                         let description = format!("Casual attendance of class:{}", class_id);
                                         let currency = "aud";
                                         // let amount = price*BigDecimal::from(100);
@@ -1211,7 +2045,7 @@ impl ScyllaConnector {
                                             .round(0)
                                             .to_i64()
                                             .unwrap();
-                                        let result = stripe_client.charge_payment_method(cents_i64, currency, &payment_method_id, &stripe_customer_id, &transaction_id, school_id, user_id, Some(&description)).await.trace()?;
+                                        let result = stripe_client.charge_payment_method(cents_i64, currency, &payment_method_id, &stripe_customer_id, &user_payment_id, school_id, user_id, Some(&description)).await.trace()?;
                                         // result.id
                                         let stripe_payment_id = result.id;
                                         let duration = PaymentPlanDuration::SingleClass as i32;
@@ -1222,10 +2056,10 @@ impl ScyllaConnector {
                                         let class_start_ts = scylla::value::CqlTimestamp(class_start_ts);
                                         
                                         let result = self.session
-                                            .query_unpaged("insert into mma.user_payment (user_id, base_payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-                                            (user_id, zero_guuid, class_id, class_start_ts, now, stripe_payment_id, now, price, payment_status)) // Pass the query string and bound values
+                                            .query_unpaged("insert into mma.user_payment (user_payment_id, user_id, base_payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                                            (user_payment_id, user_id, zero_guuid, class_id, class_start_ts, now, stripe_payment_id, now, price, payment_status)) // Pass the query string and bound values
                                             .await.trace()?;
-                                        return Ok(true);
+                                        return Ok((true, Some(user_payment_id), None));
                                         // CREATE TABLE IF NOT EXISTS {}.user_payment (user_payment_id uuid, user_id uuid, class_id uuid, class_start_ts timestamp, base_payment_plan_id uuid, payment_plan_id uuid, status int, stripe_payment_id text, created_ts timestamp, paid decimal, amount decimal, refunded decimal, refunded_ts timestamp, paid_ts timestamp, processing_ts timestamp, processing_node text, captured_ts timestamp, captured decimal, PRIMARY KEY (user_id, base_payment_plan_id, class_id, class_start_ts));
 
                                     }
@@ -1239,7 +2073,7 @@ impl ScyllaConnector {
                 }
                 
             },
-            None => {return Ok(true); }
+            None => {return Ok((true, None, None)); }
         }
 
         // Check if user has paid for the class
@@ -1251,9 +2085,182 @@ impl ScyllaConnector {
             }
         }
 
-        Ok(false)
+        Ok((false, None, None))
     }
 
+
+    pub async fn lock_class_attendance (
+        &self,
+        class_id: &Uuid,
+        class_start_ts: i64,
+    ) -> AppResult<()> {
+        let cql_class_start_ts: CqlTimestamp = scylla::value::CqlTimestamp(class_start_ts);
+
+        let result = self.session
+            .query_unpaged(
+                "INSERT INTO mma.class_attendance_locks (class_id, class_start_ts) VALUES (?, ?) IF NOT EXISTS",
+                (class_id,cql_class_start_ts)
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+    
+        let mut locked = false;
+        for row in result.rows().trace()? {
+            let (ref_locked, _, _) : (bool, Option<Uuid>, Option<CqlTimestamp>) = row.trace()?;
+            locked = ref_locked;
+        }
+
+
+        if !locked {
+            return Err(AppError::Internal("Class is locked, try again shortly".to_string()));
+        }
+
+        tracing::info!("Locked class_attendance_locks");
+        return Ok(());
+    }
+
+    pub async fn unlock_class_attendance (
+        &self,
+        class_id: &Uuid,
+        class_start_ts: i64,
+    ) -> AppResult<()> {
+        let cql_class_start_ts: CqlTimestamp = scylla::value::CqlTimestamp(class_start_ts);
+
+        let unlocked = self.session
+            .query_unpaged(
+                "delete from mma.class_attendance_locks  where class_id = ? and class_start_ts = ?",
+                (class_id,cql_class_start_ts)
+            )
+            .await.trace()?;
+        tracing::info!("UnLocked class_attendance_locks");
+
+        return Ok(());
+    }
+
+    pub async fn set_class_attendance_locked_section (
+        &self,
+        class_id: &Uuid,
+        school_id: &Uuid,
+        user_id: &Uuid,
+        waiver_id: &Option<Uuid>,
+        price: &Option<BigDecimal>,
+        free_lessons: &Option<i32>,
+        present: bool,
+        class_start_ts: i64,
+        stripe_client: &StripeClient
+    ) -> AppResult<bool> {
+        let mut user_payment_id = None;
+        let mut user_payment_plan_id = None;
+        let cql_class_start_ts = scylla::value::CqlTimestamp(class_start_ts); 
+
+
+        let result = self.session
+            .query_unpaged("SELECT user_id FROM mma.attendance where class_id = ? and class_start_ts = ? and user_id = ?",
+            (class_id, cql_class_start_ts, user_id)) // Pass the query string and bound values
+            .await.trace()?
+            .into_rows_result().trace()?;
+    
+        // Requesting to add a student who has already been added
+        if result.rows_num() == 1 && present {
+            return Ok(true);
+        }
+
+        // Requesting removal of student that was already removed
+        if result.rows_num() == 0 && !present {
+            return Ok(true);
+        }
+
+
+        match waiver_id {
+            Some(id) => {
+                if present {
+                    // Check if user has accepted the waiver
+                    let accepted = self.has_user_accepted_waiver(user_id, &id).await.trace()?;
+                    if !accepted {
+                        return Err(AppError::UserWaiverNotAccepted(format!("")));
+                    }
+                }
+            },
+            None => {}
+        }
+
+        if price.is_some() {
+            let free_lessons = free_lessons.unwrap_or(0);
+            // If the class has a price
+            if present {
+                let (paid, ref_user_payment_id, ref_user_payment_plan_id) = self.pay_class(user_id, school_id, class_id, class_start_ts, stripe_client, free_lessons, &price).await.trace()?;
+                user_payment_id = ref_user_payment_id;
+                user_payment_plan_id = ref_user_payment_plan_id;
+                if !paid { 
+                    return Ok(false);
+                }
+
+            }
+        }
+
+        // Get current timestamp
+        let now = get_time();
+        let now = scylla::value::CqlTimestamp(now);
+
+        // Prepare the statement once
+        let prepared = match present {
+            true => {
+                self
+                    .session
+                    .prepare(
+                        "INSERT INTO mma.attendance (class_id, user_id, class_start_ts, is_instructor, checkin_ts, user_payment_id, user_payment_plan_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                    )
+                    .await.trace()?
+            },
+            false => {
+                self
+                    .session
+                    .prepare(
+                        "DELETE FROM mma.attendance WHERE class_id = ? AND class_start_ts = ? and user_id = ?"
+                    )
+                    .await.trace()?
+            }
+        };
+
+        
+
+        let prepared_count = self
+            .session
+            .prepare(
+                "INSERT INTO mma.attendance_count (class_id, user_id, count) VALUES (?, ?, ?)"
+            )
+            .await.trace()?;
+
+
+        // Create batch
+        let mut batch = scylla::statement::batch::Batch::default();
+        // Add each user_id as a separate statement in the batch if present
+        batch.append_statement(prepared.clone());
+        batch.append_statement(prepared_count.clone());
+        let attendance_count = self.get_user_class_attendance_count(user_id, class_id).await.trace()?;
+
+        let batch_value = match present {
+            true => {
+                let values = ((class_id, user_id, cql_class_start_ts, false, now, user_payment_id, user_payment_plan_id),
+                 (class_id, user_id,attendance_count+1));
+                 tracing::info!("Adding to class attendance {}", attendance_count);
+                self.session.batch(&batch, &values).await.trace()?;
+
+            },
+            false => {
+                let values = ((class_id, cql_class_start_ts, user_id),
+                (class_id, user_id,attendance_count-1));
+                tracing::info!("Removing to class attendance {}", attendance_count);
+
+                self.session.batch(&batch, &values).await.trace()?;
+            }
+        };
+        
+        // Execute batch
+
+
+        return Ok(true);
+    }
 
     pub async fn set_class_attendance (
         &self,
@@ -1265,13 +2272,39 @@ impl ScyllaConnector {
         stripe_client: &StripeClient
     ) -> AppResult<bool> {
 
+        if user_ids.len() != 1 {
+            return Err(AppError::Internal("Only supports adding 1 student at a time".to_string()));
+        }
+        let modify_user_id = user_ids.get(0).unwrap();
+        let is_present = *present.get(0).unwrap();
+        let cql_class_start_ts: CqlTimestamp = scylla::value::CqlTimestamp(class_start_ts);
+
+
+        // mma.attendance (class_id, user_id, class_start_ts, is_instructor, checkin_ts, user_payment_id, user_payment_plan_id) VALUES (?, ?, ?, ?, ?, ?, ?)
+
+        let result = self.session
+            .query_unpaged("SELECT user_id FROM mma.attendance where class_id = ? and class_start_ts = ? and user_id = ?",
+            (class_id, cql_class_start_ts, modify_user_id)) // Pass the query string and bound values
+            .await.trace()?
+            .into_rows_result().trace()?;
+    
+        // Requesting to add a student who has already been added
+        if result.rows_num() == 1 && is_present {
+            return Ok(true);
+        }
+
+        // Requesting removal of student that was already removed
+        if result.rows_num() == 0 && !is_present {
+            return Ok(true);
+        }
+
+
         let adding_student_count = present.iter().filter(|&&p| p).count();
         let remove_student_count = present.iter().filter(|&&p| !p).count();
         let total_student_attend_dif = adding_student_count as i32 - remove_student_count as i32;
 
-        // SetClassStudentsAttendanceRequest
+
         let class_valid_ts = self.is_valid_class_start(&class_id, &school_id, class_start_ts, Some(total_student_attend_dif)).await.trace()?;
-            // .map_err(|app_err| AppError::Internal(app_err.to_string()) ).trace()?; // Convert potential AppError from validate
         
         if !class_valid_ts {
             return Err(AppError::Internal("Invalid class start timestamp".to_string()));
@@ -1289,126 +2322,16 @@ impl ScyllaConnector {
 
         for row in result.rows()? {
             let (waiver_id, price, free_lessons): (Option<Uuid>, Option<BigDecimal>, Option<i32>) = row.trace()?;
-            match waiver_id {
-                Some(id) => {
-                    for (user, present) in user_ids.iter().zip(present.iter()) {
-                        if *present {
-                            // Check if user has accepted the waiver
-                            let accepted = self.has_user_accepted_waiver(user, &id).await.trace()?;
-                            if !accepted {
-                                return Err(AppError::UserWaiverNotAccepted(format!("")));
-                            }
-                        }
-                    }
-                },
-                None => {}
-            }
+        
+            self.lock_class_attendance(class_id, class_start_ts).await.trace()?;
+            
+            let result = self.set_class_attendance_locked_section(class_id, school_id, modify_user_id, &waiver_id, &price, &free_lessons, is_present, class_start_ts, stripe_client).await.trace();
+        
+            self.unlock_class_attendance(class_id, class_start_ts).await.trace()?;
+            result?;
 
-            if price.is_some() {
-                let free_lessons = free_lessons.unwrap_or(0);
-                // If the class has a price
-                for (user, present) in user_ids.iter().zip(present.iter()) {
-                    if *present {
-                        let paid = self.pay_class(user, school_id, class_id, class_start_ts, stripe_client, free_lessons, &price).await.trace()?;
-                        
-                        if !paid { 
-                            return Ok(false);
-                        }
-
-                    }
-                }
-            }
-
+            break;
         }
-
-
-        let class_start_ts: CqlTimestamp = scylla::value::CqlTimestamp(class_start_ts);
-
-        // Get current timestamp
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
-        let now = scylla::value::CqlTimestamp(now);
-
-        // Prepare the statement once
-        let prepared = self
-            .session
-            .prepare(
-                "INSERT INTO mma.attendance (class_id, user_id, class_start_ts, is_instructor, checkin_ts) VALUES (?, ?, ?, ?, ?)"
-            )
-            .await.trace()?;
-
-        let prepared_count = self
-            .session
-            .prepare(
-                "INSERT INTO mma.attendance_count (class_id, user_id, count) VALUES (?, ?, ?)"
-            )
-            .await.trace()?;
-
-
-        // Create batch
-        let mut batch = scylla::statement::batch::Batch::default();
-        // Add each user_id as a separate statement in the batch if present
-        for (user_id, is_present) in user_ids.iter().zip(present.iter()) {
-            if *is_present {
-                batch.append_statement(prepared.clone());
-            }
-        }
-
-        let batch_values: Vec<_> = user_ids
-            .iter()
-            .zip(present.iter())
-            .filter_map(|(user_id, is_present)| {
-                if *is_present {
-                    Some((class_id, user_id, class_start_ts, false, now))
-                } else {
-                    None // Skip users not present
-                }
-            })
-            .collect();
-
-        // Execute batch
-        self.session.batch(&batch, batch_values).await.trace()?;
-
-
-        // Now remove attendance for users not present
-        let not_present_user_ids: Vec<Uuid> = user_ids.iter()
-            .zip(present.iter())
-            .filter_map(|(user_id, is_present)| {
-                if !is_present {
-                    Some(user_id)
-                } else {
-                    None // Skip users who are present
-                }
-            })
-            .cloned()
-            .collect();
-
-        if !not_present_user_ids.is_empty() {
-            self.session
-                .query_unpaged(
-                    "DELETE FROM mma.attendance WHERE class_id = ? AND class_start_ts = ? and user_id IN ?",
-                    (class_id, class_start_ts, not_present_user_ids),
-                )
-                .await.trace()?;
-        }
-
-        let mut batch = scylla::statement::batch::Batch::default();
-        let mut batch_values: Vec<_> = Vec::new();
-        // let classes_attended = self.get_user_class_attendance_count(user, class_id).await.trace()?;
-        for (user_id, is_present) in user_ids.iter().zip(present.iter()) {
-            if *is_present {
-                batch.append_statement(prepared_count.clone());
-                let attendance_count = self.get_user_class_attendance_count(user_id, class_id).await.trace()?;
-                batch_values.push((class_id, user_id, attendance_count)); // Increment count by 1 for each present user
-            }
-        }
-
-        // Execute batch for attendance count
-        self.session.batch(&batch, batch_values).await.trace()?;
-
-
 
         // println!("Attendance set for class {}: {:?}", class_id, user_ids);
         Ok(true)
@@ -1429,10 +2352,7 @@ impl ScyllaConnector {
             .ok_or_else(|| AppError::Internal("Invalid timestamp".to_string())).trace()?;
 
         // Get current timestamp
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
+        let now = get_time();
         let now_cql = scylla::value::CqlTimestamp(now);
         
 
@@ -1477,7 +2397,7 @@ impl ScyllaConnector {
                                         "SELECT count(user_id) FROM mma.attendance WHERE class_id = ? and class_start_ts = ?",
                                         (class_id, query_class_start_ts_cql),
                                     )
-                                    .await?
+                                    .await.trace()?
                                     .into_rows_result().trace()?;
 
 
@@ -1671,7 +2591,61 @@ impl ScyllaConnector {
     }
 
 
+    pub async fn get_school_title(
+        &self,
+        school_id: &Uuid,
+    ) -> AppResult<String> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT title FROM mma.school WHERE school_id = ?",
+                (school_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
 
+        for row in result.rows().trace()? {
+            let (title, ): (Option<String>, ) = row.trace()?;
+            match title {
+                Some(title) => return Ok(title),
+                None => return Ok("".to_string())
+            };
+        }
+           
+        return Err(AppError::BadRequest("Could not find school".to_string()));
+    }
+
+    pub async fn get_school_users(
+        &self,
+        school_id: &Uuid,
+    ) -> AppResult<Vec<SchoolUser>> {
+        let mut users: Vec<SchoolUser> = Vec::new();
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT user_id, first_name, surname, email, email_verified, photo_id FROM mma.user WHERE school_id = ?",
+                (school_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        for row in result.rows().trace()? {
+            let (user_id, first_name, surname, email, email_verified, img): (Uuid, String, String, Option<String>, Option<bool>, Option<String>) = row.trace()?;
+            let email_verified = match email_verified {
+                Some(email_verified) => email_verified,
+                None => false
+            };
+
+            users.push(SchoolUser{
+                user_id,
+                first_name,
+                surname,
+                email,
+                email_verified,
+                img
+            });
+        }
+        return Ok(users); 
+    }
 
     pub async fn get_class_attendance(
         &self,
@@ -1686,7 +2660,7 @@ impl ScyllaConnector {
                 "SELECT user_id FROM mma.attendance WHERE class_id = ? and class_start_ts = ?",
                 (class_id, class_start_ts),
             )
-            .await?
+            .await.trace()?
             .into_rows_result().trace()?;
 
         // println!("Attendance query result: {:?}", result);
@@ -1703,7 +2677,7 @@ impl ScyllaConnector {
                 "SELECT user_id, first_name, surname, image, school_id FROM mma.user WHERE school_id = ? ",
                 (&school_id, ),
             )
-            .await?
+            .await.trace()?
             .into_rows_result().trace()?;
 
         // println!("Attendance query result: {:?}", result);
@@ -1733,11 +2707,322 @@ impl ScyllaConnector {
         return Ok(Some(attendance));
     }
 
+    pub async fn remove_expired_payment_plans(
+        &self,
+        user_id: &Uuid,
+        expired_active_plans: &Vec<(Uuid, CqlTimestamp)>,
+    ) -> AppResult<()> {
+
+        if expired_active_plans.len() == 0 {
+            return Ok(());
+        }
+
+        tracing::info!("expiring active_payment_plan");
+        let result: QueryResult = self.session
+            .query_unpaged("update mma.user set active_payment_plans = active_payment_plans - ? where user_id = ?", 
+            (expired_active_plans, user_id)) // Pass the query string and bound values
+            .await.trace()?;
+
+        Ok(())
+    }
+
+
+    pub async fn get_user_active_payment_plans(
+        &self,
+        user_id: &Uuid,
+        school_id: &Uuid,
+    ) -> AppResult<Vec<ActivePaymentPlanData>> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT user_payment_plan_id, base_payment_plan_id, payment_plan_id, group_user_ids, next_group_user_ids, expiration_ts, subscribed from mma.user_payment_plan where user_id = ?;",
+                (user_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+
+        let mut user_payment_plans = Vec::new();
+        let mut payment_plan_ids = Vec::new();
+        let mut base_payment_plan_ids = Vec::new();
+        let mut user_ids = Vec::new();
+        let now = get_time();
+        let mut expired_payment_plan_ids = Vec::new();
+        for row in result.rows().trace()? {
+            let (user_payment_plan_id, base_payment_plan_id, payment_plan_id, group_user_ids, next_group_user_ids, expiration_ts, subscribed) : (Uuid, Uuid, Uuid, Vec<Uuid>, Vec<Uuid>, CqlTimestamp, bool) = row.trace()?;
+            if expiration_ts.0 > now {
+                for user in group_user_ids.clone() {
+                    if !user_ids.contains(&user) {
+                        user_ids.push(user);
+                    }
+                }
+
+                user_payment_plans.push(UserPaymentPlan{
+                    user_payment_plan_id,
+                    base_payment_plan_id,
+                    payment_plan_id,
+                    group_user_ids: group_user_ids,
+                    next_group_user_ids,
+                    expiration_ts: expiration_ts.0,
+                    subscribed
+                });
+
+
+                payment_plan_ids.push(payment_plan_id);
+                base_payment_plan_ids.push(base_payment_plan_id);
+            } else {
+                expired_payment_plan_ids.push((user_payment_plan_id, expiration_ts));
+            }
+        }
+
+        self.remove_expired_payment_plans(user_id, &expired_payment_plan_ids);
+
+        let mut user_data = HashMap::new();
+        let result = self.session
+            .query_unpaged(
+                "SELECT school_id, user_id, first_name, surname FROM mma.user where user_id in ?;",
+                (user_ids,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+        
+        for row in result.rows().trace()? {
+            let (ref_school_id, ref_user_id, first_name, surname) : (Uuid, Uuid, String, String) = row.trace()?;
+            if *school_id != ref_school_id {
+                tracing::error!("Error payment plan included user from a different school. This should not be possible. Violation. user_id:{} ref_user_id:{} ref_school_id:{} school_id:{}", user_id, ref_user_id, ref_school_id, school_id);
+                continue;
+            }
+            user_data.insert(ref_user_id, (first_name, surname));
+        }
+            
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, working, title, description, cost, duration_id FROM mma.payment_plan where school_id = ? and base_payment_plan_id in ? and payment_plan_id in ?;",
+                (school_id, base_payment_plan_ids, payment_plan_ids),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        let mut plans: Vec<ActivePaymentPlanData> = Vec::new();
+        let mut plan_mapping = HashMap::new();
+        for row in result.rows::<PaymentPlanData>().trace()? {
+            let plan = row.trace()?;
+            plan_mapping.insert(plan.payment_plan_id, plan);
+        }
+
+
+
+
+        for user_payment_plan in user_payment_plans {
+            let payment_plan = plan_mapping.get(&user_payment_plan.payment_plan_id);
+            match payment_plan {
+                None => {
+                    tracing::error!("db user_payment_plan:{} has no data for specific payment_plan_id:{}", user_payment_plan.user_payment_plan_id, user_payment_plan.payment_plan_id);
+                },
+                Some(payment_plan) => {
+                    let mut members = Vec::new();
+                    let mut next_members = Vec::new();
+                    for member in user_payment_plan.group_user_ids {
+                        let user = user_data.get(&member);
+                        match user {
+                            Some((first_name, surname)) => {
+                                members.push(UserWithName{
+                                    user_id: member,
+                                    first_name: first_name.clone(),
+                                    surname: surname.clone()
+                                });
+                            },
+                            None => {
+                                tracing::error!("No user found for group user_id:{} of user_payment_plan_id:{}", member, user_payment_plan.user_payment_plan_id);
+                            }
+                        }
+                    }
+
+                    for member in user_payment_plan.next_group_user_ids {
+                        let user = user_data.get(&member);
+                        match user {
+                            Some((first_name, surname)) => {
+                                members.push(UserWithName{
+                                    user_id: member,
+                                    first_name: first_name.clone(),
+                                    surname: surname.clone()
+                                });
+                            },
+                            None => {
+                                tracing::error!("No user found for next_group_user_ids user_id:{} of user_payment_plan_id:{}", member, user_payment_plan.user_payment_plan_id);
+                            }
+                        }
+                    }
+
+
+                    let new_plan = ActivePaymentPlanData {
+                        user_payment_plan_id: user_payment_plan.user_payment_plan_id,
+                        payment_plan_id: user_payment_plan.payment_plan_id,
+                        base_payment_plan_id: user_payment_plan.base_payment_plan_id,
+                        grouping_id: payment_plan.grouping_id,
+                        min_age: payment_plan.min_age,
+                        max_age: payment_plan.max_age,
+                        working: payment_plan.working,
+                        title: payment_plan.title.clone(),
+                        description: payment_plan.description.clone(),
+                        cost: payment_plan.cost.clone(),
+                        duration_id: payment_plan.duration_id,
+                        expiration_ts: user_payment_plan.expiration_ts,
+                        subscribed: user_payment_plan.subscribed,
+                        members: members,
+                        next_members: next_members
+                    };
+                    plans.push(new_plan);
+                }
+            }
+        }
+
+        return Ok(plans);
+    }
+
+
+    pub async fn update_payment_plan(
+        &self,
+        school_id: &Uuid,
+        plan: &SchoolUpdatePaymentPlanRequest
+    ) -> AppResult<()> {
+
+        let plan_id = Uuid::new_v4();
+
+        let base_plan_id = match plan.base_payment_plan_id {
+            Some(id) => {
+                id
+            },
+            None => {
+                Uuid::new_v4()
+            } 
+        };
+
+        if plan.duration_id < 0 || plan.duration_id >= PaymentPlanDuration::END as i32 {
+            tracing::warn!("Invalid duration id in update_payment_plan");
+            return Err(AppError::Internal("Invalid payment duration".to_string()));
+        }
+        if plan.grouping_id < 0 || plan.grouping_id >= PaymentGroupType::END as i32 {
+            tracing::warn!("Invalid payment group id in update_payment_plan");
+            return Err(AppError::Internal("Invalid group id".to_string()));
+        }
+
+        let result = self.session
+            .query_unpaged(
+                "INSERT into mma.payment_plan (school_id, payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, working, title, description, cost, duration_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+                (&school_id, &plan_id, &base_plan_id, plan.grouping_id, plan.min_age, plan.max_age, plan.working, &plan.title, &plan.description, &plan.cost, plan.duration_id),
+            )
+            .await.trace()?;
+
+        Ok(())
+    }
+
+
+    pub async fn get_school_current_payment_plans(
+        &self,
+        school_id: &Uuid,
+    ) -> AppResult<Vec<PurchasablePaymentPlanData>> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, working, title, description, cost, duration_id FROM mma.payment_plan where school_id = ?;",
+                (school_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        let mut plans: Vec<PurchasablePaymentPlanData> = Vec::new();
+        for row in result.rows::<PaymentPlanData>().trace()? {
+            let plan = row.trace()?;
+            let age_match = true;
+            
+            if age_match {
+                let new_plan = PurchasablePaymentPlanData {
+                    payment_plan_id: plan.payment_plan_id,
+                    base_payment_plan_id: plan.base_payment_plan_id,
+                    grouping_id: plan.grouping_id,
+                    min_age: plan.min_age,
+                    max_age: plan.max_age,
+                    working: plan.working,
+                    title: plan.title,
+                    description: plan.description,
+                    cost: plan.cost,
+                    duration_id: plan.duration_id,
+                    purchasable: age_match,
+                    purchasable_message: None
+                };
+                plans.push(new_plan);
+            }
+        }
+        Ok(plans)
+
+    }
+
+
+
+    pub async fn get_purchasable_payment_plans(
+        &self,
+        user_id: &Uuid,
+        school_id: &Uuid,
+    ) -> AppResult<Vec<PurchasablePaymentPlanData>> {
+
+        let user_result = self.session
+            .query_unpaged(
+                "SELECT dob FROM mma.user where user_id = ?;",
+                (school_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        let mut age_years = None;
+        for row in user_result.rows().trace()? {
+            let (dob, ) : (Option<String>, ) = row?;
+            age_years = match dob {
+                Some(dob) => {
+                    calculate_age(&dob)
+                },
+                None => None
+            };
+        }
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, working, title, description, cost, duration_id FROM mma.payment_plan where school_id = ?;",
+                (school_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        let mut plans: Vec<PurchasablePaymentPlanData> = Vec::new();
+        for row in result.rows::<PaymentPlanData>().trace()? {
+            let plan = row.trace()?;
+            let age_match = age_check(age_years, plan.min_age, plan.max_age);
+            
+            if age_match {
+                let new_plan = PurchasablePaymentPlanData {
+                    payment_plan_id: plan.payment_plan_id,
+                    base_payment_plan_id: plan.base_payment_plan_id,
+                    grouping_id: plan.grouping_id,
+                    min_age: plan.min_age,
+                    max_age: plan.max_age,
+                    working: plan.working,
+                    title: plan.title,
+                    description: plan.description,
+                    cost: plan.cost,
+                    duration_id: plan.duration_id,
+                    purchasable: age_match,
+                    purchasable_message: None
+                };
+                plans.push(new_plan);
+            }
+        }
+        Ok(plans)
+    }
+
 
     pub async fn get_class(&self, class_id: &Uuid, school_id: &Uuid) -> AppResult<Option<ClassData>> {
         let result = self.session
             .query_unpaged("SELECT class_id, venue_id, waiver_id, capacity, publish_mode, price, notify_booking, title, description, styles, grades, deleted_ts, free_lessons FROM mma.class where class_id = ? and school_id = ?", (class_id, school_id)) // Pass the query string and bound values
-            .await?
+            .await.trace()?
             .into_rows_result().trace()?;
 
         let mut class: Option<ClassData> = None;
@@ -1753,6 +3038,7 @@ impl ScyllaConnector {
                 return Ok(None);
             }
 
+
             class = Some(ClassData {
                 class_id: row.class_id,
                 venue_id: row.venue_id,
@@ -1764,7 +3050,7 @@ impl ScyllaConnector {
                 title: row.title,
                 description: row.description,
                 frequency: Vec::new(), // Initialize with an empty vector
-                styles: Vec::new(), // Initialize with an empty vector
+                styles: row.styles, // Initialize with an empty vector
                 grades: Vec::new(), // Initialize with an empty vector
                 free_lessons: row.free_lessons,
             });
@@ -1778,7 +3064,7 @@ impl ScyllaConnector {
                         "SELECT class_frequency_id, frequency, start_date, end_date, start_time, end_time FROM mma.class_frequency WHERE class_id = ?",
                         (class_id,),
                     )
-                    .await?
+                    .await.trace()?
                     .into_rows_result().trace()?;
     
                 for row in result.rows()?
@@ -1808,17 +3094,32 @@ impl ScyllaConnector {
 
     pub async fn create_school(&self, super_user_id: &Uuid, school_id: &Uuid, title: &Option<String>, description: &Option<String>) -> AppResult<()> {
         // Get current timestamp
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
+        let now = get_time();
         let now = scylla::value::CqlTimestamp(now);
         let zero_ts = scylla::value::CqlTimestamp(0);
+        let timezone = "Australia/Sydney";
+
+        let result = self.session
+            .query_unpaged("SELECT school_id FROM mma.school where school_id = ?", (school_id, )) // Pass the query string and bound values
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        if result.rows_num() != 0 {
+            return Err(AppError::BadRequest("Trying to create a school when one with that school_id exists already".to_string()));
+        }
 
         self.session
             .query_unpaged(
-                "INSERT INTO mma.school (super_user_id, school_id, title, description, created_ts, deleted_ts) VALUES (?, ?, ?, ?, ?, ?)",
-                (super_user_id, school_id, title, description, now, zero_ts), // Include other fields as per your schema
+                "INSERT INTO mma.school (super_user_id, school_id, title, description, created_ts, deleted_ts, timezone) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (super_user_id, school_id, title, description, now, zero_ts, timezone), // Include other fields as per your schema
+            )
+            .await.trace()?;
+
+        let zero_guuid = Uuid::nil();
+        self.session
+            .query_unpaged(
+                "INSERT INTO mma.user_permission (user_id, club_id, class_id, permission, created_ts) VALUES (?, ?, ?, ?, ?)",
+                (super_user_id, zero_guuid, zero_guuid, Permissions::HyperAdmin as i32, now), // Include other fields as per your schema
             )
             .await.trace()?;
 
@@ -1877,12 +3178,12 @@ impl ScyllaConnector {
 
     pub async fn get_style(&self, style_id: &Uuid, school_id: &Uuid) -> AppResult<Option<StyleData>> {
         let result = self.session
-        .query_unpaged("SELECT style_id, title, description FROM mma.style where style_id = ? and school_id = ?", (style_id, school_id)) // Pass the query string and bound values
-        .await?
-        .into_rows_result().trace()?;
+            .query_unpaged("SELECT style_id, title, description FROM mma.style where style_id = ? and school_id = ?", (style_id, school_id)) // Pass the query string and bound values
+            .await.trace()?
+            .into_rows_result().trace()?;
 
         // let mut class: Option<ClassData> = None;
-        for row in result.rows::<StyleData>()?
+        for row in result.rows::<StyleData>().trace()?
         {
             let row = row.trace()?;
             return Ok(Some(row));
@@ -1932,6 +3233,149 @@ impl ScyllaConnector {
         Ok(())
     }
 
+
+    pub async fn change_user_subscribe_payment_plan(
+        &self, 
+        user_id: &Uuid,
+        subscription: &ChangeUserSubscribePaymentPlan) 
+    -> AppResult<()> {
+
+        let result = self.session
+        .query_unpaged(
+            "UPDATE mma.user_payment_plan SET subscribed = ? where user_id = ? and user_payment_plan_id = ?",
+            (subscription.subscribe, user_id, subscription.user_payment_plan_id),
+        )
+        .await.trace()?;
+
+        Ok(())
+    }
+    
+    pub async fn user_subscribe_payment_plan(
+        &self, 
+        stripe_client: &StripeClient,
+        user_id: &Uuid,
+        school_id: &Uuid,
+        subscription: &UserSubscribePaymentPlan
+    ) -> AppResult<()> {
+
+        let mut age = None;
+        // if !subscription.subscribe {
+        let result = self.session
+            .query_unpaged(
+                "SELECT dob FROM mma.user where user_id = ?",
+                (user_id, ),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+        
+        for row in result.rows().trace()?
+        {
+            let (dob_str,): (Option<String>,) = row.trace()?;
+            age = get_age(&dob_str);
+        }
+        // }
+
+        let result = self.session
+            .query_unpaged(
+                "SELECT payment_plan_id, subscribed, expiration_ts FROM mma.user_payment_plan where user_id = ?",
+                (user_id, ),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        let mut has_plan = false;
+        let now = get_time();
+        for row in result.rows().trace()?
+        {
+            let (payment_plan_id, subscribed, expiration_ts): (Uuid, bool, CqlTimestamp) = row.trace()?;
+
+            if payment_plan_id == subscription.payment_plan_id && expiration_ts.0 >= now {
+                // if subscribed != subscription.subscribe {
+                //     let result = self.session
+                //         .query_unpaged(
+                //             "update mma.user_payment_plan subscribed = ? where user_id = ? and payment_plan_id = ?",
+                //             (subscription.subscribe, user_id, payment_plan_id),
+                //         )
+                //         .await.trace()?;
+                // }
+
+                tracing::info!("Already subscribed expired by {}", expiration_ts.0 - now);
+                return Ok(()); // Already subscribed to this payment plan
+            }
+            // if payment_plan_id == subscription.payment_plan_id && !subscription.subscribe && !subscribed {
+            //     // User was subscribed but has already unsubscribed
+            //     tracing::info!("Already existing - + unsubscribed");
+
+            //     return Ok(());
+            // }
+
+            has_plan = true;
+        }
+
+        // if !has_plan && !subscription.subscribe {
+        //     tracing::info!("Already unsubscribed");
+        //     return Ok(()); // Already unsubscribed to this payment plan
+        // }
+
+        
+        // school_id uuid, payment_plan_id uuid, base_payment_plan_id uuid, grouping_id int, min_age int, max_age int, working boolean, title text, description text, cost decimal, duration_id int, deleted_ts timestamp, created_ts timestamp
+        let result = self.session
+            .query_unpaged(
+                "SELECT deleted_ts, cost, min_age, max_age, duration_id, grouping_id FROM mma.payment_plan where school_id = ? and base_payment_plan_id = ? and payment_plan_id = ?",
+                (school_id, &subscription.base_payment_plan_id, &subscription.payment_plan_id),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        let mut has_rows = false;
+        for row in result.rows().trace()?
+        {
+            let (deleted_ts, cost, min_age, max_age, duration_id, grouping_id ): (Option<CqlTimestamp>, BigDecimal, Option<i32>, Option<i32>, i32, i32) = row.trace()?;
+            if deleted_ts.is_some() {
+                return Err(AppError::BadRequest("Payment plan has been deleted".to_string()))
+            }
+
+            let age_check = age_check(age, min_age, max_age);
+            if !age_check {
+                return Err(AppError::BadRequest("Users age does not allow for subscription to this payment_method".to_string()))
+            }
+
+            let mut group_members = Vec::new();
+            group_members.push(user_id);
+
+            //stripe_client
+            let result = self.pay_pass(
+                user_id,
+                school_id,
+                stripe_client,
+                &cost,
+                &subscription.base_payment_plan_id,
+                &subscription.payment_plan_id,
+                duration_id,
+                grouping_id,
+                &group_members
+            ).await.trace()?;
+
+            if !result {
+                tracing::info!("Payment failed");
+                return Err(AppError::BadRequest("Payment operation failed".to_string()))
+            }
+
+            tracing::info!("No problems with paying");
+            return Ok(());
+
+
+            has_rows = true;
+            break;
+        }
+        if !has_rows {
+            return Err(AppError::BadRequest("Payment plan does not exist".to_string()))
+        }
+        
+
+        Ok(())
+    }
+
     // list styles
     pub async fn get_styles(&self, school_id: &Uuid) -> AppResult<Vec<StyleData>> {
         let mut statement = Statement::new( 
@@ -1948,7 +3392,7 @@ impl ScyllaConnector {
             .into_rows_result().trace()?;
 
         let mut styles: Vec<StyleData> = Vec::new();
-        for row in result.rows::<StyleData>()?
+        for row in result.rows::<StyleData>().trace()?
         {
             let row = row.trace()?;
             // Successfully retrieved a row. Now extract the columns.
@@ -2006,14 +3450,14 @@ impl ScyllaConnector {
                  WHERE email = ? AND code = ?",
                 (email, code),
             )
-            .await?
+            .await.trace()?
             .into_rows_result().trace()?;
         
         // Extract row data
         let mut logged_user_id: Option<Uuid> = None;
         let mut is_valid = false;
         
-        for row in result.rows()? {
+        for row in result.rows().trace()? {
             let (id, expires_ts, is_used): (Uuid, CqlTimestamp, bool) = row.trace()?;
             
             // Check if code is not expired and not used
@@ -2039,11 +3483,11 @@ impl ScyllaConnector {
                     "SELECT school_id FROM mma.user WHERE logged_user_id = ?",
                     (logged_user_id,),
                 )
-                .await?
+                .await.trace()?
                 .into_rows_result().trace()?;
 
                 let mut school_id: Option<Uuid> = None;
-                for row in result.rows()? {
+                for row in result.rows().trace()? {
                     let (id,): (Uuid,) = row.trace()?;
                     school_id = Some(id);
                 }
@@ -2113,7 +3557,7 @@ impl ScyllaConnector {
                 WHERE email = ? AND code = ?",
                 (email, code),
             )
-            .await?
+            .await.trace()?
             .into_rows_result().trace()?;
         
         // Check if code exists, is not expired, and is not used

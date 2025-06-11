@@ -343,13 +343,21 @@
 
             // Function to show a specific content section
             const showSection = (sectionId) => {
+                var foundSection = false; // Flag to check if section is found
                 contentSections.forEach(section => {
                     if (section.id === `${sectionId}-section`) {
                         section.style.display = 'block';
+                        foundSection = true; // Set flag if section is found
                     } else {
                         section.style.display = 'none';
                     }
                 });
+
+                // If no section is found, show the home section
+                if (!foundSection) {
+                    document.getElementById('home-section').style.display = 'block';
+                }
+
                  // Update active nav link (optional but good practice)
                  navLinks.forEach(link => {
                      if (link.getAttribute('data-section') === sectionId) {

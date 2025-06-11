@@ -1,0 +1,50 @@
+# 28MB docker image - + upx binary, opt ="z"
+# ---- Stage 1: build + package ----
+FROM docker.io/rust:1.87-slim AS builder
+WORKDIR /app
+
+# install what we need to build + busybox-static for later
+RUN apt-get update \
+ && apt-get install -y \
+      pkg-config libssl-dev build-essential \
+      tar gzip busybox-static curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# Install UPX
+RUN curl -L https://github.com/upx/upx/releases/download/v5.0.1/upx-5.0.1-amd64_linux.tar.xz | tar -xJ \
+ && mv upx-5.0.1-amd64_linux/upx /usr/local/bin/ \
+ && chmod +x /usr/local/bin/upx
+
+COPY Cargo.toml Cargo.lock ./
+COPY src/        src/
+COPY benches/    benches/
+
+# apply your sed patches…
+RUN sed -i 's/mmapod:9042/127.0.0.1:9042/g' src/main.rs
+
+RUN cargo build --release
+RUN strip target/release/mma
+RUN ls -lh target/release/mma
+RUN upx --lzma target/release/mma
+RUN ls -lh target/release/mma
+
+
+# package into a tar.gz
+RUN cp /app/target/release/mma /usr/local/bin/app
+
+# capture ENV file
+RUN echo "DEV_MODE=1" > /.env_runtime
+
+# ---- Stage 2: runtime ----
+FROM gcr.io/distroless/cc-debian12:nonroot
+WORKDIR /app
+
+COPY --from=builder --chown=65532:65532 /usr/local/bin/app /app/mma
+COPY --from=builder --chown=65532:65532 /.env_runtime     /app/.env
+COPY --chown=65532:65532 templates         /app/templates
+COPY --chown=65532:65532 schema            /app/schema
+COPY --chown=65532:65532 auth              /app/auth
+
+EXPOSE 1227
+
+CMD ["/app/mma"]

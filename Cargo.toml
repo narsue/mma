@@ -1,6 +1,6 @@
 [package]
 name = "mma"
-version = "0.1.3"
+version = "0.1.5"
 edition = "2021"
 
 [dependencies]
@@ -28,21 +28,25 @@ notify = "6.1" # For file watching
 notify-debouncer-full = "0.3" # Debouncer for notify
 bigdecimal = { version = "0.4", features = ["serde"]}
 lettre = { version = "0.10", features = ["tokio1", "tokio1-native-tls", "builder"] }
-native-tls = "0.2"
+native-tls = { version = "0.2", features = ["vendored"]}
 mail-builder = "0.2.5"
 urlencoding = "2.1.3"
 reqwest = { version ="0.12.19", features = ["json"]}
 dotenv = "0.15.0"
 ansi_term = "0.12.1"
+ammonia = "4.1.0"
+lazy_static = "1.5.0"
+regex = "1.11.1"
+email_address = "0.2.9"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "plotters", "cargo_bench_support"] }
 actix-web-test = "0.0.1"
 actix-rt = "2.8"
 
-[[bench]]
-name = "my_benchmark_suite" # You can name this anything, e.g., "db_benchmarks"
-harness = false
+#[[bench]]
+#name = "my_benchmark_suite" # You can name this anything, e.g., "db_benchmarks"
+#harness = false
 
 
 # These are the default settings (you don't need to add this unless customizing)
@@ -53,8 +57,8 @@ lto = true         # Link-time optimization (can be enabled for even more optimi
 strip = true
 
 
-[profile.bench]
-opt-level = 3
-lto = true          # Enable link-time optimization for maximum performance
-debug = false
-codegen-units = 1   # Better optimization at the cost of compile time
+#[profile.bench]
+#opt-level = 3
+#lto = true          # Enable link-time optimization for maximum performance
+#debug = false
+#codegen-units = 1   # Better optimization at the cost of compile time
