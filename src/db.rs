@@ -2198,6 +2198,8 @@ impl ScyllaConnector {
         &self,
         school_id: &Uuid,
     ) -> AppResult<()> {
+        // TODO - Need to handle for performing this task multiple times especially in regards to deleted information. As overridden data kind of works but in the case of non overridden data will linger.
+
         let mut user_hashmap = HashMap::new();
         let mut class_hashmap = HashMap::new();
         // class (school_id uuid, class_id uuid, venue_id uuid
@@ -2276,80 +2278,80 @@ impl ScyllaConnector {
                     // attendance_data.push((class_id, user_id, cql_class_start_ts.0, is_instructor, gender, age));
 
                     // Class Stats all
-                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceAll as i8, 0, 0 as i16)).or_insert(0) += 1;
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceAll as i8, 0, 0 as i16, 0)).or_insert(0) += 1;
 
                     let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
-                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
                     let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
-                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
                     let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
-                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
                     let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
-                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
                     let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
-                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
 
                     if *gender_id == Some(StatGender::Male) {
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
 
                         let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
 
                         let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
 
                         let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
 
                         let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
 
                         let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
                     }
 
                     if *gender_id == Some(StatGender::Female) {
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
 
                         let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
 
                         let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
 
                         let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
 
                         let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
 
                         let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
-                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
                     }
 
 
                     // School Stats all
-                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::ALL as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::ALL as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
                     let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
-                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::HOUR as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::HOUR as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
                     let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
-                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::DAY as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::DAY as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
                     let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
-                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::WEEK as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::WEEK as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
                     let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
-                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::MONTH as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::MONTH as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
                     let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
-                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::YEAR as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::YEAR as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
 
                 }
@@ -2360,11 +2362,13 @@ impl ScyllaConnector {
 
 
         // Step 4: Insert results into dash_stats
-        for ((id, id_type, stat_window, stat_count_type, v1, v2), count) in count_total {
+        for ((id, id_type, stat_window, stat_count_type, v1, v2, ts), count) in count_total {
+            println!("Inserting stat: id: {}, id_type: {}, window: {}, count_type: {}, v1: {}, v2: {}, ts: {}, count: {}", 
+                id, id_type, stat_window, stat_count_type, v1, v2, ts, count);
             self.session
                 .query_unpaged(
-                    "INSERT INTO mma.dash_stats (school_id, id, id_type, window, count, count_type, v1, v2)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO mma.dash_stats (school_id, id, id_type, window, count, count_type, v1, v2, ts)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         school_id, 
                         id, 
@@ -2373,7 +2377,8 @@ impl ScyllaConnector {
                         count,
                         stat_count_type,
                         v1,
-                        v2
+                        v2,
+                        CqlTimestamp(ts)
                     )
                 )
                 .await?;
@@ -2389,7 +2394,7 @@ impl ScyllaConnector {
     ) -> AppResult<Vec<DashStat>> { 
         let result = self.session
             .query_unpaged(
-                "SELECT id, id_type, window, count, count_type, v1, v2 FROM mma.dash_stats WHERE school_id = ?",
+                "SELECT id, id_type, window, count, count_type, v1, v2, ts FROM mma.dash_stats WHERE school_id = ?",
                 (school_id,)
             )
             .await.trace()?
@@ -2397,7 +2402,7 @@ impl ScyllaConnector {
 
         let mut results = Vec::new();
         for row in result.rows().trace()? {
-            let (id, id_type, window, count, count_type, v1, v2): (Uuid, i8, i8, i32, i8, i16, i16) = row.trace()?;
+            let (id, id_type, window, count, count_type, v1, v2, ts): (Uuid, i8, i8, i32, i8, i16, i16, CqlTimestamp) = row.trace()?;
             results.push(DashStat{
                 id,
                 id_type,
@@ -2405,7 +2410,8 @@ impl ScyllaConnector {
                 count,
                 count_type,
                 v1,
-                v2
+                v2,
+                ts: ts.0,
             });
         }
         
@@ -2656,6 +2662,7 @@ impl ScyllaConnector {
         // task::spawn(async move {
         let start = std::time::Instant::now();
 
+        // TODO - perform this as a seperate background task
         if let Err(e) = self.update_dashboard_stats(&school_id).await {
             tracing::error!("Failed to update dashboard stats: {:?}", e);
         } else {

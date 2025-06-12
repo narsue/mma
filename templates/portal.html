@@ -606,44 +606,50 @@
              </div>
         </div>
 
+        <!-- Section: Dashboard Page -->
         <div id="dashboardSection" class="portal-section p-6">
             <h2 class="text-2xl font-bold text-gray-900 mb-4">Dashboard</h2>
           
             <!-- Filters -->
             <div class="mb-6 flex flex-col sm:flex-row gap-4">
-              <select id="classFilter" class="w-full sm:w-1/3 border-gray-300 rounded-md shadow-sm">
-                <option value="">All Classes</option>
-                <option value="1">Class 1</option>
-                <option value="2">Class 2</option>
-              </select>
-          
-              <select id="timeFilter" class="w-full sm:w-1/3 border-gray-300 rounded-md shadow-sm">
-                <option value="today">Today</option>
-                <option value="yesterday">Yesterday</option>
-                <option value="week" selected>This Week</option>
-                <option value="last_month">Last Month</option>
-                <option value="last_3_months">Last 3 Months</option>
-                <option value="last_year">Last Year</option>
-              </select>
-          
+                <select id="classFilter" class="w-full sm:w-1/3 border-gray-300 rounded-md shadow-sm">
+                    <option value="">All Classes</option>
+                    <option value="1">Class 1</option>
+                    <option value="2">Class 2</option>
+                </select>
+
+                <select id="timeFilter" class="w-full sm:w-1/3 border-gray-300 rounded-md shadow-sm">
+                    <option value="today">Today</option>
+                    <option value="yesterday">Yesterday</option>
+                    <option value="week" selected>This Week</option>
+                    <option value="last_month">Last Month</option>
+                    <option value="last_3_months">Last 3 Months</option>
+                    <option value="last_year">Last Year</option>
+                    <option value="all" selected>All Time</option>
+                </select>
+
+                <select id="countTypeFilter" class="w-full sm:w-1/3 border-gray-300 rounded-md shadow-sm">
+                    <option value="AttendanceAll" selected>Attendance (All)</option>
+                    <option value="AttendanceGender">Attendance (By Gender)</option>
+                    <option value="Revenue">Revenue</option>
+                    <option value="PendingRevenue">Pending Revenue</option>
+                    <option value="Refunded">Refunded</option>
+                </select>
+
               <button id="refreshDashboard" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
                 Refresh
               </button>
             </div>
           
             <!-- Charts -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="gap-6">
               <div class="bg-white p-4 rounded shadow">
                 <h3 class="text-lg font-semibold mb-2">Lesson Attendance</h3>
                 <canvas id="attendanceChart" height="200"></canvas>
               </div>
-          
-              <div class="bg-white p-4 rounded shadow">
-                <h3 class="text-lg font-semibold mb-2">Revenue</h3>
-                <canvas id="revenueChart" height="200"></canvas>
-              </div>
+
             </div>
-          </div>
+        </div>
 
 
         <!-- Section: Classes -->
@@ -2197,74 +2203,321 @@
 
             // Dashboard -- start
             const attendanceChartCtx = document.getElementById('attendanceChart').getContext('2d');
-            const revenueChartCtx = document.getElementById('revenueChart').getContext('2d');
 
-            let attendanceChart, revenueChart;
+            let attendanceChart;
+
+            const StatWindow = {
+                1: "HOUR",
+                2: "DAY",
+                3: "WEEK",
+                4: "MONTH",
+                5: "YEAR",
+                6: "ALL",
+            };
+
+            const StatGender = {
+                1: "Male",
+                2: "Female",
+                3: "Unknown",
+            };
+
+            const StatPayType = {
+                1: "FreeLesson",
+                2: "AllPlan",
+                3: "FamilyPlan",
+                4: "IndividualPlan",
+                5: "Instructor",
+                6: "NoCharge",
+            };
+
+            const StatCountType = {
+                1: "AttendanceAll",
+                2: "AttendanceGender",
+                3: "AttendanceAge",
+                4: "AttendancePay",
+                5: "Revenue",
+                6: "PendingRevenue",
+                7: "Refunded",
+            };
+
+            const StatIdType = {
+                1: "SCHOOL",
+                2: "CLASS",
+                3: "VENUE",
+                4: "CLUB",
+            };
+
+            // Map timeFilter to StatWindow enum value
+            const timeFilterToWindow = {
+                today: 1,         // HOUR
+                yesterday: 1,     // HOUR (or handle differently if needed)
+                week: 2,          // WEEK
+                last_month: 4,    // MONTH
+                last_3_months: 4, // MONTH (or handle differently)
+                last_year: 5,     // YEAR
+                all: 6,           // ALL
+            };
+
+
+            function formatLabel(ts, window) {
+                const date = new Date(ts); // ts is in milliseconds
+                switch (window) {
+                    case 1: // HOUR
+                    return date.toLocaleString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                    });
+                    case 2: // DAY
+                    return date.toLocaleDateString();
+                    case 3: // WEEK
+                    // Show week start date
+                    return "Week of " + date.toLocaleDateString();
+                    case 4: // MONTH
+                    return date.toLocaleString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                    });
+                    case 5: // YEAR
+                    return date.getFullYear().toString();
+                    case 6: // ALL
+                    return "All Time";
+                    default:
+                    return date.toLocaleString();
+                }
+            }
+
 
             async function loadDashboardData() {
-                const classId = document.getElementById('classFilter').value;
+                // const classId = document.getElementById('classFilter').value;
                 const timeFilter = document.getElementById('timeFilter').value;
-
+                const countType = document.getElementById('countTypeFilter').value;
+                const windowValue = timeFilterToWindow[timeFilter] || 6; // default to ALL
+                // console.log("Loading dashboard data for classId:", classId, "timeFilter:", timeFilter, "countType:", countType);
                 try {
-                    const res = await fetch(`/api/school/get_dashboard_data?class_id=${classId}&time_filter=${timeFilter}`);
-                    const { data, totals } = await res.json();
+                    const res = await fetch(`/api/school/get_dashboard_data`);
+                    const { data } = await res.json();
 
-                    const labels = data.map(d => new Date(d.datetime).toLocaleDateString());
-                    const attendanceAll = data.map(d => d.all);
-                    const men = data.map(d => d.men);
-                    const women = data.map(d => d.women);
-                    const unknown = data.map(d => d.unknown);
-                    const revenueCasual = data.map(d => d.casual_earned);
-                    const revenuePlan = data.map(d => d.plan_earned);
+                    const classIds = Array.from(
+                        new Set(
+                            data
+                            .filter(d => d.id_type === 2)
+                            .map(d => d.id)
+                        )
+                    );
+
+
+                    const classFilter = document.getElementById('classFilter');
+
+                    // Save the current selection (if any)
+                    const currentValue = classFilter.value;
+
+                    // Clear existing options
+                    classFilter.innerHTML = '';
+
+                    // Add "All Classes" option
+                    const allOption = document.createElement('option');
+                    allOption.value = '';
+                    allOption.textContent = 'All Classes';
+                    classFilter.appendChild(allOption);
+
+                    // Add options for each class ID
+                    for (const classId of classIds) {
+                        const option = document.createElement('option');
+                        option.value = classId;
+                        var class_info = get_cached_value("class", classId);
+                        if (class_info === null) {
+                            await fetchAndDisplayClasses();
+                        }
+                        var class_info = get_cached_value("class", classId);
+                        if (class_info === null) {
+                            option.textContent = `Class ${classId}`;
+                        } else {
+                            option.textContent = `${class_info.title}`;
+                        }
+                        classFilter.appendChild(option);
+                    }
+
+                    // Restore previous selection if possible
+                    if (classIds.includes(currentValue)) {
+                        classFilter.value = currentValue;
+                    }
+
+
+
+                    // Prepare datasets based on countType
+                    let attendanceDatasets = [];
+                    let revenueDatasets = [];
+                    // Filter data by selected window
+                    const windowData = data.filter(d => d.window === windowValue);
+
+                    var labels = [];
+
+                    if (countType === "AttendanceAll") {
+                        labels = windowData.map(d => formatLabel(d.ts, d.window));
+
+                        attendanceDatasets = [
+                            {
+                            label: "All",
+                            data: windowData.map((d) => d.count),
+                            borderColor: "#2563eb",
+                            backgroundColor: "#2563eb20",
+                            tension: 0.3,
+                            },
+                        ];
+                    } else if (countType === "AttendanceGender") {
+                        if (windowValue === 6) {
+                                // For ALL TIME, show a histogram (bar chart) of total counts per gender
+                                const menTotal = windowData
+                                        .filter(d => d.count_type === 2 && d.v1 === 1)
+                                        .reduce((sum, d) => sum + d.count, 0);
+                                    const womenTotal = windowData
+                                        .filter(d => d.count_type === 2 && d.v1 === 2)
+                                        .reduce((sum, d) => sum + d.count, 0);
+                                    const unknownTotal = windowData
+                                        .filter(d => d.count_type === 2 && d.v1 === 3)
+                                        .reduce((sum, d) => sum + d.count, 0);
+
+                                    labels = ["Men", "Women", "Unknown"];
+                                    attendanceDatasets = [
+                                    {
+                                        label: "Attendance by Gender (All Time)",
+                                        data: [menTotal, womenTotal, unknownTotal],
+                                        backgroundColor: ["#4b5563", "#10b981", "#f59e0b"],
+                                    },
+                                ];
+                            } else {
+                                // Show last 7 days, even if no data
+                                function getLastNDaysTimestamps(n) {
+                                    const days = [];
+                                    const now = new Date();
+                                    now.setHours(0, 0, 0, 0);
+                                    for (let i = n - 1; i >= 0; i--) {
+                                    const d = new Date(now);
+                                    d.setDate(now.getDate() - i);
+                                    days.push(d.getTime());
+                                    }
+                                    return days;
+                                }
+
+                                function buildGenderDayMap(genderValue) {
+                                    const map = {};
+                                    windowData
+                                    .filter(d => d.count_type === 2 && d.v1 === genderValue)
+                                    .forEach(d => {
+                                        const dayTs = new Date(d.ts);
+                                        dayTs.setHours(0, 0, 0, 0);
+                                        map[dayTs.getTime()] = d.count;
+                                    });
+                                    return map;
+                                }
+
+                                const last7Days = getLastNDaysTimestamps(7);
+
+                                const menMap = buildGenderDayMap(1);
+                                const womenMap = buildGenderDayMap(2);
+                                const unknownMap = buildGenderDayMap(3);
+
+                                const menData = last7Days.map(ts => menMap[ts] || 0);
+                                const womenData = last7Days.map(ts => womenMap[ts] || 0);
+                                const unknownData = last7Days.map(ts => unknownMap[ts] || 0);
+
+                                labels = last7Days.map(ts => {
+                                    const d = new Date(ts);
+                                    return d.toLocaleDateString();
+                                });
+
+                                attendanceDatasets = [
+                                    {
+                                    label: "Men",
+                                    data: menData,
+                                    borderColor: "#4b5563",
+                                    backgroundColor: "#4b556320",
+                                    tension: 0.3,
+                                    },
+                                    {
+                                    label: "Women",
+                                    data: womenData,
+                                    borderColor: "#10b981",
+                                    backgroundColor: "#10b98120",
+                                    tension: 0.3,
+                                    },
+                                    {
+                                    label: "Unknown",
+                                    data: unknownData,
+                                    borderColor: "#f59e0b",
+                                    backgroundColor: "#f59e0b20",
+                                    tension: 0.3,
+                                    },
+                                ];
+                            }
+                    } else if (countType === "Revenue") {
+                        attendanceDatasets = [
+                            {
+                            label: "Casual Revenue ($)",
+                            data: data.map((d) => d.casual_earned),
+                            backgroundColor: "#3b82f6",
+                            },
+                            {
+                            label: "Plan Revenue ($)",
+                            data: data.map((d) => d.plan_earned),
+                            backgroundColor: "#10b981",
+                            },
+                        ];
+                        } else if (countType === "PendingRevenue") {
+                        attendanceDatasets = [
+                            {
+                            label: "Pending Revenue ($)",
+                            data: data.map((d) => d.pending_revenue),
+                            backgroundColor: "#f59e0b",
+                            },
+                        ];
+                        } else if (countType === "Refunded") {
+                        attendanceDatasets = [
+                            {
+                            label: "Refunded ($)",
+                            data: data.map((d) => d.refunded),
+                            backgroundColor: "#ef4444",
+                            },
+                        ];
+                    }
 
                     // Attendance Chart
                     if (attendanceChart) attendanceChart.destroy();
                     attendanceChart = new Chart(attendanceChartCtx, {
-                        type: 'line',
+                        type: "line",
                         data: {
-                        labels,
-                        datasets: [
-                            { label: 'All', data: attendanceAll, borderColor: '#2563eb', backgroundColor: '#2563eb20', tension: 0.3 },
-                            { label: 'Men', data: men, borderColor: '#4b5563', backgroundColor: '#4b556320', tension: 0.3 },
-                            { label: 'Women', data: women, borderColor: '#10b981', backgroundColor: '#10b98120', tension: 0.3 },
-                            { label: 'Unknown', data: unknown, borderColor: '#f59e0b', backgroundColor: '#f59e0b20', tension: 0.3 }
-                        ]
-                        },
-                            options: {
-                            responsive: true,
-                            plugins: {
-                                legend: { position: 'top' },
-                                title: { display: true, text: 'Lesson Attendance Over Time' }
-                            }
-                        }
-                    });
-
-                    // Revenue Chart
-                    if (revenueChart) revenueChart.destroy();
-                    revenueChart = new Chart(revenueChartCtx, {
-                        type: 'bar',
-                        data: {
-                        labels,
-                        datasets: [
-                            { label: 'Casual Revenue ($)', data: revenueCasual, backgroundColor: '#3b82f6' },
-                            { label: 'Plan Revenue ($)', data: revenuePlan, backgroundColor: '#10b981' }
-                        ]
+                            labels,
+                            datasets: attendanceDatasets,
                         },
                         options: {
-                        responsive: true,
-                        plugins: {
-                            legend: { position: 'top' },
-                            title: { display: true, text: 'Revenue Breakdown' }
-                        }
-                        }
+                            responsive: true,
+                            plugins: {
+                            legend: { position: "top" },
+                            title: {
+                                display: true,
+                                text:
+                                countType === "AttendanceAll"
+                                    ? "Lesson Attendance Over Time"
+                                    : countType === "AttendanceGender"
+                                    ? "Lesson Attendance by Gender"
+                                    : "",
+                            },
+                            },
+                        },
                     });
 
+
                 } catch (error) {
-                    console.error('Error loading dashboard data:', error);
+                    console.error("Error loading dashboard data:", error);
                 }
             }
 
-            document.getElementById('refreshDashboard').addEventListener('click', loadDashboardData);
+            document.getElementById("refreshDashboard").addEventListener("click", loadDashboardData);
+            document.getElementById("classFilter").addEventListener("change", loadDashboardData);
+            document.getElementById("timeFilter").addEventListener("change", loadDashboardData);
+            document.getElementById("countTypeFilter").addEventListener("change", loadDashboardData);
             loadDashboardData(); // Initial load
 
             // Dashboard -- end
@@ -2736,6 +2989,7 @@
 
                 // Collect data from the form fields matching UpdateUserProfileRequest
                 const updateData = {
+                     user_id: my_user_id, // Assuming my_user_id is defined globally
                      first_name: profileFields.first_name.value,
                      surname: profileFields.surname.value,
                      gender: profileFields.gender.value || null,
@@ -3996,26 +4250,26 @@
 
             // Function to fetch and display classes as cards
              async function fetchAndDisplayClasses() {
-                 classListDiv.innerHTML = '<p class="text-gray-600 italic">Loading classes...</p>';
+                classListDiv.innerHTML = '<p class="text-gray-600 italic">Loading classes...</p>';
 
-                 // Get filter and sort parameters
-                 const styleFilter = classFilterStyle.value;
-                 const venueFilter = classFilterVenue.value;
-                 const sortBy = classSortBy.value;
-                 const searchTerm = classSearchInput.value.trim();
+                // Get filter and sort parameters
+                const styleFilter = classFilterStyle.value;
+                const venueFilter = classFilterVenue.value;
+                const sortBy = classSortBy.value;
+                const searchTerm = classSearchInput.value.trim();
 
-                 // Construct query parameters
-                 const queryParams = new URLSearchParams();
-                 if (styleFilter) queryParams.append('style_id', styleFilter);
-                 if (venueFilter) queryParams.append('venue_id', venueFilter);
-                 if (sortBy) queryParams.append('sort_by', sortBy);
-                 if (searchTerm) queryParams.append('search', searchTerm);
+                // Construct query parameters
+                const queryParams = new URLSearchParams();
+                if (styleFilter) queryParams.append('style_id', styleFilter);
+                if (venueFilter) queryParams.append('venue_id', venueFilter);
+                if (sortBy) queryParams.append('sort_by', sortBy);
+                if (searchTerm) queryParams.append('search', searchTerm);
 
                 await fetchVenuesForSelect(classFilterVenue);
 
-                 const url = `/api/class/get_list`;
+                const url = `/api/class/get_list`;
 
-                 try {
+                try {
                      const response = await fetch(url, {
                          method: 'GET',
                          headers: {
@@ -4024,24 +4278,21 @@
                      });
 
                      if (response.ok) {
-                         const classes = await response.json(); // Assuming backend returns a JSON array
-                         if (classes.length > 0) {
-                             let html = '';
-                             classes.forEach(cls => {
-                                 // Assume your class object has properties like:
-                                 // id, title, description, venue_id, style_ids, grading_ids, price,
-                                 // publish_mode, capacity, frequencies, notify_booking, waiver_id,
-                                 // next_run_time (formatted string), instructor_name, venue_name, venue_address,
-                                 // venue_latitude, venue_longitude, style_names (array of strings), eligibility (string), distance (optional string)
+                        const classes = await response.json(); // Assuming backend returns a JSON array
+                        if (classes.length > 0) {
+                            let html = '';
 
-                                 // Determine eligibility status
-                                 let eligibilityStatus = cls.eligibility || 'Not specified';
-                                 let eligibilityColor = 'text-gray-600';
-                                 if (eligibilityStatus.toLowerCase().includes('eligible')) {
-                                     eligibilityColor = 'text-green-600';
-                                 } else if (eligibilityStatus.toLowerCase().includes('ineligible')) {
-                                     eligibilityColor = 'text-red-600';
-                                 }
+                            classes.forEach(cls => {
+                                add_cached_value('class', cls.class_id, cls); // Cache the class data for later use
+
+                                // Determine eligibility status
+                                let eligibilityStatus = cls.eligibility || 'Not specified';
+                                let eligibilityColor = 'text-gray-600';
+                                if (eligibilityStatus.toLowerCase().includes('eligible')) {
+                                    eligibilityColor = 'text-green-600';
+                                } else if (eligibilityStatus.toLowerCase().includes('ineligible')) {
+                                    eligibilityColor = 'text-red-600';
+                                }
 
                                  // Format price
                                 const formattedPrice = cls.price !== undefined && cls.price !== null ? `$${parseFloat(cls.price).toFixed(2)}` : 'Free';
@@ -4089,6 +4340,7 @@
                                         all_event_ids.push(class_frequency.class_frequency_id);
                                     }
                                 });
+
                                 calendar.removeNonPresentClassIdEvents(cls.class_id, all_event_ids);
                                 var editbtn = ``;
                                 if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
@@ -4142,9 +4394,9 @@
                              attachClassButtonListeners();
                              attachVenueNameListeners(); // Attach listeners to venue names
 
-                         } else {
-                             classListDiv.innerHTML = '<p class="text-gray-600 italic">No classes found matching your criteria.</p>';
-                         }
+                        } else {
+                            classListDiv.innerHTML = '<p class="text-gray-600 italic">No classes found matching your criteria.</p>';
+                        }
                      } else if (response.status === 401 || response.status === 403) {
                           classListDiv.innerHTML = '<p class="text-red-600">Error: You are not authorized to view classes.</p>';
                          console.error("Authorization error fetching classes:", response.status);

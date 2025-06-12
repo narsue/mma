@@ -675,4 +675,5 @@ pub struct DashStat{
     pub count_type: i8,
     pub v1: i16,
     pub v2: i16,
+    pub ts: i64,
 }
