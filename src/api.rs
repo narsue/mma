@@ -665,3 +665,14 @@ pub struct UserSchoolPermission{
     pub class_id: Option<Uuid>,
     pub permission: i32
 }
+
+#[derive(Serialize)]
+pub struct DashStat{
+    pub id: Uuid,
+    pub id_type: i8,
+    pub window: i8,
+    pub count: i32,
+    pub count_type: i8,
+    pub v1: i16,
+    pub v2: i16,
+}

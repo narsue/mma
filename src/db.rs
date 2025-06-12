@@ -15,14 +15,14 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use crate::db_migrate::MigrationTool;
 use crate::models::Permissions;
-use crate::payment_plan::{self, PaymentGroupType, PaymentPlanDuration};
+use crate::payment_plan::{*};
 use bigdecimal::ToPrimitive;
 
 use std::sync::Arc;
 use uuid::Uuid;
 use std::time::SystemTime;
 use rand::{distributions::Alphanumeric, Rng};
-use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, DateTime, TimeZone, Utc, Weekday};
+use chrono::{Datelike, Timelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, DateTime, TimeZone, Utc, Weekday};
 use chrono_tz::Tz;
 use scylla::value::CqlTimestamp;
 use bigdecimal::BigDecimal;
@@ -31,12 +31,13 @@ use crate::error::{AppError, Result, Result as AppResult, TraceErr};
 use crate::api::{ActivePaymentPlanData, ClassData, ClassFrequency, ClassFrequencyId, 
     PurchasablePaymentPlanData, SchoolUserId, StudentClassAttendance, StyleData, UpdateUserProfileRequest, 
     UserProfileData, UserWithName, VenueData, SchoolUpdatePaymentPlanRequest, UserSubscribePaymentPlan,
-    ChangeUserSubscribePaymentPlan, SchoolUser, UserSchoolPermission, DetailedSchoolUserId}; 
+    ChangeUserSubscribePaymentPlan, SchoolUser, UserSchoolPermission, DetailedSchoolUserId, DashStat}; 
 use crate::stripe_client::StripeClient;
 use ammonia::clean;
 use lazy_static::lazy_static;
 use regex::Regex;
 use email_address::EmailAddress;
+use tokio::task;
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -106,6 +107,54 @@ fn sanitize_email(input: &String) -> Option<String> {
     // EmailAddress::parse(t).ok().map(|e| e.to_string())
 }
 
+
+/// Truncates a timestamp (in milliseconds) to the start of the given StatWindow.
+pub fn truncate_timestamp(ts_millis: i64, window: StatWindow) -> i64 {
+    let dt = Utc.timestamp_millis_opt(ts_millis).unwrap();
+
+    let truncated = match window {
+        StatWindow::HOUR => dt
+            .with_minute(0)
+            .unwrap()
+            .with_second(0)
+            .unwrap()
+            .with_nanosecond(0)
+            .unwrap(),
+
+        StatWindow::DAY => dt
+            .with_hour(0)
+            .unwrap()
+            .with_minute(0)
+            .unwrap()
+            .with_second(0)
+            .unwrap()
+            .with_nanosecond(0)
+            .unwrap(),
+
+        StatWindow::WEEK => {
+            // Start of the ISO week (Monday)
+            let num_days_from_monday = dt.weekday().num_days_from_monday() as i64;
+            let start_of_week = dt.date_naive() - Duration::days(num_days_from_monday);
+            Utc.with_ymd_and_hms(start_of_week.year(), start_of_week.month(), start_of_week.day(), 0, 0, 0).unwrap()
+        }
+
+        StatWindow::MONTH => {
+            Utc.with_ymd_and_hms(dt.year(), dt.month(), 1, 0, 0, 0).unwrap()
+        }
+
+        StatWindow::YEAR => {
+            Utc.with_ymd_and_hms(dt.year(), 1, 1, 0, 0, 0).unwrap()
+        },
+
+        StatWindow::ALL => {
+            return 0;
+        }
+    };
+
+    truncated.timestamp_millis()
+}
+
+
 pub fn age_check(age_years: Option<i32>, min_age: Option<i32> , max_age: Option<i32>) -> bool 
 {
     match age_years {
@@ -164,6 +213,20 @@ pub fn get_age(dob_str: &Option<String>) -> Option<i32> {
     }
 }
 
+pub fn get_naive_age(dob_date: &Option<NaiveDate>) -> Option<i32> {
+    let now = Utc::now();
+    match dob_date {
+        Some(dob_date) => {
+            let mut age = now.year() - dob_date.year();
+            if age < 0 {
+                return None;
+            }
+            return Some(age);
+        },
+        None => { None }
+    }
+}
+
 pub struct UserPaymentPlan {
     pub user_payment_plan_id: Uuid,
     pub base_payment_plan_id: Uuid,
@@ -197,7 +260,7 @@ struct UserRow {
     surname: String,         // 4: text (assumed non-null)
     gender: Option<String>,  // 5: text (nullable)
     phone: Option<String>,   // 6: text (nullable)
-    dob: Option<String>,     // 7: text (nullable - consider Date type if stored as such)
+    dob: Option<NaiveDate>,     // 7: text (nullable - consider Date type if stored as such)
     dev_stripe_payment_method_ids: Option<Vec<String>>, // 8: text (nullable)
     prod_stripe_payment_method_ids: Option<Vec<String>>, // 8: text (nullable)
     email_verified: Option<bool>,    // 10: boolean (assumed non-null)
@@ -323,7 +386,7 @@ pub async fn init_schema(session: &Session) -> Result<()> {
         
     // Set up tables if empty otherwise migrate tables if old schema
     let migration = MigrationTool::new("mma".to_string(), PathBuf::from("schema"));
-    migration.migrate_to_version(session, 2).await.trace()?;
+    migration.migrate_to_version(session, 1).await.trace()?;
 
     println!("Schema initialized");
     Ok(())
@@ -883,7 +946,14 @@ impl ScyllaConnector {
                 Some(email_verified) => email_verified,
                 None => false
             };
-
+            let dob_str = match row.dob{
+                Some(dob) => {
+                    Some(dob.to_string())
+                },
+                None => {
+                    None
+                }
+            };
             // Check if the row is empty
             // Successfully retrieved a row. Now extract the columns.
             let user_profile = UserProfileData {
@@ -893,7 +963,7 @@ impl ScyllaConnector {
                 surname: row.surname,
                 gender: row.gender,
                 phone: row.phone,
-                dob: row.dob,
+                dob: dob_str,
                 stripe_payment_method_ids: stripe_payment_method_ids,
                 email_verified: email_verified, 
                 photo_id: row.photo_id,
@@ -2119,6 +2189,230 @@ impl ScyllaConnector {
         return Ok(());
     }
 
+
+
+
+
+    // CREATE TABLE IF NOT EXISTS {}.dash_stats { school_id uuid, id uuid, id_type tinyint, window tinyint, count int, count_type tinyint }; 
+    pub async fn update_dashboard_stats (
+        &self,
+        school_id: &Uuid,
+    ) -> AppResult<()> {
+        let mut user_hashmap = HashMap::new();
+        let mut class_hashmap = HashMap::new();
+        // class (school_id uuid, class_id uuid, venue_id uuid
+        // Get classes for school
+        let class_rows = self.session
+            .query_unpaged(
+                "SELECT class_id, venue_id FROM mma.class WHERE school_id = ?",
+                (school_id,)
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        // Early return if empty
+        if class_rows.rows_num() == 0 {
+            return Ok(());
+        }        
+
+        let mut school_class_ids = Vec::new();
+        for row in class_rows.rows().trace()? {
+            let (class_id, venue_id): (Uuid, Uuid) = row.trace()?;
+            class_hashmap.insert(class_id, (venue_id, ));
+            school_class_ids.push(class_id);
+        }
+
+
+        // Step 1: Get attendance records
+        let attendance_rows = self.session
+            .query_unpaged(
+                "SELECT class_id, user_id, class_start_ts, is_instructor FROM mma.attendance WHERE class_id in ?",
+                (school_class_ids,)
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        // Early return if empty
+        if attendance_rows.rows_num() == 0 {
+            return Ok(());
+        }
+
+        // let mut attendance_data = Vec::new();
+
+        let mut count_total = HashMap::new();
+
+        // Step 2: Enrich attendance with user info
+        for row in attendance_rows.rows().trace()? {
+            let (class_id, user_id, cql_class_start_ts, is_instructor): (Uuid, Uuid, CqlTimestamp, bool) = row.trace()?;
+            if !user_hashmap.contains_key(&user_id) {
+                // Lookup user details
+                let user_row = self.session
+                    .query_unpaged(
+                        "SELECT gender, dob FROM mma.user WHERE user_id = ?",
+                        (user_id,)
+                    )
+                    .await.trace()?
+                    .into_rows_result().trace()?;
+
+                for user_data in user_row.rows().trace()? {
+                    let (gender, dob): (Option<String>, Option<chrono::NaiveDate>) = user_data?;
+                    let gender_id = match gender.as_deref() {
+                        Some("male") => Some(StatGender::Male),
+                        Some("female") => Some(StatGender::Female),
+                        Some(_) => None, // or Some(StatGender::Unknown) if you define it
+                        None => None,
+                    };
+
+                    let age = get_naive_age(&dob);
+                    user_hashmap.insert(user_id, (gender_id, age));
+
+                    break;
+                }
+            }
+            let user_d = user_hashmap.get(&user_id);
+            let user_d = match user_d {
+                Some((gender_id, age)) => {
+
+                    // attendance_data.push((class_id, user_id, cql_class_start_ts.0, is_instructor, gender, age));
+
+                    // Class Stats all
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceAll as i8, 0, 0 as i16)).or_insert(0) += 1;
+
+                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+
+                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+
+                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+
+                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+
+                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
+                    *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+
+
+                    if *gender_id == Some(StatGender::Male) {
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+
+                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+
+                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+
+                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+
+                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+
+                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0)).or_insert(0) += 1;
+                    }
+
+                    if *gender_id == Some(StatGender::Female) {
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+
+                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+
+                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+
+                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+
+                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+
+                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
+                        *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0)).or_insert(0) += 1;
+                    }
+
+
+                    // School Stats all
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::ALL as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+
+                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::HOUR as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+
+                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::DAY as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+
+                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::WEEK as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+
+                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::MONTH as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+
+                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
+                    *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::YEAR as i8, StatCountType::AttendanceAll as i8, 0, 0)).or_insert(0) += 1;
+
+
+                }
+                None => {}
+            };
+
+        }
+
+
+        // Step 4: Insert results into dash_stats
+        for ((id, id_type, stat_window, stat_count_type, v1, v2), count) in count_total {
+            self.session
+                .query_unpaged(
+                    "INSERT INTO mma.dash_stats (school_id, id, id_type, window, count, count_type, v1, v2)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        school_id, 
+                        id, 
+                        id_type,
+                        stat_window, // Assume daily rollup for now
+                        count,
+                        stat_count_type,
+                        v1,
+                        v2
+                    )
+                )
+                .await?;
+        }
+
+        Ok(())
+    }
+
+
+    pub async fn get_dash_stats (
+        &self,
+        school_id: &Uuid,
+    ) -> AppResult<Vec<DashStat>> { 
+        let result = self.session
+            .query_unpaged(
+                "SELECT id, id_type, window, count, count_type, v1, v2 FROM mma.dash_stats WHERE school_id = ?",
+                (school_id,)
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        let mut results = Vec::new();
+        for row in result.rows().trace()? {
+            let (id, id_type, window, count, count_type, v1, v2): (Uuid, i8, i8, i32, i8, i16, i16) = row.trace()?;
+            results.push(DashStat{
+                id,
+                id_type,
+                window,
+                count,
+                count_type,
+                v1,
+                v2
+            });
+        }
+        
+        return Ok(results);
+    }
+
+
     pub async fn unlock_class_attendance (
         &self,
         class_id: &Uuid,
@@ -2356,6 +2650,18 @@ impl ScyllaConnector {
 
             break;
         }
+
+        // let school_id = *school_id;
+
+        // task::spawn(async move {
+        let start = std::time::Instant::now();
+
+        if let Err(e) = self.update_dashboard_stats(&school_id).await {
+            tracing::error!("Failed to update dashboard stats: {:?}", e);
+        } else {
+            tracing::info!("Dashboard stats updated in {:?}", start.elapsed());
+        }
+        // });
 
         // println!("Attendance set for class {}: {:?}", class_id, user_ids);
         Ok(true)
@@ -2996,16 +3302,17 @@ impl ScyllaConnector {
             )
             .await.trace()?
             .into_rows_result().trace()?;
-
+        let utc_now = Utc::now();
         let mut age_years = None;
         for row in user_result.rows().trace()? {
-            let (dob, ) : (Option<String>, ) = row.trace()?;
-            age_years = match dob {
-                Some(dob) => {
-                    calculate_age(&dob)
-                },
-                None => None
-            };
+            let (dob, ) : (Option<NaiveDate>, ) = row.trace()?;
+            age_years = //match dob {
+                // Some(dob) => {
+                    get_naive_age(&dob);
+                    // Some(dob.year() - utc_now.year())
+                // },
+                // None => None
+            //};
         }
 
         let result = self.session
@@ -3291,11 +3598,14 @@ impl ScyllaConnector {
             )
             .await.trace()?
             .into_rows_result().trace()?;
-        
+        let utc_now = Utc::now();
+
         for row in result.rows().trace()?
         {
-            let (dob_str,): (Option<String>,) = row.trace()?;
-            age = get_age(&dob_str);
+            let (dob,): (Option<NaiveDate>,) = row.trace()?;
+            age = get_naive_age(&dob);
+            // age = get_age(&dob_str);
+            // let age = Some(dob.year() - utc_now.year());
         }
         // }
 

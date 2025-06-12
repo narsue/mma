@@ -213,8 +213,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::get_school_users_handler)
             .service(handlers::admin_get_user_data)
             .service(handlers::admin_invite_logged_user)
-
-            
+            .service(handlers::get_dashboard_data)
     })
     .bind(format!("0.0.0.0:{}", port))?
     .run();

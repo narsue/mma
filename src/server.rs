@@ -1989,7 +1989,46 @@ pub mod handlers {
         }
     }
 
+    // Get Venue List
+    #[get("/api/school/get_dashboard_data")]
+    pub async fn get_dashboard_data(
+        state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
+        mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
+    ) -> Result<HttpResponse, ActixError> {
+        // Validate the session and get the creator user_id
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
+        if user.school_user_ids.is_empty() {
+            // If the user has no school_user_ids, they are not associated with any school
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+        let school_user_id = user.school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let creator_user_id = auth_user_id; // Use the authenticated user ID as the creator
+        
+        let dashboard_data = state_manager.db.get_dash_stats(&school_id).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
 
+        match dashboard_data {
+            Ok(dashboard_data) => {
+                // Return the vector of ClassData as a JSON array with 200 OK status
+                Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "success": true,
+                    "school_id": school_id,
+                    "data": dashboard_data
+                })))
+            },
+            Err(e) => {
+                tracing::error!("Database error fetching dashboard data: {:?}", e);
+                // Convert the AppError into an ActixError representing a 500 Internal Server Error
+                Err(ErrorInternalServerError("Error getting dashboard data"))
+            }
+        }
+
+    }
 
     // Get Venue List
     #[get("/api/venue/get_list")]
@@ -1997,11 +2036,6 @@ pub mod handlers {
         state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
         mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
-        // The LoggedUser extractor handles the authentication check.
-        // If authentication fails, Actix Web will return an Unauthorized error
-        // before the handler body executes. The _user variable is unused
-        // if the user_id isn't needed for filtering *this* specific list endpoint.
-
         // Validate the session and get the creator user_id
         let logged_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
