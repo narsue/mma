@@ -830,29 +830,28 @@
                     <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
                     <div>
                         <label for="class-filter-style" class="block text-sm font-medium text-gray-700">Filter by Style:</label>
-                        <select id="class-filter-style" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                            <option value="">All Styles</option>
+                        <select id="class-filter-style" class="mt-1 block w-full pl-3 pr-10 py-2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
                             <!-- Options will be populated by JS -->
                         </select>
                     </div>
                     <div>
                         <label for="class-filter-venue" class="block text-sm font-medium text-gray-700">Filter by Venue:</label>
-                        <select id="class-filter-venue" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                            <option value="">All Venues</option>
+                        <select id="class-filter-venue" class="mt-1 block w-full pl-3 pr-10 py-2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
                             <!-- Options will be populated by JS -->
                         </select>
                 </div>
                 <div>
                     <label for="class-sort-by" class="block text-sm font-medium text-gray-700">Sort By:</label>
-                    <select id="class-sort-by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                    <select id="class-sort-by" class="mt-1 block w-full pl-3 pr-10 py-2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                         <option value="title" selected>Title (A-Z)</option>
                          <option value="next_run_time">Next Run Time</option>
-                         <option value="title">Title (A-Z)</option>
-                         <!-- Add other sorting options -->
+                         <option value="price">Price (Low to High)</option>
+                         <option value="capacity">Capacity</option>
                     </select>
                 </div>
                  <div>
                      <label for="class-search" class="block text-sm font-medium text-gray-700">Search:</label>
-                     <input type="text" id="class-search" placeholder="Search by title, description..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                     <input type="text" id="class-search" placeholder="Search by title, description..." class="mt-1 block w-full pl-3 pr-3 py-2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
                  </div>
                         <div>
                             <button id="apply-filters-button" class="w-full py-2 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-lg hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200 transform hover:scale-105">
@@ -4305,6 +4304,7 @@
 
             // --- Classes Section Logic ---
             const classListDiv = document.getElementById('class-list');
+            let cachedClassesData = null; // Cache for classes data to avoid repeated API calls
             const addClassButton = document.getElementById('createClassBtn');
             const addClassModal = document.getElementById('add-class-modal');
             const addClassForm = document.getElementById('add-class-form');
@@ -4315,12 +4315,12 @@
             const classVenueSelect = document.getElementById('class-venue-id');
             const classStyleSelect = document.getElementById('class-style-ids');
 
-            // Filter and Sort Elements
-            const classFilterStyle = document.getElementById('class-filter-style');
-            const classFilterVenue = document.getElementById('class-filter-venue');
-            const classSortBy = document.getElementById('class-sort-by');
-            const classSearchInput = document.getElementById('class-search');
-            const applyFiltersButton = document.getElementById('apply-filters-button');
+            // Filter and Sort Elements (using let so they can be reassigned after DOM reconstruction)
+            let classFilterStyle = document.getElementById('class-filter-style');
+            let classFilterVenue = document.getElementById('class-filter-venue');
+            let classSortBy = document.getElementById('class-sort-by');
+            let classSearchInput = document.getElementById('class-search');
+            let applyFiltersButton = document.getElementById('apply-filters-button');
 
             // Join by Code Elements
             const classCodeInput = document.getElementById('class-code-input');
@@ -4537,6 +4537,150 @@
                 }
             }
 
+            // Function to calculate the next run time for a frequency
+            function getNextRunTime(frequency, startDate, endDate, startTime) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                const startDateObj = new Date(startDate);
+                startDateObj.setHours(0, 0, 0, 0);
+                
+                // Check if we're past the end date
+                if (endDate) {
+                    const endDateObj = new Date(endDate);
+                    if (today > endDateObj) {
+                        return null; // No more runs
+                    }
+                }
+                
+                // Start checking from today
+                let checkDate = new Date(Math.max(today.getTime(), startDateObj.getTime()));
+                
+                // Look ahead up to 365 days to find next occurrence
+                for (let i = 0; i < 365; i++) {
+                    const dayOfWeek = checkDate.getDay();
+                    let shouldRun = false;
+                    
+                    switch (frequency) {
+                        case 1: // Every Monday
+                            shouldRun = dayOfWeek === 1;
+                            break;
+                        case 2: // Every Tuesday
+                            shouldRun = dayOfWeek === 2;
+                            break;
+                        case 3: // Every Wednesday
+                            shouldRun = dayOfWeek === 3;
+                            break;
+                        case 4: // Every Thursday
+                            shouldRun = dayOfWeek === 4;
+                            break;
+                        case 5: // Every Friday
+                            shouldRun = dayOfWeek === 5;
+                            break;
+                        case 6: // Every Saturday
+                            shouldRun = dayOfWeek === 6;
+                            break;
+                        case 7: // Every Sunday
+                            shouldRun = dayOfWeek === 0;
+                            break;
+                        case 8: // Every Weekday
+                            shouldRun = dayOfWeek >= 1 && dayOfWeek <= 5;
+                            break;
+                        case 9: // Every Weekend
+                            shouldRun = dayOfWeek === 0 || dayOfWeek === 6;
+                            break;
+                        case 10: // Every Day
+                            shouldRun = true;
+                            break;
+                        case 12: // One off
+                        case 16: // One off
+                            shouldRun = checkDate.toDateString() === startDateObj.toDateString();
+                            break;
+                        case 13: // Every week (same as every day within bounds)
+                            shouldRun = true;
+                            break;
+                        case 14: // Every fortnight
+                            const daysDiff = Math.floor((checkDate - startDateObj) / (1000 * 60 * 60 * 24));
+                            const weeksDiff = Math.floor(daysDiff / 7);
+                            shouldRun = weeksDiff >= 0 && weeksDiff % 2 === 0;
+                            break;
+                        case 15: // Every month
+                            shouldRun = checkDate.getDate() === startDateObj.getDate();
+                            break;
+                        default:
+                            return null;
+                    }
+                    
+                    if (shouldRun) {
+                        // Create the full datetime for this occurrence
+                        const nextRun = new Date(checkDate);
+                        const [hours, minutes, seconds] = startTime.split(':');
+                        nextRun.setHours(parseInt(hours), parseInt(minutes), parseInt(seconds || 0));
+                        
+                        // If it's today, make sure the time hasn't passed yet
+                        if (checkDate.toDateString() === today.toDateString()) {
+                            const now = new Date();
+                            if (nextRun <= now) {
+                                // Time has passed today, continue to next day
+                                checkDate.setDate(checkDate.getDate() + 1);
+                                continue;
+                            }
+                        }
+                        
+                        return nextRun;
+                    }
+                    
+                    checkDate.setDate(checkDate.getDate() + 1);
+                }
+                
+                return null; // No occurrence found in the next 365 days
+            }
+
+            // Function to update join button states based on current attendance
+            async function updateJoinButtonStates(targetDiv = classListDiv) {
+                const joinButtons = targetDiv.querySelectorAll('.join-class-button');
+                const currentUserId = my_user_id;
+                
+                if (!currentUserId) return;
+                
+                for (const button of joinButtons) {
+                    const classId = button.getAttribute('data-class-id');
+                    const nextRunTimeStamp = button.getAttribute('data-next-run');
+                    
+                    if (!nextRunTimeStamp) continue;
+                    
+                    try {
+                        const timeSegment = parseInt(nextRunTimeStamp);
+                        const studentsResponse = await fetch('/api/class/get_students', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                class_id: classId,
+                                class_start_ts: timeSegment
+                            })
+                        });
+                        
+                        if (studentsResponse.ok) {
+                            const studentsData = await studentsResponse.json();
+                            const students = studentsData.students || [];
+                            const currentUserAttendance = students.find(student => student.user_id === currentUserId);
+                            const isCurrentlyAttending = currentUserAttendance && currentUserAttendance.attended;
+                            
+                            if (isCurrentlyAttending) {
+                                button.textContent = 'Leave Class';
+                                button.className = 'join-class-button py-2 px-4 bg-red-500 text-white rounded-md hover:bg-red-600 transition duration-200 text-sm';
+                            } else {
+                                button.textContent = 'Join Class';
+                                button.className = 'join-class-button py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 text-sm';
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error checking attendance for button state:', error);
+                    }
+                }
+            }
 
             // --- API Fetch Functions ---
 
@@ -4581,6 +4725,206 @@
                 ];
             }
 
+            // Function to apply client-side filtering, searching, and sorting to classes
+            function applyClassFilters(classes) {
+                // Get filter and sort parameters
+                console.log('Applying filters. Elements:', {
+                    styleFilter: classFilterStyle,
+                    venueFilter: classFilterVenue,
+                    sortBy: classSortBy,
+                    searchInput: classSearchInput
+                });
+                
+                const styleFilterValue = classFilterStyle ? classFilterStyle.value : '';
+                const venueFilterValue = classFilterVenue ? classFilterVenue.value : '';
+                const sortBy = classSortBy ? classSortBy.value : '';
+                const searchTerm = classSearchInput ? classSearchInput.value.trim().toLowerCase() : '';
+                
+                console.log('Filter values:', {
+                    style: styleFilterValue,
+                    venue: venueFilterValue,
+                    sort: sortBy,
+                    search: searchTerm
+                });
+                
+                let filtered = [...classes];
+                
+                // Apply style filter (single-selection)
+                // Only filter if a specific style is selected (not "all")
+                if (styleFilterValue && styleFilterValue !== 'all') {
+                    filtered = filtered.filter(cls => {
+                        if (!cls.styles || !Array.isArray(cls.styles)) return false;
+                        return cls.styles.some(style => {
+                            const styleId = typeof style === 'object' ? style.style_id : style;
+                            return styleId === styleFilterValue;
+                        });
+                    });
+                }
+                
+                // Apply venue filter (single-selection) 
+                // Only filter if a specific venue is selected (not "all")
+                if (venueFilterValue && venueFilterValue !== 'all') {
+                    filtered = filtered.filter(cls => cls.venue_id === venueFilterValue);
+                }
+                
+                // Apply search filter
+                if (searchTerm) {
+                    filtered = filtered.filter(cls => {
+                        const title = (cls.title || '').toLowerCase();
+                        const description = (cls.description || '').toLowerCase();
+                        return title.includes(searchTerm) || description.includes(searchTerm);
+                    });
+                }
+                
+                // Apply sorting
+                if (sortBy) {
+                    filtered.sort((a, b) => {
+                        switch (sortBy) {
+                            case 'title':
+                                return (a.title || '').localeCompare(b.title || '');
+                            case 'price':
+                                const priceA = parseFloat(a.price) || 0;
+                                const priceB = parseFloat(b.price) || 0;
+                                return priceA - priceB;
+                            case 'capacity':
+                                return (a.capacity || 0) - (b.capacity || 0);
+                            case 'next_run_time':
+                                // Calculate next run times for both classes and compare
+                                let nextRunA = null;
+                                let nextRunB = null;
+                                
+                                // Calculate next run time for class A
+                                if (a.frequencies && a.frequencies.length > 0) {
+                                    const freq = a.frequencies[0]; // Use first frequency
+                                    nextRunA = getNextRunTime(freq.frequency, freq.start_date, freq.end_date, freq.start_time);
+                                }
+                                
+                                // Calculate next run time for class B
+                                if (b.frequencies && b.frequencies.length > 0) {
+                                    const freq = b.frequencies[0]; // Use first frequency
+                                    nextRunB = getNextRunTime(freq.frequency, freq.start_date, freq.end_date, freq.start_time);
+                                }
+                                
+                                // Handle null cases (classes with no upcoming runs go to the end)
+                                if (nextRunA === null && nextRunB === null) return 0;
+                                if (nextRunA === null) return 1; // A goes after B
+                                if (nextRunB === null) return -1; // A goes before B
+                                
+                                // Both have next run times, sort by earliest first
+                                return nextRunA.getTime() - nextRunB.getTime();
+                            default:
+                                return 0;
+                        }
+                    });
+                }
+                
+                console.log(`Filtering result: ${classes.length} -> ${filtered.length} classes`);
+                return filtered;
+            }
+
+            // Function to fetch venues for multi-select filter dropdown
+            async function fetchVenuesForFilter(selectElement, preserveSelections = false) {
+                console.log("Fetching venues for filter:", selectElement.id);
+                
+                // Save current selections if preserving
+                let currentSelections = [];
+                if (preserveSelections && selectElement.options) {
+                    currentSelections = Array.from(selectElement.selectedOptions).map(option => option.value);
+                }
+                
+                selectElement.innerHTML = '<option value="" disabled>Loading venues...</option>';
+                selectElement.disabled = true;
+                
+                try {
+                    const response = await fetch('/api/venue/get_list', { method: 'GET' });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        
+                        if (result.success && result.venues) {
+                            const venues = result.venues;
+                            selectElement.disabled = false;
+                            
+                            if (venues.length > 0) {
+                                let optionsHtml = '';
+                                
+                                // Add "All Venues" option
+                                optionsHtml += `<option value="all">All Venues</option>`;
+                                
+                                // Add individual venue options
+                                venues.forEach(venue => {
+                                    optionsHtml += `<option value="${venue.venue_id}">${venue.title}</option>`;
+                                    add_cached_value("venue", venue.venue_id, venue);
+                                });
+                                selectElement.innerHTML = optionsHtml;
+                            } else {
+                                selectElement.innerHTML = '<option value="" disabled>No venues found</option>';
+                            }
+                        } else {
+                            selectElement.innerHTML = `<option value="" disabled>Error: ${result.error_message || 'Unknown error'}</option>`;
+                            console.error('Backend success: false for venues:', result.error_message);
+                        }
+                    } else {
+                        selectElement.innerHTML = '<option value="" disabled>Failed to load venues</option>';
+                        console.error('Failed to fetch venues:', response.status);
+                    }
+                } catch (error) {
+                    selectElement.innerHTML = '<option value="" disabled>Network error</option>';
+                    console.error('Error fetching venues:', error);
+                }
+            }
+
+            // Function to fetch styles for multi-select filter dropdown
+            async function fetchStylesForFilter(selectElement, preserveSelections = false) {
+                console.log("Fetching styles for filter:", selectElement.id);
+                
+                // Save current selections if preserving
+                let currentSelections = [];
+                if (preserveSelections && selectElement.options) {
+                    currentSelections = Array.from(selectElement.selectedOptions).map(option => option.value);
+                }
+                
+                selectElement.innerHTML = '<option value="" disabled>Loading styles...</option>';
+                selectElement.disabled = true;
+                
+                try {
+                    const response = await fetch('/api/style/get_list', { method: 'GET' });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        
+                        if (result.success && Array.isArray(result.styles)) {
+                            selectElement.disabled = false;
+                            
+                            if (result.styles.length > 0) {
+                                let optionsHtml = '';
+                                
+                                // Add "All Styles" option
+                                optionsHtml += `<option value="all">All Styles</option>`;
+                                
+                                // Add individual style options
+                                result.styles.forEach(style => {
+                                    optionsHtml += `<option value="${style.style_id}">${style.title}</option>`;
+                                    add_cached_value("style", style.style_id, style);
+                                });
+                                selectElement.innerHTML = optionsHtml;
+                            } else {
+                                selectElement.innerHTML = '<option value="" disabled>No styles found</option>';
+                            }
+                        } else {
+                            selectElement.innerHTML = `<option value="" disabled>Error: ${result.error_message || 'Unknown error'}</option>`;
+                            console.error('Backend success: false for styles:', result.error_message);
+                        }
+                    } else {
+                        selectElement.innerHTML = '<option value="" disabled>Failed to load styles</option>';
+                        console.error('Failed to fetch styles:', response.status);
+                    }
+                } catch (error) {
+                    selectElement.innerHTML = '<option value="" disabled>Network error</option>';
+                    console.error('Error fetching styles:', error);
+                }
+            }
+
             // Function to fetch and display classes as cards
              async function fetchAndDisplayClasses() {
                 if (!classListDiv) {
@@ -4590,39 +4934,31 @@
                 
                 classListDiv.innerHTML = '<p class="text-gray-600 italic">Loading classes...</p>';
 
-                // Get filter and sort parameters
-                const styleFilter = classFilterStyle.value;
-                const venueFilter = classFilterVenue.value;
-                const sortBy = classSortBy.value;
-                const searchTerm = classSearchInput.value.trim();
-
-                // Construct query parameters
-                const queryParams = new URLSearchParams();
-                if (styleFilter) queryParams.append('style_id', styleFilter);
-                if (venueFilter) queryParams.append('venue_id', venueFilter);
-                if (sortBy) queryParams.append('sort_by', sortBy);
-                if (searchTerm) queryParams.append('search', searchTerm);
-
-                await fetchVenuesForSelect(classFilterVenue);
-
                 const url = `/api/class/get_list`;
 
                 try {
                      const response = await fetch(url, {
                          method: 'GET',
                          headers: {
-                            'Content-Type': 'application/json' // Although GET, good practice for APIs
+                            'Content-Type': 'application/json'
                          }
                      });
 
                      if (response.ok) {
-                        const classes = await response.json(); // Assuming backend returns a JSON array
-                        console.log('Classes received:', classes);
-                        console.log('Classes length:', classes.length);
-                        if (classes.length > 0) {
+                        const allClasses = await response.json();
+                        console.log('Classes received:', allClasses);
+                        
+                        // Cache the data for filtering
+                        cachedClassesData = allClasses;
+                        
+                        // Apply client-side filtering
+                        const filteredClasses = applyClassFilters(allClasses);
+                        console.log('Classes after filtering:', filteredClasses.length);
+                        
+                        if (filteredClasses.length > 0) {
                             let html = '';
 
-                            classes.forEach((cls, index) => {
+                            filteredClasses.forEach((cls, index) => {
                                 console.log(`Processing class ${index}:`, cls);
                                 add_cached_value('class', cls.class_id, cls); // Cache the class data for later use
 
@@ -4644,6 +4980,54 @@
                                     venue_name = venue_data.title;
                                 } else {
                                     venue_name = 'N/A'; 
+                                }
+                                
+                                // Calculate next run time for this class
+                                let nextRunTime = null;
+                                let nextRunTimeStr = 'Not scheduled';
+                                
+                                if (cls.frequency && cls.frequency.length > 0) {
+                                    let earliestNextRun = null;
+                                    
+                                    cls.frequency.forEach(class_frequency => {
+                                        const nextRun = getNextRunTime(
+                                            class_frequency.frequency,
+                                            class_frequency.start_date,
+                                            class_frequency.end_date,
+                                            class_frequency.start_time
+                                        );
+                                        
+                                        if (nextRun && (!earliestNextRun || nextRun < earliestNextRun)) {
+                                            earliestNextRun = nextRun;
+                                        }
+                                    });
+                                    
+                                    if (earliestNextRun) {
+                                        nextRunTime = earliestNextRun;
+                                        nextRunTimeStr = earliestNextRun.toLocaleString();
+                                    }
+                                }
+                                
+                                // Check if class runs today and generate join button accordingly
+                                let joinButtonHtml = '';
+                                let classRunsToday = false;
+                                
+                                if (cls.frequency && cls.frequency.length > 0) {
+                                    cls.frequency.forEach(class_frequency => {
+                                        if (shouldFrequencyRunToday(
+                                            class_frequency.frequency,
+                                            class_frequency.start_date,
+                                            class_frequency.end_date
+                                        )) {
+                                            classRunsToday = true;
+                                        }
+                                    });
+                                }
+                                
+                                if (classRunsToday) {
+                                    // Note: Initial button state is "Join Class" - the actual state will be updated after page load
+                                    // when the event listener checks current attendance status
+                                    joinButtonHtml = `<button class="join-class-button py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 text-sm" data-class-id="${cls.class_id}" data-next-run="${nextRunTime ? nextRunTime.getTime() : ''}">Join Class</button>`;
                                 }
                                 
                                 // Updated calendar event addition code
@@ -4714,15 +5098,15 @@
                                          </div>
 
                                          <div class="text-sm text-gray-600 mb-4">
-                                              <p><strong class="font-medium">Next Run Time:</strong> ${cls.next_run_time || 'Not scheduled'}</p>
+                                              <p><strong class="font-medium">Next Run Time:</strong> ${nextRunTimeStr}</p>
                                               <p><strong class="font-medium">Capacity:</strong> ${cls.capacity !== undefined ? cls.capacity : 'N/A'}</p>
                                               <p><strong class="font-medium">Price:</strong> ${formattedPrice}</p>
                                          </div>
 
 
                                          <div class="flex flex-wrap gap-3">
-                                              <button class="join-class-button py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Join Class</button>
-                                             <button class="checkin-class-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Check-in</button>
+                                              ${joinButtonHtml}
+                                             <!-- <button class="checkin-class-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Check-in</button> -->
                                              ${editbtn}
                                              <!-- Add Delete button if needed -->
                                          </div>
@@ -4794,13 +5178,15 @@
                                              <div>
                                                  <label for="class-sort-by" class="block text-sm font-medium text-gray-700">Sort By:</label>
                                                  <select id="class-sort-by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                                                     <option value="title" selected>Title (A-Z)</option>
                                                      <option value="next_run_time">Next Run Time</option>
-                                                     <option value="title">Title (A-Z)</option>
+                                                     <option value="price">Price (Low to High)</option>
+                                                     <option value="capacity">Capacity</option>
                                                  </select>
                                              </div>
                                              <div>
                                                  <label for="class-search" class="block text-sm font-medium text-gray-700">Search:</label>
-                                                 <input type="text" id="class-search" placeholder="Search by title, description..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                                                 <input type="text" id="class-search" placeholder="Search by title, description..." class="mt-1 block w-full pl-3 pr-3 py-2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
                                              </div>
                                              <div>
                                                  <button id="apply-filters-button" class="w-full py-2 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-lg hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200 transform hover:scale-105">
@@ -4917,6 +5303,73 @@
                              attachClassButtonListeners(updatedClassListDiv);
                              attachVenueNameListeners(updatedClassListDiv);
                              
+                             // Update join button states based on current attendance
+                             updateJoinButtonStates(updatedClassListDiv);
+                             
+                             // Preserve current filter values before populating new dropdowns
+                             const currentVenueValue = classFilterVenue ? classFilterVenue.value : 'all';
+                             const currentStyleValue = classFilterStyle ? classFilterStyle.value : 'all';
+                             const currentSortValue = classSortBy ? classSortBy.value : 'title';
+                             const currentSearchValue = classSearchInput ? classSearchInput.value : '';
+                             
+                             // Populate the new filter dropdowns
+                             if (newClassFilterVenue) {
+                                 await fetchVenuesForFilter(newClassFilterVenue);
+                                 newClassFilterVenue.value = currentVenueValue;
+                             }
+                             if (newClassFilterStyle) {
+                                 await fetchStylesForFilter(newClassFilterStyle);
+                                 newClassFilterStyle.value = currentStyleValue;
+                             }
+                             
+                             // Update global references to use the new elements
+                             if (newClassFilterStyle) classFilterStyle = newClassFilterStyle;
+                             if (newClassFilterVenue) classFilterVenue = newClassFilterVenue;
+                             if (newClassSortBy) {
+                                 classSortBy = newClassSortBy;
+                                 classSortBy.value = currentSortValue;
+                             }
+                             if (newClassSearchInput) {
+                                 classSearchInput = newClassSearchInput;
+                                 classSearchInput.value = currentSearchValue;
+                             }
+                             if (newApplyFiltersButton) applyFiltersButton = newApplyFiltersButton;
+                             
+                             // Re-attach event listeners to new filter elements
+                             if (newApplyFiltersButton) {
+                                 newApplyFiltersButton.addEventListener('click', () => {
+                                     fetchAndDisplayClasses();
+                                 });
+                             }
+                             
+                             if (newClassFilterStyle) {
+                                 newClassFilterStyle.addEventListener('change', () => {
+                                     fetchAndDisplayClasses();
+                                 });
+                             }
+                             
+                             if (newClassFilterVenue) {
+                                 newClassFilterVenue.addEventListener('change', () => {
+                                     fetchAndDisplayClasses();
+                                 });
+                             }
+                             
+                             if (newClassSortBy) {
+                                 newClassSortBy.addEventListener('change', () => {
+                                     fetchAndDisplayClasses();
+                                 });
+                             }
+                             
+                             if (newClassSearchInput) {
+                                 let newSearchTimeout;
+                                 newClassSearchInput.addEventListener('input', () => {
+                                     clearTimeout(newSearchTimeout);
+                                     newSearchTimeout = setTimeout(() => {
+                                         fetchAndDisplayClasses();
+                                     }, 300);
+                                 });
+                             }
+                             
                              // Show create class button if user has permissions and attach event listener
                              const createBtn = document.getElementById('createClassBtn');
                              if (createBtn && hasPermission && hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
@@ -4924,7 +5377,7 @@
                                  console.log('Showing create class button for admin user');
                                  
                                  // Attach click event listener to open modal
-                                 createBtn.addEventListener('click', () => {
+                                 createBtn.addEventListener('click', async () => {
                                      const addClassModal = document.getElementById('add-class-modal');
                                      const classMessageDiv = document.getElementById('create-class-message');
                                      const addClassForm = document.getElementById('add-class-form');
@@ -4939,7 +5392,19 @@
                                          }
                                          if (addClassForm) addClassForm.reset();
                                          if (frequencyContainer) frequencyContainer.innerHTML = '';
-                                         console.log('Opened create class modal');
+                                         
+                                         // Populate venues and styles dropdowns
+                                         const classVenueSelect = document.getElementById('class-venue-id');
+                                         const classStyleSelect = document.getElementById('class-style-ids');
+                                         
+                                         if (classVenueSelect) {
+                                             await fetchVenuesForSelect(classVenueSelect);
+                                         }
+                                         if (classStyleSelect) {
+                                             await fetchStylesForSelect(classStyleSelect);
+                                         }
+                                         
+                                         console.log('Opened create class modal with populated dropdowns');
                                      } else {
                                          console.error('add-class-modal not found');
                                      }
@@ -4966,30 +5431,95 @@
                      console.error("Fetch error for class list:", error);
                  }
              }
+             
 
 
             // Function to attach event listeners to dynamically created class buttons
             function attachClassButtonListeners(targetDiv = classListDiv) {
                 console.log('attachClassButtonListeners called with:', targetDiv);
-                 // Join Button Listener
+                 // Join Button Listener - Toggle attendance for today's class
                  targetDiv.querySelectorAll('.join-class-button').forEach(button => {
                      button.addEventListener('click', async () => {
                          const classId = button.getAttribute('data-class-id');
-                         console.log('Attempting to join class:', classId);
-                         // Implement API call to join class here
+                         const nextRunTimeStamp = button.getAttribute('data-next-run');
+                         
+                         if (!nextRunTimeStamp) {
+                             alert('No class time data found');
+                             return;
+                         }
+                         
+                         const nextRunTime = new Date(parseInt(nextRunTimeStamp));
+                         const currentUserId = my_user_id;
+                         
+                         if (!currentUserId) {
+                             alert('User not logged in');
+                             return;
+                         }
+                         
+                         console.log('Toggling attendance for class:', classId, 'at time:', nextRunTime.toLocaleString());
+                         
                          try {
-                             const response = await fetch(`/api/class/join/${classId}`, { method: 'POST' }); // Adjust endpoint as needed
-                             const result = await response.json();
-                              if (result.success) {
-                                   alert('Successfully joined class!'); // Or show a more integrated message
-                                   // Optionally, refresh the class list to reflect the change
-                                   fetchAndDisplayClasses();
-                              } else {
-                                   alert('Failed to join class: ' + (result.error_message || 'Unknown error'));
-                              }
+                             // First check current attendance status
+                             const timeSegment = nextRunTime.getTime();
+                             const studentsResponse = await fetch('/api/class/get_students', {
+                                 method: 'POST',
+                                 headers: {
+                                     'Content-Type': 'application/json',
+                                 },
+                                 body: JSON.stringify({
+                                     class_id: classId,
+                                     class_start_ts: timeSegment
+                                 })
+                             });
+                             
+                             if (!studentsResponse.ok) {
+                                 alert('Failed to check attendance status');
+                                 return;
+                             }
+                             
+                             const studentsData = await studentsResponse.json();
+                             const students = studentsData.students || [];
+                             
+                             // Check if current user is already attending
+                             const currentUserAttendance = students.find(student => student.user_id === currentUserId);
+                             const isCurrentlyAttending = currentUserAttendance && currentUserAttendance.attended;
+                             
+                             // Toggle attendance - if attending, remove; if not attending, add
+                             const newAttendanceStatus = !isCurrentlyAttending;
+                             
+                             const attendanceResponse = await fetch('/api/class/set_student_attendance', {
+                                 method: 'POST',
+                                 headers: {
+                                     'Content-Type': 'application/json',
+                                 },
+                                 body: JSON.stringify({
+                                     user_ids: [currentUserId],
+                                     present: [newAttendanceStatus],
+                                     class_id: classId,
+                                     class_start_ts: timeSegment
+                                 })
+                             });
+                             
+                             if (attendanceResponse.ok) {
+                                 const result = await attendanceResponse.json();
+                                 if (result.success) {
+                                     if (newAttendanceStatus) {
+                                         button.textContent = 'Leave Class';
+                                         button.className = 'join-class-button py-2 px-4 bg-red-500 text-white rounded-md hover:bg-red-600 transition duration-200 text-sm';
+                                     } else {
+                                         button.textContent = 'Join Class';
+                                         button.className = 'join-class-button py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 text-sm';
+                                     }
+                                 } else {
+                                     alert('Failed to update attendance: ' + (result.error_message || 'Unknown error'));
+                                 }
+                             } else {
+                                 const errorData = await attendanceResponse.json();
+                                 alert('Failed to update attendance: ' + (errorData.error_message || 'Server error'));
+                             }
                          } catch (error) {
-                              console.error('Fetch error joining class:', error);
-                              alert('Network error joining class.');
+                              console.error('Error toggling attendance:', error);
+                              alert('Network error updating attendance.');
                          }
                      });
                  });
@@ -5765,12 +6295,34 @@
             // --- Initial Load / Event Attachments ---
 
             // Fetch filters (venues and styles) when the DOM is ready
-            // fetchVenuesForSelect(classFilterVenue);
-            fetchStylesForSelect(classFilterStyle);
+            fetchVenuesForFilter(classFilterVenue);
+            fetchStylesForFilter(classFilterStyle);
 
             // Attach event listener for applying filters
              applyFiltersButton.addEventListener('click', () => {
-                 fetchAndDisplayClasses(); // Refetch classes with current filters
+                 fetchAndDisplayClasses();
+             });
+             
+             // Add automatic filtering on filter changes
+             classFilterStyle.addEventListener('change', () => {
+                 fetchAndDisplayClasses();
+             });
+             
+             classFilterVenue.addEventListener('change', () => {
+                 fetchAndDisplayClasses();
+             });
+             
+             classSortBy.addEventListener('change', () => {
+                 fetchAndDisplayClasses();
+             });
+             
+             // Add real-time search filtering with debounce
+             let searchTimeout;
+             classSearchInput.addEventListener('input', () => {
+                 clearTimeout(searchTimeout);
+                 searchTimeout = setTimeout(() => {
+                     fetchAndDisplayClasses();
+                 }, 300);
              });
 
              // Handle Join by Code button click
@@ -5952,7 +6504,7 @@
                 this.currentStudents = [];
                 this.currentViewMode = 'list'; // 'list' or 'grid'
                 this.SLOT_HEIGHT = 60;
-                this.START_HOUR = 6;
+                this.START_HOUR = 0;
                 this.END_HOUR = 23;
                 this.init();
             }
