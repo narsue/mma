@@ -7,20 +7,43 @@
     <!-- Include Tailwind CSS from CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://js.stripe.com/v3/"></script>
+    <!-- Add Google Fonts for better typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
     <!-- Flowbite + Chart.js (Flowbite uses Chart.js under the hood) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script src="https://unpkg.com/flowbite@2.3.0/dist/flowbite.min.js"></script>
 
     <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
 
         html, body {
             overflow-x: hidden;
         }
 
-        /* Basic nav styling to demonstrate */
+        .portal-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .section-card {
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .section-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        /* Enhanced nav styling */
         nav {
-            overflow-x: auto;                  /* turn on horizontal scrolling */
-            -webkit-overflow-scrolling: touch; /* smooth momentum scrolling on iOS */
+            background: rgba(31, 41, 55, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
         
         nav ul {
@@ -28,23 +51,33 @@
             list-style: none;
             padding: 0;
             margin: 0;
-            background-color: #1f2937; /* Tailwind: bg-gray-800 */
-            display: inline-flex;       /* shrink‐to‐content inline flexbox */
-            min-width: max-content;     /* never collapse below content width */
-            flex-wrap: nowrap;          /* don’t wrap on multiple lines */
+            display: inline-flex;
+            min-width: max-content;
+            flex-wrap: nowrap;
         }
         nav ul li {
-            margin-right: 1rem; /* Tailwind: mr-4 */
+            margin-right: 0.5rem;
             flex-shrink: 0;
         }
         nav ul li a {
-            color: #f3f4f6; /* Tailwind: text-gray-100 */
+            color: #f3f4f6;
             text-decoration: none;
-            padding: 1rem; /* Tailwind: p-4 */
+            padding: 0.75rem 1rem;
             display: block;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            font-size: 0.875rem;
         }
         nav ul li a:hover {
-            background-color: #374151; /* Tailwind: bg-gray-700 */
+            background: rgba(99, 102, 241, 0.2);
+            color: #c7d2fe;
+            transform: translateY(-1px);
+        }
+        nav ul li a.active {
+            background: rgba(99, 102, 241, 0.3);
+            color: #c7d2fe;
+            font-weight: 600;
         }
 
         /* Styles for content sections */
@@ -588,41 +621,148 @@
     </style>
 
 </head>
-<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col">
-    <nav>
-        <ul>
-            <!-- Nav items for client-side tab switching -->
-            <li id="dashboard-nav" class="hidden"><a href="#" data-section="dashboard" class="nav-link">Dashboard</a></li>
-            <li><a href="#" data-section="frontpage" class="nav-link">Front Page</a></li>
-            <li><a href="#" data-section="classes" class="nav-link">Classes</a></li>
-            <li><a href="#" data-section="venues" class="nav-link">Venues</a></li>
-            <li><a href="#" data-section="styles" class="nav-link">Styles</a></li>
-            <li><a href="#" data-section="waivers" class="nav-link">Waivers</a></li>
-            <li><a href="#" data-section="locations" class="nav-link">Locations</a></li>
-            <li><a href="#" data-section="pos" class="nav-link">Today</a></li>
-            <li><a href="#" data-section="payment_plans" class="nav-link">Plans</a></li>
-            <li id="users-nav" class="nav-item hidden"><a href="#" data-section="users" class="nav-link">Users</a></li>
-            <li><a href="#" data-section="account" class="nav-link">Account</a></li>
-            <!-- Logout is a different action -->
-            <li><a href="#" id="logoutLink" class="nav-link">Log out</a></li>
-        </ul>
+<body class="bg-gradient-to-br from-gray-50 to-indigo-100 text-gray-800 min-h-screen">
+    <!-- Enhanced Navigation -->
+    <nav class="fixed w-full top-0 z-50">
+        <div class="max-w-full px-4">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <span class="text-white text-xl font-bold tracking-wide font-poppins">MMA Portal</span>
+                    </div>
+                </div>
+                <div class="flex-1 flex justify-center">
+                    <div class="flex items-center space-x-1">
+                        <ul class="flex space-x-1">
+                            <!-- Nav items for client-side tab switching -->
+                            <li id="dashboard-nav" class="hidden"><a href="#" data-section="dashboard" class="nav-link">📊 Dashboard</a></li>
+                            <li><a href="#" data-section="frontpage" class="nav-link">🏠 Home</a></li>
+                            <li><a href="#" data-section="classes" class="nav-link">🥋 Classes</a></li>
+                            <li><a href="#" data-section="venues" class="nav-link">📍 Venues</a></li>
+                            <li><a href="#" data-section="styles" class="nav-link">🎯 Styles</a></li>
+                            <li><a href="#" data-section="waivers" class="nav-link">📋 Waivers</a></li>
+                            <li><a href="#" data-section="locations" class="nav-link">🗺️ Locations</a></li>
+                            <li><a href="#" data-section="pos" class="nav-link">📅 Today</a></li>
+                            <li><a href="#" data-section="payment_plans" class="nav-link">💳 Plans</a></li>
+                            <li id="users-nav" class="nav-item hidden"><a href="#" data-section="users" class="nav-link">👥 Users</a></li>
+                            <li><a href="#" data-section="account" class="nav-link">⚙️ Account</a></li>
+                            <!-- Logout is a different action -->
+                            <li><a href="#" id="logoutLink" class="nav-link text-red-300 hover:text-red-200">🚪 Logout</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
     </nav>
 
-    <div class="container mx-auto mt-8 p-6 bg-white rounded-lg shadow-md flex-grow mb-8 max-w-7xl"> <!-- Increased max-w -->
+    <!-- Main Content Area -->
+    <div class="pt-20 px-4 sm:px-6 lg:px-8 pb-8">
+        <div class="max-w-7xl mx-auto">
         <!-- Section: Front Page -->
         <div id="frontpageSection" class="portal-section">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Welcome to the Portal!</h2>
-            <p class="text-gray-700 mb-6">This is your main dashboard area. Select an option from the navigation above.</p>
-            <!-- Add summary data, recent activity, etc. here -->
-             <div id="frontpage-content">
-                  <!-- Dynamic dashboard content will go here -->
-                  <p>Loading dashboard content...</p>
-             </div>
+            <div class="section-card bg-white rounded-3xl shadow-xl p-8 mb-8">
+                <div class="text-center mb-12">
+                    <div class="w-24 h-24 portal-gradient rounded-full flex items-center justify-center mx-auto mb-6">
+                        <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                        </svg>
+                    </div>
+                    <h1 class="text-4xl font-bold text-gray-900 mb-4 font-poppins">Welcome to Your Portal</h1>
+                    <p class="text-xl text-gray-600 mb-8">Manage your martial arts business with powerful tools and insights</p>
+                </div>
+
+                <!-- Quick Stats Grid -->
+                <div id="frontpage-content" class="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl p-6 text-center">
+                        <div class="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-900 mb-1">-</h3>
+                        <p class="text-gray-600 text-sm">Total Members</p>
+                    </div>
+
+                    <div class="bg-gradient-to-br from-green-50 to-emerald-100 rounded-2xl p-6 text-center">
+                        <div class="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-900 mb-1">-</h3>
+                        <p class="text-gray-600 text-sm">Active Classes</p>
+                    </div>
+
+                    <div class="bg-gradient-to-br from-purple-50 to-pink-100 rounded-2xl p-6 text-center">
+                        <div class="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-900 mb-1">-</h3>
+                        <p class="text-gray-600 text-sm">Today's Attendance</p>
+                    </div>
+
+                    <div class="bg-gradient-to-br from-yellow-50 to-orange-100 rounded-2xl p-6 text-center">
+                        <div class="w-12 h-12 bg-yellow-500 rounded-xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-900 mb-1">-</h3>
+                        <p class="text-gray-600 text-sm">Monthly Revenue</p>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="grid md:grid-cols-3 gap-6">
+                    <button onclick="showSection('classes')" class="section-card bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-2xl p-6 text-center hover:shadow-lg transition-all duration-300">
+                        <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-semibold mb-2">Create Class</h3>
+                        <p class="text-blue-100 text-sm">Schedule a new class session</p>
+                    </button>
+
+                    <button onclick="showSection('pos')" class="section-card bg-gradient-to-br from-green-500 to-emerald-600 text-white rounded-2xl p-6 text-center hover:shadow-lg transition-all duration-300">
+                        <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-semibold mb-2">Take Attendance</h3>
+                        <p class="text-green-100 text-sm">Mark today's class attendance</p>
+                    </button>
+
+                    <button onclick="showSection('account')" class="section-card bg-gradient-to-br from-purple-500 to-pink-600 text-white rounded-2xl p-6 text-center hover:shadow-lg transition-all duration-300">
+                        <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-semibold mb-2">Manage Account</h3>
+                        <p class="text-purple-100 text-sm">Update your profile settings</p>
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- Section: Dashboard Page -->
-        <div id="dashboardSection" class="portal-section p-6">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Dashboard</h2>
+        <div id="dashboardSection" class="portal-section">
+            <div class="section-card bg-white rounded-3xl shadow-xl p-8 mb-8">
+                <div class="flex items-center justify-between mb-8">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900 font-poppins">Analytics Dashboard</h1>
+                        <p class="text-gray-600 mt-2">Monitor your gym's performance and growth</p>
+                    </div>
+                    <div class="w-16 h-16 portal-gradient rounded-full flex items-center justify-center">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </div>
+                </div>
           
             <!-- Filters -->
             <div class="mb-6 flex flex-col sm:flex-row gap-4">
@@ -668,24 +808,39 @@
 
         <!-- Section: Classes -->
         <div id="classesSection" class="portal-section">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Classes Management</h2>
-            <p class="text-gray-700 mb-6">View and manage upcoming classes.</p>
-
-            <!-- Filter and Sort Controls -->
-            <div class="flex flex-wrap gap-4 mb-6 items-center">
-                <div>
-                    <label for="class-filter-style" class="block text-sm font-medium text-gray-700">Filter by Style:</label>
-                    <select id="class-filter-style" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                         <option value="">All Styles</option>
-                         <!-- Options will be populated by JS -->
-                    </select>
+            <div class="section-card bg-white rounded-3xl shadow-xl p-8 mb-8">
+                <div class="flex items-center justify-between mb-8">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900 font-poppins">Classes Management</h1>
+                        <p class="text-gray-600 mt-2">Schedule and manage your martial arts classes</p>
+                    </div>
+                    <div class="flex space-x-4">
+                        <button id="createClassBtn" class="hidden inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 transform hover:scale-105">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            Create Class
+                        </button>
+                    </div>
                 </div>
-                 <div>
-                    <label for="class-filter-venue" class="block text-sm font-medium text-gray-700">Filter by Venue:</label>
-                    <select id="class-filter-venue" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                         <option value="">All Venues</option>
-                         <!-- Options will be populated by JS -->
-                    </select>
+
+                <!-- Filter and Sort Controls -->
+                <div class="bg-gray-50 rounded-2xl p-6 mb-8">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Filter & Search Classes</h3>
+                    <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                    <div>
+                        <label for="class-filter-style" class="block text-sm font-medium text-gray-700">Filter by Style:</label>
+                        <select id="class-filter-style" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                            <option value="">All Styles</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    <div>
+                        <label for="class-filter-venue" class="block text-sm font-medium text-gray-700">Filter by Venue:</label>
+                        <select id="class-filter-venue" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                            <option value="">All Venues</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
                 </div>
                 <div>
                     <label for="class-sort-by" class="block text-sm font-medium text-gray-700">Sort By:</label>
@@ -699,30 +854,44 @@
                      <label for="class-search" class="block text-sm font-medium text-gray-700">Search:</label>
                      <input type="text" id="class-search" placeholder="Search by title, description..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
                  </div>
-                <button id="apply-filters-button" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition duration-200">Apply Filters</button>
+                        <div>
+                            <button id="apply-filters-button" class="w-full py-2 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-lg hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200 transform hover:scale-105">
+                                Apply Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Join by Code -->
+                <div class="bg-blue-50 rounded-2xl p-6 mb-8">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Join</h3>
+                    <div class="flex items-center gap-4">
+                        <div class="flex-grow">
+                            <label for="class-code-input" class="block text-sm font-medium text-gray-700 mb-2">Join Class by Code:</label>
+                            <input type="text" id="class-code-input" placeholder="Enter Class Code" class="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200">
+                        </div>
+                        <div class="flex-shrink-0">
+                            <button id="join-by-code-button" class="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200 transform hover:scale-105 mt-6">
+                                Join Class
+                            </button>
+                        </div>
+                    </div>
+                    <div id="join-by-code-message" class="mt-4 text-center text-sm"></div>
+                </div>
+
+                <!-- Class listing area -->
+                <div id="class-list" class="mt-6 space-y-6">
+                    <!-- Class cards will be loaded here -->
+                    <p class="text-gray-600 italic">Loading classes...</p>
+                </div>
             </div>
 
-             <!-- Join by Code -->
-             <div class="mb-6 flex items-center gap-4">
-                 <label for="class-code-input" class="block text-sm font-medium text-gray-700">Join Class by Code:</label>
-                 <input type="text" id="class-code-input" placeholder="Enter Class Code" class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm flex-grow max-w-xs">
-                 <button id="join-by-code-button" class="py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200">Join</button>
-             </div>
-             <div id="join-by-code-message" class="mt-2 text-center text-gray-700 text-sm"></div>
 
+        </div>
+    </div>
 
-             <button id="add-class-button" class="py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 mb-6">Add New Class</button>
-
-
-            <!-- Class listing area -->
-            <div id="class-list" class="mt-6 space-y-6">
-                 <!-- Class cards will be loaded here -->
-                 <p class="text-gray-600 italic">Loading classes...</p>
-            </div>
-
-
-             <!-- Add Class Modal (Remains the same) -->
-            <div id="add-class-modal" class="modal">
+    <!-- Add Class Modal (Remains the same) -->
+    <div id="add-class-modal" class="modal">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h3>Add New Class</h3>
@@ -903,33 +1072,65 @@
 
         <!-- Section: Venues -->
         <div id="venuesSection" class="portal-section">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Venues Management</h2>
-            <p class="text-gray-700 mb-6">Information about different available venues.</p>
+            <!-- Modern Header with Gradient Icon -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">Venues Management</h2>
+                            <p class="text-gray-600">Manage and organize your training locations</p>
+                        </div>
+                    </div>
+                    <button id="add-venue-button" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-medium rounded-lg hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Add Venue
+                    </button>
+                </div>
 
-            <!-- Filter and Sort Controls for Venues -->
-            <div class="flex flex-wrap gap-4 mb-6 items-center">
-                <div>
-                    <label for="venue-search" class="block text-sm font-medium text-gray-700">Search:</label>
-                    <input type="text" id="venue-search" placeholder="Search by name, address..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                <!-- Enhanced Filter and Sort Controls -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label for="venue-search" class="block text-sm font-medium text-gray-700 mb-1">Search Venues</label>
+                            <div class="relative">
+                                <input type="text" id="venue-search" placeholder="Search by name, address..." class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="venue-sort-by" class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+                            <select id="venue-sort-by" class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 sm:text-sm bg-white">
+                                <option value="title">Name (A-Z)</option>
+                                <option value="distance">Distance</option>
+                                <option value="created">Recently Added</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <button id="apply-venue-filters-button" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors duration-200">
+                                Apply Filters
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label for="venue-sort-by" class="block text-sm font-medium text-gray-700">Sort By:</label>
-                    <select id="venue-sort-by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                        <option value="title">Name (A-Z)</option>
-                        <option value="distance">Distance</option> <!-- Requires location data in backend -->
-                        <!-- Add other sorting options -->
-                    </select>
-                </div>
-                <button id="apply-venue-filters-button" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition duration-200">Apply Filters</button>
             </div>
 
-
-            <button id="add-venue-button" class="py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 mb-6">Add New Venue</button>
-
-            <!-- Placeholder for displaying the list of venues -->
-            <div id="venue-list" class="mt-6 space-y-6">
-                <p class="text-gray-600 italic">Loading venues...</p>
-                <!-- Venue data will be loaded here by JavaScript -->
+            <!-- Modern Venue List Container -->
+            <div id="venue-list" class="space-y-4">
+                <div class="text-center py-8">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                    <p class="text-gray-600">Loading venues...</p>
+                </div>
             </div>
 
 
@@ -1060,32 +1261,65 @@
 
         <!-- Section: Styles -->
         <div id="stylesSection" class="portal-section">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Styles Management</h2>
-            <p class="text-gray-700 mb-6">Information about different styles.</p>
+            <!-- Modern Header with Gradient Icon -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">Styles Management</h2>
+                            <p class="text-gray-600">Manage martial arts styles and disciplines</p>
+                        </div>
+                    </div>
+                    <button id="add-style-button" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-orange-600 to-red-600 text-white font-medium rounded-lg hover:from-orange-700 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Add Style
+                    </button>
+                </div>
 
-            <!-- Filter and Sort Controls for Styles -->
-            <div class="flex flex-wrap gap-4 mb-6 items-center">
-                <div>
-                    <label for="style-search" class="block text-sm font-medium text-gray-700">Search:</label>
-                    <input type="text" id="style-search" placeholder="Search by name, description..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                <!-- Enhanced Filter and Sort Controls -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label for="style-search" class="block text-sm font-medium text-gray-700 mb-1">Search Styles</label>
+                            <div class="relative">
+                                <input type="text" id="style-search" placeholder="Search by name, description..." class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 sm:text-sm">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="style-sort-by" class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+                            <select id="style-sort-by" class="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 sm:text-sm bg-white">
+                                <option value="title">Name (A-Z)</option>
+                                <option value="created">Recently Added</option>
+                                <option value="popularity">Most Popular</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <button id="apply-style-filters-button" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-colors duration-200">
+                                Apply Filters
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label for="style-sort-by" class="block text-sm font-medium text-gray-700">Sort By:</label>
-                    <select id="style-sort-by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                        <option value="title">Name (A-Z)</option>
-                        <!-- Add other sorting options if needed -->
-                    </select>
-                </div>
-                <button id="apply-style-filters-button" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition duration-200">Apply Filters</button>
             </div>
 
-
-            <button id="add-style-button" class="py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 mb-6">Add New Style</button>
-
-            <!-- Placeholder for displaying the list of styles -->
-            <div id="style-list" class="mt-6 space-y-6">
-                <p class="text-gray-600 italic">Loading styles...</p>
-                <!-- Style data will be loaded here by JavaScript -->
+            <!-- Modern Style List Container -->
+            <div id="style-list" class="space-y-4">
+                <div class="text-center py-8">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+                    <p class="text-gray-600">Loading styles...</p>
+                </div>
             </div>
 
             <!-- Add Style Modal (Remains the same) -->
@@ -1150,21 +1384,55 @@
 
          <!-- Section: Waivers -->
         <div id="waiversSection" class="portal-section">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Waiver Management</h2>
-
-            <div id="latest-waiver-display" class="mt-6 p-4 border border-gray-300 rounded-md bg-gray-50">
-                <!-- Latest waiver content will be loaded here by JavaScript -->
-                <p class="text-gray-600 italic">Loading waiver...</p>
+            <!-- Modern Header with Gradient Icon -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-lg flex items-center justify-center">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">Waiver Management</h2>
+                            <p class="text-gray-600">Manage liability waivers and legal documents</p>
+                        </div>
+                    </div>
+                    <button id="create-waiver-button" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 text-white font-medium rounded-lg hover:from-teal-700 hover:to-cyan-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg" style="display: none;">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Create New Waiver
+                    </button>
+                </div>
             </div>
 
-            <div id="accept-waiver-area" class="mt-4">
-                <!-- Accept button and messages will appear here -->
-                <div id="accept-waiver-message" class="message text-center"></div>
-                <button id="accept-waiver-button" class="py-2 px-4 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-200 mt-4" style="display: none;">Accept Waiver</button>
+            <!-- Modern Waiver Display Card -->
+            <div class="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+                <div class="bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Current Waiver</h3>
+                    <p class="text-sm text-gray-600 mt-1">Review and accept the liability waiver below</p>
+                </div>
+                <div id="latest-waiver-display" class="p-6">
+                    <div class="text-center py-8">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+                        <p class="text-gray-600">Loading waiver...</p>
+                    </div>
+                </div>
             </div>
 
-
-            <button id="create-waiver-button" class="py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 mt-6" style="display: none;">Create New Waiver</button>
+            <!-- Modern Accept Waiver Area -->
+            <div id="accept-waiver-area" class="bg-white rounded-lg shadow-md p-6">
+                <div id="accept-waiver-message" class="message text-center mb-4"></div>
+                <div class="text-center">
+                    <button id="accept-waiver-button" class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-medium rounded-lg hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg" style="display: none;">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Accept Waiver
+                    </button>
+                </div>
+            </div>
 
             <!-- Waiver Creation Modal -->
             <div id="create-waiver-modal" class="modal">
@@ -2186,13 +2454,13 @@
                         document.getElementById("dashboard-nav").classList.remove("hidden");
                         document.getElementById("users-nav").classList.remove("hidden");
                         document.getElementById("add-venue-button").classList.remove("hidden");
-                        document.getElementById("add-class-button").classList.remove("hidden");
+                        document.getElementById("createClassBtn").classList.remove("hidden");
                     }
                     else{
                         document.getElementById("dashboard-nav").classList.add("hidden");
                         document.getElementById("users-nav").classList.add("hidden");
                         document.getElementById("add-venue-button").classList.add("hidden");
-                        document.getElementById("add-class-button").classList.add("hidden");
+                        document.getElementById("createClassBtn").classList.add("hidden");
                     }
 
                     if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin, Permissions.CreateWaiver])) {
@@ -2578,10 +2846,14 @@
 
             // --- Section Switching Logic (Remains the same) ---
             function showSection(sectionId) {
+                console.log('showSection called with:', sectionId);
                 sections.forEach(section => {
                     if (section.id === sectionId + 'Section') {
+                        console.log('Showing section:', section.id);
+                        section.classList.add('active');
                         section.style.display = 'block'; // Or 'flex'
                     } else {
+                        section.classList.remove('active');
                         section.style.display = 'none';
                     }
                 });
@@ -2606,6 +2878,7 @@
 					initPaymentPlansSection();
 				}
                 if (sectionId === 'classes') {
+                    console.log('Switching to classes section, calling fetchAndDisplayClasses');
                     fetchAndDisplayClasses(); // Fetch and display classes when this section is shown
                 }
                 if (sectionId === 'venues') {
@@ -4032,7 +4305,7 @@
 
             // --- Classes Section Logic ---
             const classListDiv = document.getElementById('class-list');
-            const addClassButton = document.getElementById('add-class-button');
+            const addClassButton = document.getElementById('createClassBtn');
             const addClassModal = document.getElementById('add-class-modal');
             const addClassForm = document.getElementById('add-class-form');
             const submitCreateClassButton = document.getElementById('submit-create-class');
@@ -4150,8 +4423,13 @@
                         <button type="button" class="remove-frequency-button absolute top-2 right-2 bg-red-500 text-white rounded px-2 py-1 text-xs font-medium hover:bg-red-600">Remove</button>
                         ${isEdit && frequencyId ? `<input type="hidden" name="${prefix}-${htmlId}-id" value="${frequencyId}">` : ''} <!-- Hidden input for frequency ID -->
                         <div class="form-group">
-                            <label for="${prefix}-${htmlId}-frequency" class="block text-sm font-medium text-gray-700 mb-1">Frequency (int):</label>
-                            <input type="number" id="${prefix}-${htmlId}-frequency" value="${frequencyValue}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <label for="${prefix}-${htmlId}-frequency" class="block text-sm font-medium text-gray-700 mb-1">Frequency:</label>
+                            <select id="${prefix}-${htmlId}-frequency" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                <option value="">Select frequency...</option>
+                                ${getFrequencyOptions().map(option => 
+                                    `<option value="${option.id}" ${frequencyValue == option.id ? 'selected' : ''}>${option.label}</option>`
+                                ).join('')}
+                            </select>
                         </div>
                         <div class="form-group">
                             <label for="${prefix}-${htmlId}-start-date" class="block text-sm font-medium text-gray-700 mb-1">Start Date:</label>
@@ -4262,8 +4540,54 @@
 
             // --- API Fetch Functions ---
 
+            // Helper function to get frequency label from ID
+            function getFrequencyLabel(frequencyId) {
+                const frequencyMap = {
+                    1: 'Every Monday',
+                    2: 'Every Tuesday', 
+                    3: 'Every Wednesday',
+                    4: 'Every Thursday',
+                    5: 'Every Friday',
+                    6: 'Every Saturday',
+                    7: 'Every Sunday',
+                    8: 'Every Weekday',
+                    9: 'Every Weekend',
+                    10: 'Every Day',
+                    11: 'Public Holidays',
+                    12: 'One Off',
+                    13: 'Every Week',
+                    16: 'One Off (Alt)'
+                };
+                return frequencyMap[frequencyId] || `Frequency ${frequencyId}`;
+            }
+
+            // Helper function to get all frequency options
+            function getFrequencyOptions() {
+                return [
+                    { id: 1, label: 'Every Monday' },
+                    { id: 2, label: 'Every Tuesday' },
+                    { id: 3, label: 'Every Wednesday' },
+                    { id: 4, label: 'Every Thursday' },
+                    { id: 5, label: 'Every Friday' },
+                    { id: 6, label: 'Every Saturday' },
+                    { id: 7, label: 'Every Sunday' },
+                    { id: 8, label: 'Every Weekday (Mon-Fri)' },
+                    { id: 9, label: 'Every Weekend (Sat-Sun)' },
+                    { id: 10, label: 'Every Day' },
+                    { id: 11, label: 'Public Holidays' },
+                    { id: 12, label: 'One Off Event' },
+                    { id: 13, label: 'Every Week' },
+                    { id: 16, label: 'One Off (Alternative)' }
+                ];
+            }
+
             // Function to fetch and display classes as cards
              async function fetchAndDisplayClasses() {
+                if (!classListDiv) {
+                    console.error('classListDiv is null! Element with id="class-list" not found!');
+                    return;
+                }
+                
                 classListDiv.innerHTML = '<p class="text-gray-600 italic">Loading classes...</p>';
 
                 // Get filter and sort parameters
@@ -4293,10 +4617,13 @@
 
                      if (response.ok) {
                         const classes = await response.json(); // Assuming backend returns a JSON array
+                        console.log('Classes received:', classes);
+                        console.log('Classes length:', classes.length);
                         if (classes.length > 0) {
                             let html = '';
 
-                            classes.forEach(cls => {
+                            classes.forEach((cls, index) => {
+                                console.log(`Processing class ${index}:`, cls);
                                 add_cached_value('class', cls.class_id, cls); // Cache the class data for later use
 
                                 // Determine eligibility status
@@ -4402,13 +4729,227 @@
                                      </div>
                                  `;
                              });
+                             console.log('Generated HTML length:', html.length);
+                             console.log('Setting classListDiv innerHTML');
                              classListDiv.innerHTML = html;
+                             console.log('classListDiv innerHTML set');
+                             
+                             // Debug visibility
+                             const classesSection = document.getElementById('classesSection');
+                             console.log('classesSection display style:', classesSection.style.display);
+                             console.log('classesSection computed display:', getComputedStyle(classesSection).display);
+                             console.log('classesSection classList:', classesSection.classList.toString());
+                             console.log('First 500 chars of generated HTML:', html.substring(0, 500));
+                             console.log('classListDiv after setting innerHTML:', classListDiv.innerHTML.substring(0, 200));
+                             
+                             
+                             
+                             // Debug the section dimensions and position
+                             const rect = classesSection.getBoundingClientRect();
+                             console.log('classesSection position:', rect);
+                             console.log('classesSection width:', rect.width, 'height:', rect.height);
+                             console.log('classesSection computed styles:', {
+                                 display: getComputedStyle(classesSection).display,
+                                 visibility: getComputedStyle(classesSection).visibility,
+                                 opacity: getComputedStyle(classesSection).opacity,
+                                 overflow: getComputedStyle(classesSection).overflow,
+                                 position: getComputedStyle(classesSection).position,
+                                 zIndex: getComputedStyle(classesSection).zIndex
+                             });
+                             
+                             // Restore the original classes HTML structure
+                             classesSection.innerHTML = `
+                                 <div class="section-card bg-white rounded-3xl shadow-xl p-8 mb-8">
+                                     <div class="flex items-center justify-between mb-8">
+                                         <div>
+                                             <h1 class="text-3xl font-bold text-gray-900 font-poppins">Classes Management</h1>
+                                             <p class="text-gray-600 mt-2">Schedule and manage your martial arts classes</p>
+                                         </div>
+                                         <div class="flex space-x-4">
+                                             <button id="createClassBtn" class="hidden inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 transform hover:scale-105">
+                                                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                                 </svg>
+                                                 Create Class
+                                             </button>
+                                         </div>
+                                     </div>
+                                     
+                                     <!-- Filter and Sort Controls -->
+                                     <div class="bg-gray-50 rounded-2xl p-6 mb-8">
+                                         <h3 class="text-lg font-semibold text-gray-900 mb-4">Filter & Search Classes</h3>
+                                         <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                                             <div>
+                                                 <label for="class-filter-style" class="block text-sm font-medium text-gray-700">Filter by Style:</label>
+                                                 <select id="class-filter-style" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                                                     <option value="">All Styles</option>
+                                                 </select>
+                                             </div>
+                                             <div>
+                                                 <label for="class-filter-venue" class="block text-sm font-medium text-gray-700">Filter by Venue:</label>
+                                                 <select id="class-filter-venue" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                                                     <option value="">All Venues</option>
+                                                 </select>
+                                             </div>
+                                             <div>
+                                                 <label for="class-sort-by" class="block text-sm font-medium text-gray-700">Sort By:</label>
+                                                 <select id="class-sort-by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                                                     <option value="next_run_time">Next Run Time</option>
+                                                     <option value="title">Title (A-Z)</option>
+                                                 </select>
+                                             </div>
+                                             <div>
+                                                 <label for="class-search" class="block text-sm font-medium text-gray-700">Search:</label>
+                                                 <input type="text" id="class-search" placeholder="Search by title, description..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                                             </div>
+                                             <div>
+                                                 <button id="apply-filters-button" class="w-full py-2 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-lg hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200 transform hover:scale-105">
+                                                     Apply Filters
+                                                 </button>
+                                             </div>
+                                         </div>
+                                     </div>
 
-                             // Attach event listeners after rendering
-                             attachClassButtonListeners();
-                             attachVenueNameListeners(); // Attach listeners to venue names
+                                     <!-- Join by Code -->
+                                     <div class="bg-blue-50 rounded-2xl p-6 mb-8">
+                                         <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Join</h3>
+                                         <div class="flex items-center gap-4">
+                                             <div class="flex-grow">
+                                                 <label for="class-code-input" class="block text-sm font-medium text-gray-700 mb-2">Join Class by Code:</label>
+                                                 <input type="text" id="class-code-input" placeholder="Enter Class Code" class="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200">
+                                             </div>
+                                             <div class="flex-shrink-0">
+                                                 <button id="join-by-code-button" class="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200 transform hover:scale-105 mt-6">
+                                                     Join Class
+                                                 </button>
+                                             </div>
+                                         </div>
+                                         <div id="join-by-code-message" class="mt-4 text-center text-sm"></div>
+                                     </div>
+
+                                     <!-- Class listing area -->
+                                     <div id="class-list" class="mt-6 space-y-6">
+                                         <!-- Classes will be loaded here -->
+                                     </div>
+                                 </div>
+                             `;
+                             console.log('Restored original classes structure with proper HTML');
+                             
+                             // Now populate the class-list div with the generated class cards
+                             const newClassListDiv = classesSection.querySelector('#class-list');
+                             if (newClassListDiv && html) {
+                                 newClassListDiv.innerHTML = html;
+                                 console.log('Populated class-list with generated HTML');
+                             }
+                             
+                             // Check for duplicate IDs or CSS overrides
+                             const allClassesSections = document.querySelectorAll('#classesSection');
+                             console.log('Number of elements with ID classesSection:', allClassesSections.length);
+                             
+                             const allClassLists = document.querySelectorAll('#class-list');
+                             console.log('Number of elements with ID class-list:', allClassLists.length);
+                             
+                             // Check parent containers
+                             console.log('classesSection parent:', classesSection.parentElement);
+                             console.log('classesSection parent display:', getComputedStyle(classesSection.parentElement).display);
+                             
+                             // Apply clean normal styling, preserving display state
+                             const currentCleanDisplay = classesSection.style.display;
+                             classesSection.style.cssText = `
+                                 display: ${currentCleanDisplay || (classesSection.classList.contains('active') ? 'block' : 'none')};
+                                 position: relative !important;
+                                 background: transparent !important;
+                                 border: none !important;
+                                 width: auto !important;
+                                 height: auto !important;
+                                 z-index: auto !important;
+                                 opacity: 1 !important;
+                              `;
+                             console.log('Applied clean styling');
+                             
+                             // EMERGENCY FIX: Move classes section out of dashboard section
+                             const mainContainer = document.querySelector('.max-w-7xl');
+                             if (classesSection.parentElement.id === 'dashboardSection') {
+                                 console.log('FIXING: Moving classesSection out of dashboardSection');
+                                 
+                                 // Preserve current display state before moving
+                                 const currentDisplay = classesSection.style.display;
+                                 
+                                 mainContainer.appendChild(classesSection);
+                                 console.log('Moved classesSection to main container');
+                                 
+                                 // Apply normal styling after moving, preserving display state
+                                 classesSection.style.cssText = `
+                                     display: ${currentDisplay || (classesSection.classList.contains('active') ? 'block' : 'none')};
+                                     position: relative !important;
+                                     background: transparent !important;
+                                     border: none !important;
+                                     width: auto !important;
+                                     height: auto !important;
+                                     z-index: auto !important;
+                                     opacity: 1 !important;
+                                  `;
+                                 console.log('Applied normal styling after move, display:', classesSection.style.display);
+                             }
+                             
+                             // Reconnect form elements since we replaced the innerHTML
+                             const newClassFilterStyle = document.getElementById('class-filter-style');
+                             const newClassFilterVenue = document.getElementById('class-filter-venue');
+                             const newClassSortBy = document.getElementById('class-sort-by');
+                             const newClassSearchInput = document.getElementById('class-search');
+                             const newApplyFiltersButton = document.getElementById('apply-filters-button');
+                             const newJoinByCodeButton = document.getElementById('join-by-code-button');
+                             
+                             console.log('Reconnecting form elements:', {
+                                 classFilterStyle: newClassFilterStyle,
+                                 classFilterVenue: newClassFilterVenue,
+                                 classSortBy: newClassSortBy,
+                                 classSearchInput: newClassSearchInput,
+                                 applyFiltersButton: newApplyFiltersButton,
+                                 joinByCodeButton: newJoinByCodeButton
+                             });
+
+                             // Update classListDiv reference to the new element
+                             const updatedClassListDiv = document.getElementById('class-list');
+                             console.log('Updated classListDiv reference:', updatedClassListDiv);
+                             
+                             // Attach event listeners after rendering (use updated reference)
+                             attachClassButtonListeners(updatedClassListDiv);
+                             attachVenueNameListeners(updatedClassListDiv);
+                             
+                             // Show create class button if user has permissions and attach event listener
+                             const createBtn = document.getElementById('createClassBtn');
+                             if (createBtn && hasPermission && hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
+                                 createBtn.classList.remove('hidden');
+                                 console.log('Showing create class button for admin user');
+                                 
+                                 // Attach click event listener to open modal
+                                 createBtn.addEventListener('click', () => {
+                                     const addClassModal = document.getElementById('add-class-modal');
+                                     const classMessageDiv = document.getElementById('create-class-message');
+                                     const addClassForm = document.getElementById('add-class-form');
+                                     const frequencyContainer = document.getElementById('frequency-container');
+                                     
+                                     if (addClassModal) {
+                                         addClassModal.style.display = 'block';
+                                         if (classMessageDiv) {
+                                             classMessageDiv.textContent = '';
+                                             classMessageDiv.className = 'message text-center';
+                                             classMessageDiv.style.display = 'none';
+                                         }
+                                         if (addClassForm) addClassForm.reset();
+                                         if (frequencyContainer) frequencyContainer.innerHTML = '';
+                                         console.log('Opened create class modal');
+                                     } else {
+                                         console.error('add-class-modal not found');
+                                     }
+                                 });
+                             } else {
+                                 console.log('Create class button hidden - no admin permissions');
+                             }
 
                         } else {
+                            console.log('No classes found, showing no classes message');
                             classListDiv.innerHTML = '<p class="text-gray-600 italic">No classes found matching your criteria.</p>';
                         }
                      } else if (response.status === 401 || response.status === 403) {
@@ -4428,9 +4969,10 @@
 
 
             // Function to attach event listeners to dynamically created class buttons
-            function attachClassButtonListeners() {
+            function attachClassButtonListeners(targetDiv = classListDiv) {
+                console.log('attachClassButtonListeners called with:', targetDiv);
                  // Join Button Listener
-                 classListDiv.querySelectorAll('.join-class-button').forEach(button => {
+                 targetDiv.querySelectorAll('.join-class-button').forEach(button => {
                      button.addEventListener('click', async () => {
                          const classId = button.getAttribute('data-class-id');
                          console.log('Attempting to join class:', classId);
@@ -4453,7 +4995,7 @@
                  });
 
                  // Check-in Button Listener
-                 classListDiv.querySelectorAll('.checkin-class-button').forEach(button => {
+                 targetDiv.querySelectorAll('.checkin-class-button').forEach(button => {
                      button.addEventListener('click', async () => {
                          const classId = button.getAttribute('data-class-id');
                           console.log('Attempting to check-in for class:', classId);
@@ -4492,10 +5034,13 @@
                  });
 
                  // Edit Button Listener
-                 classListDiv.querySelectorAll('.edit-class-button').forEach(button => {
+                 const editButtons = targetDiv.querySelectorAll('.edit-class-button');
+                 console.log('Found edit buttons:', editButtons.length);
+                 editButtons.forEach((button, index) => {
+                     console.log(`Edit button ${index}:`, button);
                      button.addEventListener('click', async () => {
                          const classId = button.getAttribute('data-class-id');
-                         console.log('Attempting to edit class:', classId);
+                         console.log('Edit button clicked! Class ID:', classId);
                          // Fetch class data and open edit modal
                          fetchClassForEdit(classId);
                      });
@@ -4503,8 +5048,8 @@
             }
 
             // Function to attach event listeners to venue names for showing venue info
-            function attachVenueNameListeners() {
-                 classListDiv.querySelectorAll('.venue-name').forEach(span => {
+            function attachVenueNameListeners(targetDiv = classListDiv) {
+                 targetDiv.querySelectorAll('.venue-name').forEach(span => {
                      span.addEventListener('click', async () => {
                          const venueId = span.getAttribute('data-venue-id');
                          console.log('Attempting to fetch venue info for:', venueId);

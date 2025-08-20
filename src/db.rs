@@ -2394,7 +2394,7 @@ impl ScyllaConnector {
                 id, id_type, stat_window, stat_count_type, v1, v2, ts, count);
             self.session
                 .query_unpaged(
-                    "update mma.dash_stats (school_id, id, id_type, window, count, count_type, v1, v2, ts)
+                    "insert into mma.dash_stats (school_id, id, id_type, window, count, count_type, v1, v2, ts)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         school_id, 
