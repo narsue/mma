@@ -12,16 +12,30 @@
     <script src="https://unpkg.com/flowbite@2.3.0/dist/flowbite.min.js"></script>
 
     <style>
+
+        html, body {
+            overflow-x: hidden;
+        }
+
         /* Basic nav styling to demonstrate */
+        nav {
+            overflow-x: auto;                  /* turn on horizontal scrolling */
+            -webkit-overflow-scrolling: touch; /* smooth momentum scrolling on iOS */
+        }
+        
         nav ul {
             display: flex;
             list-style: none;
             padding: 0;
             margin: 0;
             background-color: #1f2937; /* Tailwind: bg-gray-800 */
+            display: inline-flex;       /* shrink‐to‐content inline flexbox */
+            min-width: max-content;     /* never collapse below content width */
+            flex-wrap: nowrap;          /* don’t wrap on multiple lines */
         }
         nav ul li {
             margin-right: 1rem; /* Tailwind: mr-4 */
+            flex-shrink: 0;
         }
         nav ul li a {
             color: #f3f4f6; /* Tailwind: text-gray-100 */
@@ -4326,7 +4340,7 @@
                                         let end = new Date( new Date(`${year}-${month}-${day}T${class_frequency.end_time}`)); // Adjust for timezone offset
                                         // start.setMinutes(start.getMinutes() - start.getTimezoneOffset()); // Adjust for timezone offset
                                         // end.setMinutes(end.getMinutes() - end.getTimezoneOffset()); // Adjust for timezone offset
-                                        console.log("Frequency start time:", class_frequency);
+                                        console.log("Frequency start time:", class_frequency, cls);
                                         // Add the calendar event only if it should run today
                                         calendar.addEvent(
                                             start,

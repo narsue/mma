@@ -1183,7 +1183,7 @@ pub mod handlers {
                     // Return a BadRequest error for invalid input format
                     return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                         success: false,
-                        class_id: None,
+                        id: None,
                         error_message: Some(format!("Invalid start date format: {}. Expected YYYY-MM-DD", freq_req.start_date)),
                     }));
                 }
@@ -1196,7 +1196,7 @@ pub mod handlers {
                     // Return a BadRequest error for invalid input format
                     return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                         success: false,
-                        class_id: None,
+                        id: None,
                         error_message: Some(format!("Invalid end date format: {}. Expected YYYY-MM-DD", freq_req.end_date)),
                     }));
                 }
@@ -1209,7 +1209,7 @@ pub mod handlers {
                     // Return a BadRequest error for invalid input format
                     return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                         success: false,
-                        class_id: None,
+                        id: None,
                         error_message: Some(format!("Invalid start time format: {}. Expected HH:MM:SS", freq_req.start_time)),
                     }));
                 }
@@ -1222,7 +1222,7 @@ pub mod handlers {
                     // Return a BadRequest error for invalid input format
                     return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                         success: false,
-                        class_id: None,
+                        id: None,
                         error_message: Some(format!("Invalid end time format: {}. Expected HH:MM:SS", freq_req.end_time)),
                     }));
                 }
@@ -1233,7 +1233,7 @@ pub mod handlers {
                 tracing::warn!("End date/time must be after start date/time");
                 return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                     success: false,
-                    class_id: None,        // 1. Validate the session and get the creator user_id
+                    id: None,        // 1. Validate the session and get the creator user_id
                     error_message: Some("End date/time must be after start date/time".to_string()),
                 }));
             }
@@ -1257,7 +1257,7 @@ pub mod handlers {
                         // Return a BadRequest error for invalid input format
                         return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                             success: false,
-                            class_id: None,
+                            id: None,
                             error_message: Some(format!("Invalid price format: {}", price_str)),
                         }));
                     }
@@ -1294,7 +1294,7 @@ pub mod handlers {
                 // Return a success response with the newly created class ID
                 Ok(HttpResponse::Ok().json(CreateClassResponse {
                     success: true,
-                    class_id: Some(class_id),
+                    id: Some(class_id),
                     error_message: None,
                 }))
             }
@@ -1357,7 +1357,7 @@ pub mod handlers {
                     // Return a BadRequest error for invalid input format
                     return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                         success: false,
-                        class_id: None,
+                        id: None,
                         error_message: Some(format!("Invalid start date format: {}. Expected YYYY-MM-DD", freq_req.start_date)),
                     }));
                 }
@@ -1370,7 +1370,7 @@ pub mod handlers {
                     // Return a BadRequest error for invalid input format
                     return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                         success: false,
-                        class_id: None,
+                        id: None,
                         error_message: Some(format!("Invalid end date format: {}. Expected YYYY-MM-DD", freq_req.end_date)),
                     }));
                 }
@@ -1383,7 +1383,7 @@ pub mod handlers {
                     // Return a BadRequest error for invalid input format
                     return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                         success: false,
-                        class_id: None,
+                        id: None,
                         error_message: Some(format!("Invalid start time format: {}. Expected HH:MM:SS", freq_req.start_time)),
                     }));
                 }
@@ -1396,7 +1396,7 @@ pub mod handlers {
                     // Return a BadRequest error for invalid input format
                     return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                         success: false,
-                        class_id: None,
+                        id: None,
                         error_message: Some(format!("Invalid end time format: {}. Expected HH:MM:SS", freq_req.end_time)),
                     }));
                 }
@@ -1407,7 +1407,7 @@ pub mod handlers {
                 tracing::warn!("End date/time must be after start date/time");
                 return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                     success: false,
-                    class_id: None,
+                    id: None,
                     error_message: Some("End date/time must be after start date/time".to_string()),
                 }));
             }
@@ -1432,7 +1432,7 @@ pub mod handlers {
                         // Return a BadRequest error for invalid input format
                         return Ok(HttpResponse::BadRequest().json(CreateClassResponse {
                             success: false,
-                            class_id: None,
+                            id: None,
                             error_message: Some(format!("Invalid price format: {}", price_str)),
                         }));
                     }
@@ -1471,7 +1471,7 @@ pub mod handlers {
                 // Return a success response with the newly created class ID
                 Ok(HttpResponse::Ok().json(CreateClassResponse {
                     success: true,
-                    class_id: Some(class_id),
+                    id: Some(class_id),
                     error_message: None,
                 }))
             }
@@ -1883,7 +1883,7 @@ pub mod handlers {
                 // Return a success response with the newly created venue ID
                 Ok(HttpResponse::Ok().json(CreateClassResponse {
                     success: true,
-                    class_id: Some(venue_id),
+                    id: Some(venue_id),
                     error_message: None,
                 }))
             }
@@ -2208,7 +2208,7 @@ pub mod handlers {
                 // Return a success response with the newly created style ID
                 Ok(HttpResponse::Ok().json(CreateClassResponse {
                     success: true,
-                    class_id: Some(style_id),
+                    id: Some(style_id),
                     error_message: None,
                 }))
             }

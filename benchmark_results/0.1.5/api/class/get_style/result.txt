@@ -1,23 +1,23 @@
 
 Summary:
-  Total:	0.0111 secs
-  Slowest:	0.0013 secs
+  Total:	0.0096 secs
+  Slowest:	0.0010 secs
   Fastest:	0.0000 secs
   Average:	0.0001 secs
-  Requests/sec:	44941.5014
+  Requests/sec:	52099.1042
   
 
 Response time histogram:
   0.000 [1]	|
-  0.000 [486]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.000 [475]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.000 [11]	|■
+  0.000 [0]	|
   0.000 [3]	|
-  0.000 [2]	|
-  0.001 [3]	|
-  0.001 [0]	|
-  0.001 [0]	|
   0.001 [2]	|
+  0.001 [6]	|■
   0.001 [0]	|
-  0.001 [2]	|
+  0.001 [0]	|
+  0.001 [1]	|
   0.001 [1]	|
 
 
@@ -27,15 +27,15 @@ Latency distribution:
   50% in 0.0001 secs
   75% in 0.0001 secs
   90% in 0.0001 secs
-  95% in 0.0002 secs
-  99% in 0.0008 secs
+  95% in 0.0001 secs
+  99% in 0.0006 secs
 
 Details (average, fastest, slowest):
-  DNS+dialup:	0.0000 secs, 0.0000 secs, 0.0013 secs
+  DNS+dialup:	0.0000 secs, 0.0000 secs, 0.0010 secs
   DNS-lookup:	0.0000 secs, 0.0000 secs, 0.0000 secs
-  req write:	0.0000 secs, 0.0000 secs, 0.0012 secs
-  resp wait:	0.0001 secs, 0.0000 secs, 0.0003 secs
-  resp read:	0.0000 secs, 0.0000 secs, 0.0008 secs
+  req write:	0.0000 secs, 0.0000 secs, 0.0006 secs
+  resp wait:	0.0001 secs, 0.0000 secs, 0.0002 secs
+  resp read:	0.0000 secs, 0.0000 secs, 0.0006 secs
 
 Status code distribution:
   [404]	500 responses

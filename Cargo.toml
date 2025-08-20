@@ -51,7 +51,7 @@ actix-rt = "2.8"
 
 # These are the default settings (you don't need to add this unless customizing)
 [profile.release]
-opt-level = "z"        # Maximum optimizations
+opt-level = 3        # Maximum optimizations
 debug = false        # No debug info
 lto = true         # Link-time optimization (can be enabled for even more optimization)
 strip = true

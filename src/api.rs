@@ -299,7 +299,7 @@ pub struct UpdateClassRequest {
 pub struct CreateClassResponse {
     pub success: bool,
     #[serde(skip_serializing_if = "Option::is_none")] // Optional field
-    pub class_id: Option<Uuid>, // Return the ID of the created class on success
+    pub id: Option<Uuid>, // Return the ID of the created object on success
     #[serde(skip_serializing_if = "Option::is_none")] // Optional field
     pub error_message: Option<String>, // Return error message on failure
 }

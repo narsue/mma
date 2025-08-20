@@ -16,7 +16,7 @@ CPU_MODEL=$(grep -m1 "model name" /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')
 # Authenticate and get cookie
 COOKIE=$(curl -s -i -X POST http://127.0.0.1:1227/api/user/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"narsue@school1.com","password":"Secure123!"}' \
+  -d '{"email":"narsue@school1.com","password":"test"}' \
   | awk '/^[Ss]et-[Cc]ookie:/ { 
       split($0, a, ": "); 
       split(a[2], b, ";"); 

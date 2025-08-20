@@ -1,6 +1,5 @@
 use bigdecimal::num_bigint::BigInt;
 use futures::future::Map;
-// use argon2::password_hash;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::response::query_result::QueryResult;
@@ -327,13 +326,41 @@ pub fn get_time() -> i64
     .as_millis() as i64
 }
 
-
+// Default bscrypt 27 hashes / per second 
+// Default Argon2 130 hashes / per second
 pub fn hash_password(password: &str) -> Result<String> {
     // Generate a random salt
     let salt = SaltString::generate(&mut OsRng);
     
     // Configure Argon2 with default parameters
-    let argon2 = Argon2::default();
+    // let argon2 = Argon2::default();
+    // Set custom, slightly lower parameters
+    // let params = argon2::Params::new(
+    //     1024*19, // memory_cost (2 MiB instead of 4)
+    //     2,    // time_cost (2 iterations instead of 3)
+    //     1,    // parallelism
+    //     None, // output length (default)
+    // ).map_err(|e| AppError::Internal(format!("Argon2 params error: {}", e)))?;
+
+    // let argon2 = Argon2::new(
+    //     argon2::Algorithm::Argon2id,
+    //     argon2::Version::V0x13,
+    //     params,
+    // );
+
+    let params = argon2::Params::new(
+        1024*7, // memory_cost (2 MiB instead of 4)
+        5,    // time_cost (2 iterations instead of 3)
+        1,    // parallelism
+        None, // output length (default)
+    ).map_err(|e| AppError::Internal(format!("Argon2 params error: {}", e)))?;
+
+    let argon2 = Argon2::new(
+        argon2::Algorithm::Argon2id,
+        argon2::Version::V0x13,
+        params,
+    );
+
     
     // Hash the password
     let password_hash = argon2
@@ -2367,7 +2394,7 @@ impl ScyllaConnector {
                 id, id_type, stat_window, stat_count_type, v1, v2, ts, count);
             self.session
                 .query_unpaged(
-                    "INSERT INTO mma.dash_stats (school_id, id, id_type, window, count, count_type, v1, v2, ts)
+                    "update mma.dash_stats (school_id, id, id_type, window, count, count_type, v1, v2, ts)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         school_id, 
