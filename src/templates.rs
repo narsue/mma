@@ -15,6 +15,7 @@ pub type TemplateCache = Arc<DashMap<String, String>>;
 const TEMPLATE_DIR: &str = "templates";
 const TEMPLATE_FILES: &[&str] = &[
     "portal.html",
+    "kiosk.html",
     "home.html",
     // "login.html",
     // "gym_signup.html",

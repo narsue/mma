@@ -644,6 +644,7 @@
                             <li><a href="#" data-section="locations" class="nav-link">🗺️ Locations</a></li>
                             <li><a href="#" data-section="pos" class="nav-link">📅 Today</a></li>
                             <li><a href="#" data-section="payment_plans" class="nav-link">💳 Plans</a></li>
+                            <li><a href="#" data-section="kiosk" class="nav-link">🖥️ Kiosk</a></li>
                             <li id="users-nav" class="nav-item hidden"><a href="#" data-section="users" class="nav-link">👥 Users</a></li>
                             <li><a href="#" data-section="account" class="nav-link">⚙️ Account</a></li>
                             <!-- Logout is a different action -->
@@ -1588,6 +1589,31 @@
 				</div>
 			</div>
 		</div>
+
+
+        <!-- Section: Kiosk -->
+        <div id="kioskSection" class="portal-section">
+            <div class="section-card bg-white rounded-3xl shadow-xl p-8 mb-8">
+                <div class="flex items-center justify-between mb-8">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900 font-poppins">Kiosk Mode</h1>
+                        <p class="text-gray-600 mt-2">Select a venue to start kiosk mode for student check-ins</p>
+                    </div>
+                    <div class="flex-shrink-0 w-16 h-16 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-50 rounded-2xl p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Available Venues</h3>
+                    <div id="kiosk-venues-list" class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <p class="text-gray-600 italic col-span-full text-center py-8">Loading venues...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
 
 
         <!-- Section: POS -->
@@ -2883,6 +2909,9 @@
                 if (sectionId === 'venues') {
                     fetchAndDisplayVenues(); // Fetch and display venues when this section is shown
                 }
+                if (sectionId === 'kiosk') {
+                    fetchAndDisplayKioskVenues(); // Fetch and display venues for kiosk mode
+                }
                 if (sectionId === 'styles') {
                     fetchAndDisplayStyles();
                 }
@@ -4043,6 +4072,92 @@
                       submitCreateStyleButton.disabled = false;
                   }
              });
+
+
+            // Function to fetch and display venues for kiosk mode
+            async function fetchAndDisplayKioskVenues() {
+                const kioskVenuesListDiv = document.getElementById('kiosk-venues-list');
+                if (!kioskVenuesListDiv) {
+                    console.error('Kiosk venues list div not found!');
+                    return;
+                }
+                
+                kioskVenuesListDiv.innerHTML = '<p class="text-gray-600 italic col-span-full text-center py-8">Loading venues...</p>';
+                
+                try {
+                    const response = await fetch('/api/venue/get_list', { method: 'GET' });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        
+                        if (result.success && Array.isArray(result.venues)) {
+                            if (result.venues.length > 0) {
+                                let html = '';
+                                
+                                result.venues.forEach(venue => {
+                                    html += `
+                                        <div class="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 hover:border-indigo-200">
+                                            <div class="flex items-center justify-between mb-4">
+                                                <div>
+                                                    <h3 class="text-xl font-bold text-gray-900 mb-2">${venue.title || 'Unnamed Venue'}</h3>
+                                                    <p class="text-gray-600 text-sm">${venue.description || 'No description'}</p>
+                                                </div>
+                                            </div>
+                                            <div class="space-y-2 mb-4">
+                                                <p class="text-sm text-gray-600"><strong>Address:</strong> ${venue.address || 'N/A'}</p>
+                                                <p class="text-sm text-gray-600"><strong>Phone:</strong> ${venue.contact_phone || 'N/A'}</p>
+                                            </div>
+                                            <button 
+                                                class="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition duration-300 transform hover:scale-105 start-kiosk-btn"
+                                                data-venue-id="${venue.venue_id}"
+                                                data-venue-name="${venue.title}"
+                                            >
+                                                <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.01M15 10h1.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                                Start Kiosk
+                                            </button>
+                                        </div>
+                                    `;
+                                });
+                                
+                                kioskVenuesListDiv.innerHTML = html;
+                                
+                                // Add event listeners to Start Kiosk buttons
+                                attachKioskButtonListeners();
+                            } else {
+                                kioskVenuesListDiv.innerHTML = '<p class="text-gray-600 italic col-span-full text-center py-8">No venues found.</p>';
+                            }
+                        } else {
+                            kioskVenuesListDiv.innerHTML = `<p class="text-red-600 col-span-full text-center py-8">Error: ${result.error_message || 'Failed to load venues'}</p>`;
+                        }
+                    } else {
+                        kioskVenuesListDiv.innerHTML = '<p class="text-red-600 col-span-full text-center py-8">Failed to load venues.</p>';
+                    }
+                } catch (error) {
+                    console.error('Error fetching venues for kiosk:', error);
+                    kioskVenuesListDiv.innerHTML = '<p class="text-red-600 col-span-full text-center py-8">Network error loading venues.</p>';
+                }
+            }
+            
+            // Function to attach event listeners to kiosk buttons
+            function attachKioskButtonListeners() {
+                const kioskButtons = document.querySelectorAll('.start-kiosk-btn');
+                kioskButtons.forEach(button => {
+                    button.addEventListener('click', function() {
+                        const venueId = this.getAttribute('data-venue-id');
+                        const venueName = this.getAttribute('data-venue-name');
+                        startKioskMode(venueId, venueName);
+                    });
+                });
+            }
+            
+            // Function to start kiosk mode for a specific venue
+            function startKioskMode(venueId, venueName) {
+                // Redirect to kiosk mode in the same window
+                const kioskUrl = `/kiosk?venue_id=${venueId}&venue_name=${encodeURIComponent(venueName)}`;
+                window.location.href = kioskUrl;
+            }
 
 
             async function fetchAndDisplayPOS() {

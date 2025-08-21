@@ -728,6 +728,33 @@ pub mod handlers {
         }
     }
 
+    #[get("/kiosk")]
+    // Kiosk mode route - requires authentication but allows isolated operation
+    pub async fn kiosk_page(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser,
+        cache: web::Data<TemplateCache>
+    ) -> Result<HttpResponse, actix_web::Error> {
+        // Validate the user's session
+        let _logged_user_id = user.validate(&state_manager).await;
+        match _logged_user_id {
+            Ok(user_id) => {
+            },
+            Err(e) => {
+                tracing::warn!("Unauthorized access to kiosk page: {:?}", e);
+                return Ok(HttpResponse::Found().append_header((LOCATION, "/")).finish());
+            }
+        }
+
+        // Serve the kiosk HTML
+        match get_template_content(&cache, "kiosk.html") {
+            Ok(content) => Ok(HttpResponse::Ok()
+                .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
+                .body(content)),
+            Err(resp) => Ok(resp),
+        }
+    }
+
 
     #[post("/contact/submit")]
     pub async fn contact_submit(

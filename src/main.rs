@@ -157,6 +157,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
             // Protected routes - user authentication required
             .service(handlers::portal_page)
+            .service(handlers::kiosk_page)
             .service(handlers::user_logout)
             .service(handlers::user_profile)
             .service(handlers::create_user)
