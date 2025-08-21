@@ -58,6 +58,7 @@ pub enum StatCountType {
     Revenue=5,
     PendingRevenue=6,
     Refunded=7,
+    TotalMembers=8,
 }
 
 #[repr(i32)]

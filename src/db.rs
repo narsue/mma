@@ -833,6 +833,12 @@ impl ScyllaConnector {
                     .await
                     .trace_err("creating db user")?;
 
+                // Increment user count for dashboard stats
+                if let Err(e) = self.increment_user_count(&school_id).await {
+                    tracing::error!("Failed to increment user count: {:?}", e);
+                }
+                
+
                 if new_school {
                     self.create_school(&user_id, &school_id, &None, &None).await.trace()?;
                 }
@@ -2219,6 +2225,151 @@ impl ScyllaConnector {
 
 
 
+
+    /// Thread-safe atomic increment of user count for dashboard stats using generic locking
+    /// This function is safe for concurrent operations across multiple threads and nodes
+    pub async fn increment_user_count(&self, school_id: &Uuid) -> AppResult<()> {
+        let lock_key = format!("user_count:{}", school_id);
+        
+        // Use generic locking mechanism
+        self.acquire_lock(&lock_key).await?;
+        
+        let result = self.increment_user_count_locked_section(school_id).await;
+        
+        self.release_lock(&lock_key).await?;
+        
+        result
+    }
+
+    /// Generic lock acquisition using LWT with string-based keys
+    /// This can be used for any type of distributed locking across the cluster
+    pub async fn acquire_lock(&self, lock_key: &str) -> AppResult<()> {
+        let now = get_time();
+        let acquired_ts = CqlTimestamp(now);
+        
+        let result = self.session
+            .query_unpaged(
+                "INSERT INTO mma.generic_locks (lock_key, acquired_ts) VALUES (?, ?) IF NOT EXISTS",
+                (lock_key, acquired_ts)
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        let mut locked = false;
+        for row in result.rows().trace()? {
+            let (ref_locked, _, _): (bool, Option<String>, Option<CqlTimestamp>) = row.trace()?;
+            locked = ref_locked;
+        }
+
+        if !locked {
+            return Err(AppError::Internal(format!("Could not acquire lock: {}", lock_key)));
+        }
+
+        tracing::info!("Acquired lock: {}", lock_key);
+        Ok(())
+    }
+
+    /// Generic lock release
+    pub async fn release_lock(&self, lock_key: &str) -> AppResult<()> {
+        self.session
+            .query_unpaged(
+                "DELETE FROM mma.generic_locks WHERE lock_key = ?",
+                (lock_key,)
+            )
+            .await.trace()?;
+            
+        tracing::info!("Released lock: {}", lock_key);
+        Ok(())
+    }
+
+    /// Generic lock-execute-unlock pattern
+    /// Use this for any operation that needs distributed locking
+    /// 
+    /// Example usage:
+    /// ```rust
+    /// let lock_key = format!("resource_type:{}", resource_id);
+    /// self.with_lock(&lock_key, || async {
+    ///     // Your critical section code here
+    ///     Ok(result)
+    /// }).await?
+    /// ```
+    pub async fn with_lock<F, Fut, T>(&self, lock_key: &str, operation: F) -> AppResult<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = AppResult<T>>,
+    {
+        self.acquire_lock(lock_key).await?;
+        
+        let result = operation().await;
+        
+        self.release_lock(lock_key).await?;
+        
+        result
+    }
+
+    /// Increment user count in locked section - safe read-modify-write
+    pub async fn increment_user_count_locked_section(&self, school_id: &Uuid) -> AppResult<()> {
+        let now = get_time();
+        
+        // Define all the stat combinations we need to increment
+        let mut stat_keys = vec![
+            // ALL window - no timestamp
+            (school_id, school_id, StatIdType::SCHOOL as i8, StatWindow::ALL as i8, StatCountType::TotalMembers as i8, 0i16, 0i16, CqlTimestamp(0)),
+        ];
+        
+        // Add time-windowed stats
+        let windows = [StatWindow::WEEK, StatWindow::MONTH, StatWindow::YEAR];
+        for window in windows.iter() {
+            let truncated_ts = truncate_timestamp(now, *window);
+            stat_keys.push((
+                school_id, 
+                school_id, 
+                StatIdType::SCHOOL as i8, 
+                *window as i8, 
+                StatCountType::TotalMembers as i8, 
+                0i16, 
+                0i16, 
+                CqlTimestamp(truncated_ts)
+            ));
+        }
+        
+        // For each stat, read current value, increment, and write back
+        for (school_id_param, id, id_type, window, count_type, v1, v2, ts) in stat_keys {
+            // Read current count
+            let result = self.session
+                .query_unpaged(
+                    "SELECT count FROM mma.dash_stats WHERE school_id = ? AND id = ? AND id_type = ? AND window = ? AND count_type = ? AND v1 = ? AND v2 = ? AND ts = ?",
+                    (school_id_param, id, id_type, window, count_type, v1, v2, ts)
+                )
+                .await.trace()?
+                .into_rows_result().trace()?;
+
+            let current_count = if result.rows_num() > 0 {
+                let mut count = 0;
+                for row in result.rows().trace()? {
+                    let (existing_count,): (i32,) = row.trace()?;
+                    count = existing_count;
+                    break;
+                }
+                count
+            } else {
+                0
+            };
+
+            let new_count = current_count + 1;
+            
+            // Insert or update with new count
+            self.session
+                .query_unpaged(
+                    "INSERT INTO mma.dash_stats (school_id, id, id_type, window, count, count_type, v1, v2, ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (school_id_param, id, id_type, window, new_count, count_type, v1, v2, ts)
+                )
+                .await.trace()?;
+        }
+        
+        tracing::info!("Incremented user count for school: {}", school_id);
+        Ok(())
+    }
 
     // CREATE TABLE IF NOT EXISTS {}.dash_stats { school_id uuid, id uuid, id_type tinyint, window tinyint, count int, count_type tinyint }; 
     pub async fn update_dashboard_stats (
