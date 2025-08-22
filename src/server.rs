@@ -21,8 +21,10 @@ pub mod handlers {
         GetClassStudentsRequest, GetClassStudentsResponse, StudentClassAttendance, SetClassStudentsAttendanceRequest,
         CreateSetupIntentRequest, CreateSetupIntentResponse, GetStripeSavedPaymentMethodsResponse, DeletePaymentMethodRequest,
         PayablePaymentPlansResponse, SchoolUpdatePaymentPlanRequest, GenericSuccessResponse, UserSubscribePaymentPlan,
-        ChangeUserSubscribePaymentPlan, SchoolUser, UserIdRequest, UserInviteRequest
+        ChangeUserSubscribePaymentPlan, SchoolUser, UserIdRequest, UserInviteRequest, GetClassHistoryRequest, 
+        ClassHistoryRecord, ClassHistoryStats, PaymentInfo, SchoolSettingsRequest
     };
+    use crate::models::Permissions;
     use chrono::{NaiveDate, NaiveTime};
     use bigdecimal::BigDecimal;
     use crate::auth::LoggedUser;
@@ -1810,7 +1812,48 @@ pub mod handlers {
         }
     }
 
+    // --- Get Class History Handler ---
+    #[post("/api/class/get_history")]
+    pub async fn get_class_history_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser,
+        req: web::Json<GetClassHistoryRequest>,
+    ) -> Result<HttpResponse, ActixError> {
+        let auth_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?;
 
+        if user.school_user_ids.is_empty() {
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error_message": "User is not associated with any school."
+            })));
+        }
+
+        let school_user_id = user.school_user_ids.first().unwrap();
+        let school_id = school_user_id.school_id;
+
+        // Call the database function to get class history
+        let history_result = state_manager.db.get_class_history(
+            &req.class_id,
+            &school_id,
+            req.from_date.as_deref(),
+            req.to_date.as_deref()
+        ).await;
+
+        match history_result {
+            Ok((history_records, stats)) => {
+                Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "success": true,
+                    "history": history_records,
+                    "stats": stats
+                })))
+            }
+            Err(app_err) => {
+                tracing::error!("Database error fetching class history: {:?}", app_err);
+                Err(ErrorInternalServerError("Error fetching class history"))
+            }
+        }
+    }
 
     // Create Venue
     #[post("/api/venue/create")]
@@ -3842,6 +3885,160 @@ pub mod handlers {
             }
         }
         
+    }
+
+    #[get("/api/school/get_settings")]
+    pub async fn get_school_settings_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser,
+    ) -> Result<HttpResponse, ActixError> {
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?;
+        
+        let school_user_ids = user.school_user_ids;
+        if school_user_ids.is_empty() {
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("User is not associated with any school.".to_string()),
+            }));
+        }
+
+        let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        // Check permissions - only SuperAdmin or HyperAdmin can access school settings
+        let permissions = match state_manager.db.get_user_permissions(&auth_user_id).await {
+            Ok(perms) => perms,
+            Err(e) => {
+                tracing::error!("Failed to get user permissions: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to get user permissions".to_string()),
+                }));
+            }
+        };
+
+        // tracing::info!("User {} permissions for school settings: {:?}", logged_user_id, permissions);
+
+        let has_admin_permission = permissions.iter().any(|p| {
+            tracing::info!("Checking permission: {} (is HyperAdmin: {}, is SuperAdmin: {})", p.permission, p.permission == 0, p.permission == 1);
+            p.permission == 0 || p.permission == 1  // HyperAdmin (0) or SuperAdmin (1)
+        });
+
+        // tracing::info!("User {} has admin permission: {}", logged_user_id, has_admin_permission);
+
+        if !has_admin_permission {
+            return Ok(HttpResponse::Forbidden().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some(format!("Insufficient permissions to access school settings. User permissions: {:?}", permissions.iter().map(|p| p.permission).collect::<Vec<_>>())),
+            }));
+        }
+
+        match state_manager.db.get_school_settings(&school_id).await {
+            Ok(Some(settings)) => {
+                Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "success": true,
+                    "settings": settings
+                })))
+            }
+            Ok(None) => {
+                Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "success": true,
+                    "settings": {
+                        "school_name": null,
+                        "timezone": "Australia/Sydney",
+                        "stripe_publishable_key": null,
+                        "stripe_secret_key": null,
+                        "stripe_webhook_secret": null
+                    }
+                })))
+            }
+            Err(e) => {
+                tracing::error!("Failed to get school settings: {}", e);
+                Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to get school settings".to_string()),
+                }))
+            }
+        }
+    }
+
+    #[post("/api/school/update_settings")]
+    pub async fn update_school_settings_handler(
+        state_manager: web::Data<Arc<StoreStateManager>>,
+        mut user: LoggedUser,
+        body: web::Json<SchoolSettingsRequest>,
+    ) -> Result<HttpResponse, ActixError> {
+        let logged_user_id = user.validate(&state_manager).await
+            .map_err(|app_err| ErrorInternalServerError(app_err))?;
+        
+        let school_user_ids = user.school_user_ids;
+        if school_user_ids.is_empty() {
+            return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some("User is not associated with any school.".to_string()),
+            }));
+        }
+
+        // let school_user_id = school_user_ids.first().unwrap();
+        // let school_id = school_user_id.school_id;
+
+        let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
+        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        // Check permissions - only SuperAdmin or HyperAdmin can update school settings
+        let permissions = match state_manager.db.get_user_permissions(&auth_user_id).await {
+            Ok(perms) => perms,
+            Err(e) => {
+                tracing::error!("Failed to get user permissions: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to get user permissions".to_string()),
+                }));
+            }
+        };
+
+        // tracing::info!("User {} permissions for updating school settings: {:?}", logged_user_id, permissions);
+
+        let has_admin_permission = permissions.iter().any(|p| {
+            p.permission == 0 || p.permission == 1  // HyperAdmin (0) or SuperAdmin (1)
+        });
+
+        if !has_admin_permission {
+            return Ok(HttpResponse::Forbidden().json(GenericResponse {
+                success: false,
+                message: None,
+                error_message: Some(format!("Insufficient permissions to update school settings. User permissions: {:?}", permissions.iter().map(|p| p.permission).collect::<Vec<_>>())),
+            }));
+        }
+
+        let settings_request = body.into_inner();
+
+        match state_manager.db.update_school_settings(&school_id, &settings_request).await {
+            Ok(_) => {
+                Ok(HttpResponse::Ok().json(GenericResponse {
+                    success: true,
+                    message: Some("School settings updated successfully".to_string()),
+                    error_message: None,
+                }))
+            }
+            Err(e) => {
+                tracing::error!("Failed to update school settings: {}", e);
+                Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Failed to update school settings".to_string()),
+                }))
+            }
+        }
     }
 
 

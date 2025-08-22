@@ -30,7 +30,8 @@ use crate::error::{AppError, Result, Result as AppResult, TraceErr};
 use crate::api::{ActivePaymentPlanData, ClassData, ClassFrequency, ClassFrequencyId, 
     PurchasablePaymentPlanData, SchoolUserId, StudentClassAttendance, StyleData, UpdateUserProfileRequest, 
     UserProfileData, UserWithName, VenueData, SchoolUpdatePaymentPlanRequest, UserSubscribePaymentPlan,
-    ChangeUserSubscribePaymentPlan, SchoolUser, UserSchoolPermission, DetailedSchoolUserId, DashStat}; 
+    ChangeUserSubscribePaymentPlan, SchoolUser, UserSchoolPermission, DetailedSchoolUserId, DashStat,
+    ClassHistoryRecord, ClassHistoryStats, PaymentInfo}; 
 use crate::stripe_client::StripeClient;
 use ammonia::clean;
 use lazy_static::lazy_static;
@@ -3222,6 +3223,192 @@ impl ScyllaConnector {
         return Ok(Some(attendance));
     }
 
+    pub async fn get_class_history(
+        &self,
+        class_id: &Uuid,
+        school_id: &Uuid,
+        from_date: Option<&str>,
+        to_date: Option<&str>,
+    ) -> AppResult<(Vec<ClassHistoryRecord>, ClassHistoryStats)> {
+        use chrono::{TimeZone, NaiveDate, NaiveTime};
+        use chrono_tz::Australia::Sydney;
+
+        // Parse date filters if provided - use Sydney timezone
+        let from_ts = if let Some(from_str) = from_date {
+            let naive_date = NaiveDate::parse_from_str(from_str, "%Y-%m-%d")
+                .map_err(|_| AppError::Internal("Invalid from_date format".to_string()))?;
+            let naive_datetime = naive_date.and_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+            let sydney_datetime = Sydney.from_local_datetime(&naive_datetime).single()
+                .ok_or_else(|| AppError::Internal("Invalid Sydney timezone conversion".to_string()))?;
+            Some(CqlTimestamp(sydney_datetime.timestamp_millis()))
+        } else {
+            None
+        };
+
+        let to_ts = if let Some(to_str) = to_date {
+            let naive_date = NaiveDate::parse_from_str(to_str, "%Y-%m-%d")
+                .map_err(|_| AppError::Internal("Invalid to_date format".to_string()))?;
+            let naive_datetime = naive_date.and_time(NaiveTime::from_hms_opt(23, 59, 59).unwrap());
+            let sydney_datetime = Sydney.from_local_datetime(&naive_datetime).single()
+                .ok_or_else(|| AppError::Internal("Invalid Sydney timezone conversion".to_string()))?;
+            Some(CqlTimestamp(sydney_datetime.timestamp_millis()))
+        } else {
+            None
+        };
+
+        // First get attendance records with date filters
+        let attendance_result = match (from_ts, to_ts) {
+            (Some(from), Some(to)) => {
+                self.session
+                    .query_unpaged(
+                        "SELECT user_id, class_start_ts, checkin_ts, user_payment_id, user_payment_plan_id 
+                         FROM mma.attendance 
+                         WHERE class_id = ? AND class_start_ts >= ? AND class_start_ts <= ?",
+                        (class_id, from, to)
+                    )
+                    .await.trace()?
+                    .into_rows_result().trace()?
+            },
+            (Some(from), None) => {
+                self.session
+                    .query_unpaged(
+                        "SELECT user_id, class_start_ts, checkin_ts, user_payment_id, user_payment_plan_id 
+                         FROM mma.attendance 
+                         WHERE class_id = ? AND class_start_ts >= ?",
+                        (class_id, from)
+                    )
+                    .await.trace()?
+                    .into_rows_result().trace()?
+            },
+            (None, Some(to)) => {
+                self.session
+                    .query_unpaged(
+                        "SELECT user_id, class_start_ts, checkin_ts, user_payment_id, user_payment_plan_id 
+                         FROM mma.attendance 
+                         WHERE class_id = ? AND class_start_ts <= ?",
+                        (class_id, to)
+                    )
+                    .await.trace()?
+                    .into_rows_result().trace()?
+            },
+            (None, None) => {
+                self.session
+                    .query_unpaged(
+                        "SELECT user_id, class_start_ts, checkin_ts, user_payment_id, user_payment_plan_id 
+                         FROM mma.attendance 
+                         WHERE class_id = ?",
+                        (class_id,)
+                    )
+                    .await.trace()?
+                    .into_rows_result().trace()?
+            },
+        };
+
+        // Get user information for the school
+        let user_result = self.session
+            .query_unpaged(
+                "SELECT user_id, first_name, surname, email FROM mma.user WHERE school_id = ?",
+                (school_id,)
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        // Build user lookup map
+        let mut user_map = std::collections::HashMap::new();
+        for row in user_result.rows().trace()? {
+            let (user_id, first_name, surname, email): (Uuid, String, String, Option<String>) = row.trace()?;
+            user_map.insert(user_id, (first_name, surname, email));
+        }
+
+        let mut history_records = Vec::new();
+        let mut unique_sessions = std::collections::HashSet::new();
+        let mut total_revenue = 0.0;
+
+        for row in attendance_result.rows().trace()? {
+            let (user_id, class_start_ts, checkin_ts, user_payment_id, user_payment_plan_id): 
+                (Uuid, CqlTimestamp, CqlTimestamp, Option<Uuid>, Option<Uuid>) = row.trace()?;
+
+            // Get user information from the map
+            let (first_name, surname, email) = match user_map.get(&user_id) {
+                Some((fname, sname, email)) => (fname.clone(), sname.clone(), email.clone()),
+                None => continue, // Skip if user not found in this school
+            };
+
+            // Add session to unique set for stats (using timestamp as key)
+            unique_sessions.insert(class_start_ts.0);
+
+            // Get payment information if available
+            let (payment_info, amount_paid, payment_status) = if let Some(payment_id) = user_payment_id {
+                self.get_payment_details(payment_id).await.unwrap_or((None, 0.0, 2))
+            } else if user_payment_plan_id.is_some() {
+                (Some(PaymentInfo { type_name: "pass".to_string(), last4: None }), 0.0, 2) // Free with pass
+            } else {
+                (None, 0.0, 2) // Free
+            };
+
+            total_revenue += amount_paid;
+
+            history_records.push(ClassHistoryRecord {
+                user_id,
+                student_name: format!("{} {}", first_name, surname),
+                student_email: email,
+                class_start_ts: class_start_ts.0,
+                checkin_ts: checkin_ts.0,
+                payment_info,
+                amount_paid,
+                payment_status,
+            });
+        }
+
+        // Calculate statistics
+        let total_sessions = unique_sessions.len() as u32;
+        let total_attendees = history_records.len() as u32;
+        let avg_attendance = if total_sessions == 0 { 
+            0.0 
+        } else { 
+            total_attendees as f64 / total_sessions as f64
+        };
+
+        let stats = ClassHistoryStats {
+            total_sessions,
+            total_attendees,
+            total_revenue,
+            avg_attendance,
+        };
+
+        tracing::info!(
+            "Class {} history stats: sessions={}, attendees={}, revenue={:.2}, avg={:.1}",
+            class_id, total_sessions, total_attendees, total_revenue, avg_attendance
+        );
+
+        Ok((history_records, stats))
+    }
+
+    // Helper function to get payment details
+    async fn get_payment_details(&self, payment_id: Uuid) -> AppResult<(Option<PaymentInfo>, f64, i32)> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT captured, status, stripe_payment_id FROM mma.user_payment WHERE user_payment_id = ?",
+                (payment_id,)
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        for row in result.rows().trace()? {
+            let (captured, status, stripe_payment_id): (Option<BigDecimal>, i32, Option<String>) = row.trace()?;
+            
+            let amount = captured.map(|c| c.to_f64().unwrap_or(0.0)).unwrap_or(0.0);
+            let payment_info = stripe_payment_id.map(|_| PaymentInfo {
+                type_name: "card".to_string(),
+                last4: Some("****".to_string()), // Could extract actual last4 if needed
+            });
+            
+            return Ok((payment_info, amount, status));
+        }
+
+        Ok((None, 0.0, 0)) // Default values if payment not found
+    }
+
     pub async fn remove_expired_payment_plans(
         &self,
         user_id: &Uuid,
@@ -4116,6 +4303,112 @@ impl ScyllaConnector {
         
         // Return false if no valid code was found
         Ok((false, None, None, None, None, None, false))
+    }
+
+    // Get school settings
+    pub async fn get_school_settings(&self, school_id: &Uuid) -> AppResult<Option<crate::api::SchoolSettings>> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT title, timezone, stripe_publishable_key, stripe_secret_key, stripe_webhook_secret 
+                 FROM mma.school WHERE school_id = ?",
+                (school_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        for row in result.rows().trace()? {
+            let (school_name, timezone, stripe_publishable_key, stripe_secret_key, stripe_webhook_secret): 
+                (Option<String>, Option<String>, Option<String>, Option<String>, Option<String>) = row.trace()?;
+
+            // We need to hide the secret key -- so lets * all but the first 3 chars and last 3 chars
+            let stripe_secret_key = stripe_secret_key.map(|s| {
+                   "••••••••".to_string();
+            });
+
+            return Ok(Some(crate::api::SchoolSettings {
+                school_name,
+                timezone,
+                stripe_publishable_key,
+                stripe_secret_key: if stripe_secret_key.is_some() { Some("••••••••".to_string()) } else { None },
+                stripe_webhook_secret: if stripe_webhook_secret.is_some() { Some("••••••••".to_string()) } else { None },
+            }));
+        }
+        
+        Ok(None)
+    }
+
+    // Update school settings
+    pub async fn update_school_settings(
+        &self, 
+        school_id: &Uuid, 
+        settings: &crate::api::SchoolSettingsRequest
+    ) -> AppResult<()> {
+        // First, get existing settings to preserve secrets if not being updated
+        let existing = self.session
+            .query_unpaged(
+                "SELECT stripe_secret_key, stripe_webhook_secret FROM mma.school WHERE school_id = ?",
+                (school_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        let mut secret_key = settings.stripe_secret_key.clone();
+        let mut webhook_secret = settings.stripe_webhook_secret.clone();
+
+        // Check that the key starts with sk_
+        if let Some(ref key) = secret_key {
+            if key == "••••••••" { 
+                secret_key = Some("••••••••".to_string());
+            } else if key.is_empty() {
+                return Err(AppError::BadRequest("Stripe secret key cannot be empty".to_string()));
+            } else if !key.starts_with("sk_") {
+                return Err(AppError::BadRequest("Stripe secret key must start with 'sk_'".to_string()));
+            }
+        }
+        // Check that the webhook secret starts with whsec_
+        if let Some(ref key) = webhook_secret {
+            if !key.starts_with("whsec_") {
+                return Err(AppError::BadRequest("Stripe webhook secret must start with 'whsec_'".to_string()));
+            }
+        }
+
+
+
+        // Check the public key starts with pk_
+        if let Some(ref key) = settings.stripe_publishable_key {
+            if !key.starts_with("pk_") {
+                return Err(AppError::BadRequest("Stripe publishable key must start with 'pk_'".to_string()));
+            }
+        }   
+
+        // If existing record exists and new values are masked, preserve existing values
+        for row in existing.rows().trace()? {
+            let (existing_secret, existing_webhook): (Option<String>, Option<String>) = row.trace()?;
+            if secret_key.as_ref().map(|s| s.as_str()) == Some("••••••••") {
+                secret_key = existing_secret;
+            }
+            if webhook_secret.as_ref().map(|s| s.as_str()) == Some("••••••••") {
+                webhook_secret = existing_webhook;
+            }
+            break; // Only process first row
+        }
+
+        self.session
+            .query_unpaged(
+                "INSERT INTO mma.school (school_id, title, timezone, stripe_publishable_key, stripe_secret_key, stripe_webhook_secret) 
+                 VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    school_id,
+                    &settings.school_name,
+                    &settings.timezone,
+                    &settings.stripe_publishable_key,
+                    &secret_key,
+                    &webhook_secret,
+                ),
+            )
+            .await.trace()?;
+
+        Ok(())
     }
 
 

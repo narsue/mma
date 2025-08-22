@@ -550,6 +550,39 @@ pub struct SetClassStudentsAttendanceRequest {
     pub present: Vec<bool>,
 }
 
+#[derive(Deserialize)]
+pub struct GetClassHistoryRequest {
+    pub class_id: Uuid,
+    pub from_date: Option<String>, // Optional date filter (YYYY-MM-DD format)
+    pub to_date: Option<String>,   // Optional date filter (YYYY-MM-DD format)
+}
+
+#[derive(Debug, Serialize)]
+pub struct ClassHistoryRecord {
+    pub user_id: Uuid,
+    pub student_name: String,
+    pub student_email: Option<String>,
+    pub class_start_ts: i64,
+    pub checkin_ts: i64,
+    pub payment_info: Option<PaymentInfo>,
+    pub amount_paid: f64,
+    pub payment_status: i32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ClassHistoryStats {
+    pub total_sessions: u32,
+    pub total_attendees: u32,
+    pub total_revenue: f64,
+    pub avg_attendance: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaymentInfo {
+    pub type_name: String, // "card", "pass", "free", etc.
+    pub last4: Option<String>, // Last 4 digits of card if applicable
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateSetupIntentRequest {
     pub customer_email: String,
@@ -659,7 +692,7 @@ pub struct SchoolUser {
     pub img: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct UserSchoolPermission{
     pub club_id: Option<Uuid>,
     pub class_id: Option<Uuid>,
@@ -676,4 +709,22 @@ pub struct DashStat{
     pub v1: i16,
     pub v2: i16,
     pub ts: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SchoolSettings {
+    pub school_name: Option<String>,
+    pub timezone: Option<String>,
+    pub stripe_publishable_key: Option<String>,
+    pub stripe_secret_key: Option<String>,
+    pub stripe_webhook_secret: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SchoolSettingsRequest {
+    pub school_name: Option<String>,
+    pub timezone: Option<String>,
+    pub stripe_publishable_key: Option<String>,
+    pub stripe_secret_key: Option<String>,
+    pub stripe_webhook_secret: Option<String>,
 }

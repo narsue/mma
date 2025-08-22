@@ -190,6 +190,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::update_class_handler)
             .service(handlers::get_class_students_handler)
             .service(handlers::set_class_student_attendance_handler)
+            .service(handlers::get_class_history_handler)
 
             // Venue routes
             .service(handlers::create_venue_handler)
@@ -212,6 +213,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .service(handlers::get_school_current_payment_plans_handler)
             .service(handlers::update_school_payment_plan_handler)
             .service(handlers::get_school_users_handler)
+            .service(handlers::get_school_settings_handler)
+            .service(handlers::update_school_settings_handler)
             .service(handlers::admin_get_user_data)
             .service(handlers::admin_invite_logged_user)
             .service(handlers::get_dashboard_data)

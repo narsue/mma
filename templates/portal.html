@@ -646,6 +646,7 @@
                             <li><a href="#" data-section="payment_plans" class="nav-link">💳 Plans</a></li>
                             <li><a href="#" data-section="kiosk" class="nav-link">🖥️ Kiosk</a></li>
                             <li id="users-nav" class="nav-item hidden"><a href="#" data-section="users" class="nav-link">👥 Users</a></li>
+                            <li id="settings-nav" class="nav-item hidden"><a href="#" data-section="settings" class="nav-link">🏫 School Settings</a></li>
                             <li><a href="#" data-section="account" class="nav-link">⚙️ Account</a></li>
                             <!-- Logout is a different action -->
                             <li><a href="#" id="logoutLink" class="nav-link text-red-300 hover:text-red-200">🚪 Logout</a></li>
@@ -1745,6 +1746,110 @@
             </div>
         </div>
 
+        <!-- Class History Modal -->
+        <div id="classHistoryModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+            <div class="flex items-center justify-center min-h-screen p-4">
+                <div class="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+                    <!-- Modal Header -->
+                    <div class="bg-purple-50 px-6 py-4 border-b">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <h3 id="history-class-title" class="text-xl font-bold text-gray-900"></h3>
+                                <p class="text-gray-600 mt-1">Class Attendance History & Payment Records</p>
+                            </div>
+                            <button id="closeHistoryModal" class="text-gray-400 hover:text-gray-600 text-2xl font-bold">
+                                ×
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Modal Body -->
+                    <div class="p-6 overflow-auto max-h-[calc(90vh-120px)]">
+                        <!-- Filters Section -->
+                        <div class="mb-6 bg-gray-50 p-4 rounded-lg">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label for="history-date-from" class="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+                                    <input type="date" id="history-date-from" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500">
+                                </div>
+                                <div>
+                                    <label for="history-date-to" class="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+                                    <input type="date" id="history-date-to" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500">
+                                </div>
+                                <div class="flex items-end">
+                                    <button id="apply-history-filters" class="w-full bg-purple-500 text-white px-4 py-2 rounded-md hover:bg-purple-600 transition duration-200">
+                                        Apply Filters
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Summary Stats -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div class="bg-blue-50 p-4 rounded-lg text-center">
+                                <div id="total-sessions" class="text-2xl font-bold text-blue-600">-</div>
+                                <div class="text-sm text-gray-600">Total Sessions</div>
+                            </div>
+                            <div class="bg-green-50 p-4 rounded-lg text-center">
+                                <div id="total-attendees" class="text-2xl font-bold text-green-600">-</div>
+                                <div class="text-sm text-gray-600">Total Attendees</div>
+                            </div>
+                            <div class="bg-purple-50 p-4 rounded-lg text-center">
+                                <div id="total-revenue" class="text-2xl font-bold text-purple-600">-</div>
+                                <div class="text-sm text-gray-600">Total Revenue</div>
+                            </div>
+                            <div class="bg-orange-50 p-4 rounded-lg text-center">
+                                <div id="avg-attendance" class="text-2xl font-bold text-orange-600">-</div>
+                                <div class="text-sm text-gray-600">Avg Attendance</div>
+                            </div>
+                        </div>
+
+                        <!-- History Table -->
+                        <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                                <h4 class="text-lg font-medium text-gray-900">Attendance Records</h4>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-in Time</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Method</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Paid</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="history-table-body" class="bg-white divide-y divide-gray-200">
+                                        <!-- History records will be loaded here -->
+                                        <tr>
+                                            <td colspan="6" class="px-6 py-4 text-center text-gray-500">Loading history...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Export Options -->
+                        <div class="mt-6 flex justify-between items-center">
+                            <div class="text-sm text-gray-600">
+                                <span id="history-total-records">0</span> records found
+                            </div>
+                            <div class="flex gap-2">
+                                <button id="export-history-csv" class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition duration-200 text-sm">
+                                    Export CSV
+                                </button>
+                                <button id="export-history-pdf" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition duration-200 text-sm">
+                                    Export PDF
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Edit User Modal -->
         <div id="userEditModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
             <div class="bg-white w-full max-w-3xl p-6 rounded-lg relative overflow-y-auto max-h-[90vh]">
@@ -1914,6 +2019,161 @@
         </div>
 
 
+
+        <!-- Section: School Settings -->
+        <div id="settingsSection" class="portal-section">
+            <div class="section-card bg-white rounded-3xl shadow-xl p-8 mb-8">
+                <div class="flex items-center justify-between mb-8">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900 font-poppins">School Settings</h1>
+                        <p class="text-gray-600 mt-2">Configure your school's preferences and payment settings</p>
+                    </div>
+                    <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- School Settings Form -->
+                <form id="schoolSettingsForm" class="space-y-8">
+                    
+                    <!-- General Settings -->
+                    <div class="bg-gray-50 rounded-2xl p-6">
+                        <h3 class="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                            <svg class="w-6 h-6 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                            </svg>
+                            General Settings
+                        </h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label for="school-name" class="block text-sm font-medium text-gray-700 mb-2">School Name</label>
+                                <input type="text" id="school-name" name="school_name" required
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                                       placeholder="Enter your school name">
+                            </div>
+                            
+                            <div>
+                                <label for="school-timezone" class="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
+                                <select id="school-timezone" name="timezone" required
+                                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200">
+                                    <option value="">Select Timezone</option>
+                                    <!-- Australia/Oceania -->
+                                    <optgroup label="Australia/Oceania">
+                                        <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
+                                        <option value="Australia/Melbourne">Australia/Melbourne (AEST/AEDT)</option>
+                                        <option value="Australia/Brisbane">Australia/Brisbane (AEST)</option>
+                                        <option value="Australia/Adelaide">Australia/Adelaide (ACST/ACDT)</option>
+                                        <option value="Australia/Perth">Australia/Perth (AWST)</option>
+                                        <option value="Australia/Darwin">Australia/Darwin (ACST)</option>
+                                        <option value="Australia/Hobart">Australia/Hobart (AEST/AEDT)</option>
+                                        <option value="Pacific/Auckland">New Zealand (NZST/NZDT)</option>
+                                    </optgroup>
+                                    <!-- Americas -->
+                                    <optgroup label="Americas">
+                                        <option value="America/New_York">US Eastern (EST/EDT)</option>
+                                        <option value="America/Chicago">US Central (CST/CDT)</option>
+                                        <option value="America/Denver">US Mountain (MST/MDT)</option>
+                                        <option value="America/Los_Angeles">US Pacific (PST/PDT)</option>
+                                        <option value="America/Toronto">Canada Eastern (EST/EDT)</option>
+                                        <option value="America/Vancouver">Canada Pacific (PST/PDT)</option>
+                                    </optgroup>
+                                    <!-- Europe -->
+                                    <optgroup label="Europe">
+                                        <option value="Europe/London">UK (GMT/BST)</option>
+                                        <option value="Europe/Paris">Central Europe (CET/CEST)</option>
+                                        <option value="Europe/Berlin">Germany (CET/CEST)</option>
+                                        <option value="Europe/Madrid">Spain (CET/CEST)</option>
+                                        <option value="Europe/Rome">Italy (CET/CEST)</option>
+                                    </optgroup>
+                                    <!-- Asia -->
+                                    <optgroup label="Asia">
+                                        <option value="Asia/Tokyo">Japan (JST)</option>
+                                        <option value="Asia/Shanghai">China (CST)</option>
+                                        <option value="Asia/Seoul">South Korea (KST)</option>
+                                        <option value="Asia/Singapore">Singapore (SGT)</option>
+                                        <option value="Asia/Hong_Kong">Hong Kong (HKT)</option>
+                                        <option value="Asia/Bangkok">Thailand (ICT)</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stripe Payment Settings -->
+                    <div class="bg-gray-50 rounded-2xl p-6">
+                        <h3 class="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                            <svg class="w-6 h-6 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>
+                            </svg>
+                            Stripe Payment Configuration
+                        </h3>
+                        
+                        <div class="space-y-6">
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <div class="flex">
+                                    <svg class="w-5 h-5 text-blue-600 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <div class="text-sm text-blue-800">
+                                        <p class="font-medium">Stripe Configuration</p>
+                                        <p>Configure your Stripe keys to enable payment processing. You can find these keys in your Stripe Dashboard.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="stripe-publishable-key" class="block text-sm font-medium text-gray-700 mb-2">
+                                    Stripe Publishable Key
+                                    <span class="text-gray-500 text-xs">(starts with pk_live_)</span>
+                                </label>
+                                <input type="text" id="stripe-publishable-key" name="stripe_publishable_key"
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200"
+                                       placeholder="pk_live_...">
+                            </div>
+                            
+                            <div>
+                                <label for="stripe-secret-key" class="block text-sm font-medium text-gray-700 mb-2">
+                                    Stripe Secret Key
+                                    <span class="text-gray-500 text-xs">(starts with sk_live_)</span>
+                                </label>
+                                <input type="password" id="stripe-secret-key" name="stripe_secret_key"
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200"
+                                       placeholder="sk_live_...">
+                            </div>
+                            
+                            <div>
+                                <label for="stripe-webhook-secret" class="block text-sm font-medium text-gray-700 mb-2">
+                                    Stripe Webhook Endpoint Secret
+                                    <span class="text-gray-500 text-xs">(starts with whsec_)</span>
+                                </label>
+                                <input type="password" id="stripe-webhook-secret" name="stripe_webhook_secret"
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200"
+                                       placeholder="whsec_...">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Save Button -->
+                    <div class="flex justify-end space-x-4">
+                        <button type="button" id="resetSettingsBtn"
+                                class="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 transition duration-200">
+                            Reset Changes
+                        </button>
+                        <button type="button" id="saveSettingsBtn"
+                                class="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 focus:ring-2 focus:ring-blue-500 transition duration-200 transform hover:scale-105">
+                            💾 Save Settings
+                        </button>
+                    </div>
+
+                    <!-- Status Message -->
+                    <div id="settingsStatusMessage" class="hidden mt-4 p-4 rounded-lg"></div>
+                </form>
+            </div>
+        </div>
 
         <!-- Section: Account -->
         <div id="accountSection" class="portal-section">
@@ -2496,8 +2756,10 @@
 
                     if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
                         document.getElementById('add-style-button').style.display = 'block'; // Show button if user has permission
+                        document.getElementById("settings-nav").classList.remove("hidden"); // Show settings nav
                     } else {
                         document.getElementById('add-style-button').style.display = 'none'; // Hide button if no permission
+                        document.getElementById("settings-nav").classList.add("hidden"); // Hide settings nav
                     }
 
                 } catch (error) {
@@ -2936,6 +3198,10 @@
                  if (sectionId === 'waivers') {
                      fetchLatestWaiver(); // Load the latest waiver when this section is shown
                  }
+                 
+                 if (sectionId === 'settings') {
+                     loadSchoolSettings(); // Load school settings when this section is shown
+                 }
             }
 
             document.getElementById('addUserBtn').addEventListener('click', () => {
@@ -3179,6 +3445,126 @@
                     displayMessage(profileStatusMessageDiv, 'Failed to connect to the server to load profile.', false);
                 }
             }
+
+            // --- School Settings Functions ---
+            async function loadSchoolSettings() {
+                const schoolNameInput = document.getElementById('school-name');
+                const schoolTimezoneSelect = document.getElementById('school-timezone');
+                const stripePublishableKey = document.getElementById('stripe-publishable-key');
+                const stripeSecretKey = document.getElementById('stripe-secret-key');
+                const stripeWebhookSecret = document.getElementById('stripe-webhook-secret');
+                const settingsStatusMessage = document.getElementById('settingsStatusMessage');
+
+                try {
+                    settingsStatusMessage.textContent = 'Loading settings...';
+                    settingsStatusMessage.className = 'text-blue-600 mt-4 p-4 rounded-lg';
+                    settingsStatusMessage.classList.remove('hidden');
+
+                    const response = await fetch('/api/school/get_settings', {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        if (result.success && result.settings) {
+                            const settings = result.settings;
+                            
+                            schoolNameInput.value = settings.school_name || '';
+                            schoolTimezoneSelect.value = settings.timezone || 'Australia/Sydney';
+                            stripePublishableKey.value = settings.stripe_publishable_key || '';
+                            stripeSecretKey.value = settings.stripe_secret_key ? '••••••••' : '';
+                            stripeWebhookSecret.value = settings.stripe_webhook_secret ? '••••••••' : '';
+
+                            settingsStatusMessage.textContent = 'Settings loaded successfully';
+                            settingsStatusMessage.className = 'text-green-600 mt-4 p-4 rounded-lg';
+                            settingsStatusMessage.classList.remove('hidden');
+                        } else {
+                            settingsStatusMessage.textContent = result.error_message || 'Failed to load settings';
+                            settingsStatusMessage.className = 'text-red-600 mt-4 p-4 rounded-lg';
+                            settingsStatusMessage.classList.remove('hidden');
+                        }
+                    } else {
+                        settingsStatusMessage.textContent = `Error: ${response.status}`;
+                        settingsStatusMessage.className = 'text-red-600';
+                    }
+                } catch (error) {
+                    console.error('Error loading school settings:', error);
+                    settingsStatusMessage.textContent = 'Network error loading settings';
+                    settingsStatusMessage.className = 'text-red-600';
+                }
+            }
+
+            async function saveSchoolSettings() {
+                const schoolNameInput = document.getElementById('school-name');
+                const schoolTimezoneSelect = document.getElementById('school-timezone');
+                const stripePublishableKey = document.getElementById('stripe-publishable-key');
+                const stripeSecretKey = document.getElementById('stripe-secret-key');
+                const stripeWebhookSecret = document.getElementById('stripe-webhook-secret');
+                const settingsStatusMessage = document.getElementById('settingsStatusMessage');
+
+                try {
+                    settingsStatusMessage.textContent = 'Saving settings...';
+                    settingsStatusMessage.className = 'text-blue-600 mt-4 p-4 rounded-lg';
+                    settingsStatusMessage.classList.remove('hidden');
+
+                    const settingsData = {
+                        school_name: schoolNameInput.value.trim(),
+                        timezone: schoolTimezoneSelect.value,
+                        stripe_publishable_key: stripePublishableKey.value.trim(),
+                    };
+
+                    if (stripeSecretKey.value.trim() && stripeSecretKey.value !== '••••••••') {
+                        settingsData.stripe_secret_key = stripeSecretKey.value.trim();
+                    }
+
+                    if (stripeWebhookSecret.value.trim() && stripeWebhookSecret.value !== '••••••••') {
+                        settingsData.stripe_webhook_secret = stripeWebhookSecret.value.trim();
+                    }
+
+                    const response = await fetch('/api/school/update_settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(settingsData)
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok && result.success) {
+                        settingsStatusMessage.textContent = 'Settings saved successfully!';
+                        settingsStatusMessage.className = 'text-green-600 mt-4 p-4 rounded-lg';
+                        settingsStatusMessage.classList.remove('hidden');
+                        
+                        if (stripeSecretKey.value.trim() && stripeSecretKey.value !== '••••••••') {
+                            stripeSecretKey.value = '••••••••';
+                        }
+                        if (stripeWebhookSecret.value.trim() && stripeWebhookSecret.value !== '••••••••') {
+                            stripeWebhookSecret.value = '••••••••';
+                        }
+                    } else {
+                        settingsStatusMessage.textContent = result.error_message || 'Failed to save settings';
+                        settingsStatusMessage.className = 'text-red-600';
+                    }
+                } catch (error) {
+                    console.error('Error saving school settings:', error);
+                    settingsStatusMessage.textContent = 'Network error saving settings';
+                    settingsStatusMessage.className = 'text-red-600';
+                }
+            }
+
+            function resetSchoolSettings() {
+                loadSchoolSettings();
+            }
+
+            // Add event listeners for school settings
+            document.getElementById('saveSettingsBtn').addEventListener('click', saveSchoolSettings);
+            document.getElementById('resetSettingsBtn').addEventListener('click', resetSchoolSettings);
+            
+            // Prevent form submission
+            document.getElementById('schoolSettingsForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveSchoolSettings();
+            });
 
             // Edit users modal section -- START //
 
@@ -4471,10 +4857,67 @@
 
 
             // Handle initial section display
-            const initialSection = window.location.hash ? window.location.hash.substring(1) : 'frontpage';
-            const validSections = Array.from(navLinks).map(link => link.getAttribute('data-section'));
-            if (validSections.includes(initialSection)) {
-                showSection(initialSection);
+            setTimeout(() => {
+                const currentHash = window.location.hash;
+                const initialSection = currentHash ? currentHash.substring(1) : 'frontpage';
+                const currentNavLinks = document.querySelectorAll('nav ul li a[data-section]');
+                const validSections = Array.from(currentNavLinks).map(link => link.getAttribute('data-section'));
+                
+                console.log('Current URL:', window.location.href);
+                console.log('Current hash:', currentHash);
+                console.log('Initial section:', initialSection);
+                console.log('Valid sections:', validSections);
+                
+                if (validSections.includes(initialSection)) {
+                    console.log('Showing initial section:', initialSection);
+                    showSection(initialSection);
+                } else {
+                    console.log('Section not valid, showing default frontpage section');
+                    showSection('frontpage');
+                }
+            }, 100);
+        });
+
+        // Backup initialization on window load in case DOMContentLoaded doesn't work properly
+        window.addEventListener('load', () => {
+            // Check if any section is already visible
+            const visibleSection = document.querySelector('.portal-section.active, .portal-section[style*="block"]');
+            console.log('Window load - visible section:', visibleSection?.id);
+            console.log('Window load - current hash:', window.location.hash);
+            
+            if (!visibleSection) {
+                console.log('No section visible on window load, checking hash again');
+                const currentHash = window.location.hash;
+                const hashSection = currentHash ? currentHash.substring(1) : 'frontpage';
+                
+                if (hashSection && hashSection !== 'frontpage') {
+                    console.log('Attempting to show hash section:', hashSection);
+                    const targetSection = document.getElementById(hashSection + 'Section');
+                    if (targetSection) {
+                        targetSection.classList.add('active');
+                        targetSection.style.display = 'block';
+                        console.log('Forced display of section:', hashSection);
+                        return;
+                    }
+                }
+                
+                console.log('Falling back to frontpage');
+                const frontpageSection = document.getElementById('frontpageSection');
+                if (frontpageSection) {
+                    frontpageSection.classList.add('active');
+                    frontpageSection.style.display = 'block';
+                }
+            }
+        });
+
+        // Handle browser back/forward navigation
+        window.addEventListener('popstate', () => {
+            const currentSection = window.location.hash ? window.location.hash.substring(1) : 'frontpage';
+            const currentNavLinks = document.querySelectorAll('nav ul li a[data-section]');
+            const validSections = Array.from(currentNavLinks).map(link => link.getAttribute('data-section'));
+            
+            if (validSections.includes(currentSection)) {
+                showSection(currentSection);
             } else {
                 showSection('frontpage');
             }
@@ -5299,6 +5742,7 @@
                                          <div class="flex flex-wrap gap-3">
                                               ${joinButtonHtml}
                                              <!-- <button class="checkin-class-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Check-in</button> -->
+                                             <button class="history-class-button py-2 px-4 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition duration-200 text-sm" data-class-id="${cls.class_id}" data-class-title="${cls.title}">📊 History</button>
                                              ${editbtn}
                                              <!-- Add Delete button if needed -->
                                          </div>
@@ -5767,6 +6211,16 @@
                          fetchClassForEdit(classId);
                      });
                  });
+
+                // History Button Listener
+                targetDiv.querySelectorAll('.history-class-button').forEach(button => {
+                    button.addEventListener('click', async () => {
+                        const classId = button.getAttribute('data-class-id');
+                        const classTitle = button.getAttribute('data-class-title');
+                        console.log('History button clicked! Class ID:', classId);
+                        openClassHistoryModal(classId, classTitle);
+                    });
+                });
             }
 
             // Function to attach event listeners to venue names for showing venue info
@@ -6483,6 +6937,159 @@
                  element.style.display = 'block'; // Ensure it's visible
             }
 
+            // --- Class History Modal Functions ---
+
+            // Function to open the class history modal
+            async function openClassHistoryModal(classId, classTitle) {
+                const modal = document.getElementById('classHistoryModal');
+                const titleElement = document.getElementById('history-class-title');
+                const tableBody = document.getElementById('history-table-body');
+                
+                // Set modal title
+                titleElement.textContent = classTitle || 'Class History';
+                
+                // Store classId in modal dataset for filter functionality
+                modal.dataset.classId = classId;
+                
+                // Show modal
+                modal.classList.remove('hidden');
+                
+                // Set default date range (last 30 days)
+                const today = new Date();
+                const thirtyDaysAgo = new Date(today);
+                thirtyDaysAgo.setDate(today.getDate() - 30);
+                
+                document.getElementById('history-date-to').value = today.toISOString().split('T')[0];
+                document.getElementById('history-date-from').value = thirtyDaysAgo.toISOString().split('T')[0];
+                
+                // Load history data
+                await loadClassHistory(classId);
+            }
+
+            // Function to load class history data
+            async function loadClassHistory(classId) {
+                const tableBody = document.getElementById('history-table-body');
+                const fromDate = document.getElementById('history-date-from').value;
+                const toDate = document.getElementById('history-date-to').value;
+                
+                // Show loading state
+                tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">Loading history...</td></tr>';
+                
+                try {
+                    const response = await fetch('/api/class/get_history', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            class_id: classId,
+                            from_date: fromDate,
+                            to_date: toDate
+                        })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        displayHistoryData(data.history || [], data.stats || {});
+                    } else {
+                        tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">Failed to load history data</td></tr>';
+                    }
+                } catch (error) {
+                    console.error('Error loading class history:', error);
+                    tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">Error loading history data</td></tr>';
+                }
+            }
+
+            // Function to display history data in the table
+            function displayHistoryData(historyRecords, stats) {
+                const tableBody = document.getElementById('history-table-body');
+                
+                // Update summary stats
+                document.getElementById('total-sessions').textContent = stats.totalSessions || 0;
+                document.getElementById('total-attendees').textContent = stats.totalAttendees || 0;
+                document.getElementById('total-revenue').textContent = '$' + (stats.totalRevenue || 0).toLocaleString();
+                document.getElementById('avg-attendance').textContent = stats.avgAttendance || 0;
+                document.getElementById('history-total-records').textContent = historyRecords.length;
+
+                if (historyRecords.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">No attendance records found for this period</td></tr>';
+                    return;
+                }
+
+                // Generate table rows
+                const rows = historyRecords.map(record => {
+                    const date = new Date(record.class_start_ts).toLocaleDateString();
+                    const checkInTime = new Date(record.checkin_ts).toLocaleTimeString();
+                    const paymentMethod = getPaymentMethodDisplay(record.payment_info);
+                    const amountPaid = record.amount_paid ? '$' + record.amount_paid.toFixed(2) : '-';
+                    const status = getPaymentStatusDisplay(record.payment_status);
+
+                    return `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${date}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">${record.student_name}</div>
+                                <div class="text-sm text-gray-500">${record.student_email || ''}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${checkInTime}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${paymentMethod}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${amountPaid}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">${status}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                tableBody.innerHTML = rows;
+            }
+
+            // Helper function to format payment method display
+            function getPaymentMethodDisplay(paymentInfo) {
+                if (!paymentInfo) return 'Free/Pass';
+                if (paymentInfo.type === 'card') {
+                    return `Card (**** ${paymentInfo.last4})`;
+                }
+                if (paymentInfo.type === 'pass') {
+                    return 'Membership Pass';
+                }
+                return paymentInfo.type || 'Unknown';
+            }
+
+            // Helper function to format payment status display
+            function getPaymentStatusDisplay(status) {
+                const statusMap = {
+                    1: '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Paid</span>',
+                    0: '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending</span>',
+                    '-1': '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Failed</span>',
+                    2: '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Free</span>'
+                };
+                return statusMap[status] || '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">Unknown</span>';
+            }
+
+            // Add event listeners for history modal
+            document.getElementById('closeHistoryModal').addEventListener('click', () => {
+                document.getElementById('classHistoryModal').classList.add('hidden');
+            });
+
+            document.getElementById('apply-history-filters').addEventListener('click', async () => {
+                const classId = document.getElementById('classHistoryModal').dataset.classId;
+                if (classId) {
+                    await loadClassHistory(classId);
+                }
+            });
+
+            // Close modal on backdrop click
+            document.getElementById('classHistoryModal').addEventListener('click', (e) => {
+                if (e.target.id === 'classHistoryModal') {
+                    document.getElementById('classHistoryModal').classList.add('hidden');
+                }
+            });
+
+            // Export functionality (placeholder)
+            document.getElementById('export-history-csv').addEventListener('click', () => {
+                alert('CSV export functionality would be implemented here');
+            });
+
+            document.getElementById('export-history-pdf').addEventListener('click', () => {
+                alert('PDF export functionality would be implemented here');
+            });
 
             // --- Initial Load / Event Attachments ---
 
