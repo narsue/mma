@@ -3330,9 +3330,34 @@ pub mod handlers {
             }));
         }
         let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
-        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let mut school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
         let requesting_auth_user_id = school_user_id.user_id; // Use the validated user ID
         let modify_user_id = req.user_id;
+        
+        // If creating setup intent for a different user, use their school context
+        if modify_user_id != requesting_auth_user_id {
+            match state_manager.db.get_user_school_context(&modify_user_id).await {
+                Ok(Some(user_school_id)) => {
+                    school_id = user_school_id; // Use target user's school for Stripe client
+                    tracing::info!("Admin creating setup intent for user {} in school {}", modify_user_id, school_id);
+                }
+                Ok(None) => {
+                    return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                        success: false,
+                        message: None,
+                        error_message: Some("Target user is not associated with any school.".to_string()),
+                    }));
+                }
+                Err(e) => {
+                    tracing::error!("Failed to get target user's school context: {}", e);
+                    return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                        success: false,
+                        message: None,
+                        error_message: Some("Failed to get user's school context.".to_string()),
+                    }));
+                }
+            }
+        }
         // state_manager.db.get_user_profile(req.user_id)
         //     .await
         //     .map_err(|e| {
@@ -3782,10 +3807,60 @@ pub mod handlers {
             }));
         }
         let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
-        let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
+        let mut school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
         let mut auth_user_id = school_user_id.user_id; // Use the validated user ID
-        if view_user.is_some() {
-            auth_user_id = view_user.unwrap().user_id;
+        
+        // If viewing another user, get their school context
+        if let Some(view_user) = view_user {
+            let view_user_id = view_user.user_id;
+            
+            // Get the target user's school context to use the correct Stripe account
+            match state_manager.db.get_user_school_context(&view_user_id).await {
+                Ok(Some(user_school_id)) => {
+                    if school_id == user_school_id {
+                        tracing::info!("Admin {} viewing payment methods for user {} in their own school {}", auth_user_id, view_user_id, school_id);
+                    } else {
+                        tracing::info!("Admin {} viewing payment methods for user {} in different school {}", auth_user_id, view_user_id, user_school_id);
+                        return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                            success: false,
+                            message: None,
+                            error_message: Some("Cannot view payment methods for a user in a different school.".to_string()),
+                        }));
+                    }
+
+                    let view_user = state_manager.db.get_user_profile(view_user_id)
+                        .await
+                        .map_err(|e| {
+                            tracing::error!("Failed to get user profile: {}", e);
+                            ErrorInternalServerError("Failed to get user profile".to_string())
+                        })?;
+                    if view_user.is_none() {
+                        return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                            success: false,
+                            message: None,
+                            error_message: Some("Target user does not exist.".to_string()),
+                        }));
+                    }
+
+                    auth_user_id = view_user.unwrap().user_id; // Use the target user's ID for Stripe operations
+
+                }
+                Ok(None) => {
+                    return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                        success: false,
+                        message: None,
+                        error_message: Some("Target user is not associated with any school.".to_string()),
+                    }));
+                }
+                Err(e) => {
+                    tracing::error!("Failed to get target user's school context: {}", e);
+                    return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                        success: false,
+                        message: None,
+                        error_message: Some("Failed to get user's school context.".to_string()),
+                    }));
+                }
+            }
         }
 
         // Retrieve Stripe customer ID from database
@@ -3893,11 +3968,59 @@ pub mod handlers {
                 error_message: Some("User is not associated with any school.".to_string()),
             }));
         }
-        
 
         let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
         let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
-        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let mut auth_user_id = school_user_id.user_id; // Use the validated user ID
+
+        let view_user_id = req.user_id;
+        if view_user_id != auth_user_id {
+            // If viewing another user's payment method, ensure they are in the same school
+            let target_school_id = match state_manager.db.get_user_school_context(&view_user_id).await {
+                Ok(Some(school_id)) => school_id,
+                Ok(None) => {
+                    return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                        success: false,
+                        message: None,
+                        error_message: Some("Target user is not associated with any school.".to_string()),
+                    }));
+                }
+                Err(e) => {
+                    tracing::error!("Failed to get target user's school context: {}", e);
+                    return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                        success: false,
+                        message: None,
+                        error_message: Some("Failed to get user's school context.".to_string()),
+                    }));
+                }
+            };
+
+            if !school_user_ids.iter().any(|s| s.school_id == target_school_id) {
+                return Ok(HttpResponse::Forbidden().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Cannot delete payment method for a user in a different school.".to_string()),
+                }));
+            };
+
+            let view_user = state_manager.db.get_user_profile(view_user_id)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to get user profile: {}", e);
+                    ErrorInternalServerError("Failed to get user profile".to_string())
+                })?;
+            if view_user.is_none() {
+                return Ok(HttpResponse::BadRequest().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("Target user does not exist.".to_string()),
+                }));
+            }
+
+            auth_user_id = view_user.unwrap().user_id; // Use the target user's ID for Stripe operations
+        } 
+
+
 
         // Retrieve Stripe customer ID from database
         let stripe_customer_id = match state_manager.db.get_stripe_customer_id(&auth_user_id).await {

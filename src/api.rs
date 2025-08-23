@@ -606,6 +606,7 @@ pub struct GetStripeSavedPaymentMethodsResponse {
 #[derive(Debug, Serialize, Deserialize)]
 // Delete a payment method
 pub struct DeletePaymentMethodRequest{
+    pub user_id: Uuid, // User ID for whom the payment method is deleted
     pub payment_method_id: Option<String>, // ID of the deleted payment method
 }
 

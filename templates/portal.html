@@ -3602,6 +3602,9 @@
             }
 
             function openEditUserModal(userId) {
+                stripeAdmin = null;
+                cardElementAdmin = null;
+                
                 fetch('/api/user/get', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -8080,7 +8083,7 @@
         // Load saved cards
         async function loadSavedCards() {
             const savedCardsList = document.getElementById('saved-cards-list');
-            
+            // console.log('loadSavedCards Loading saved cards for user:', my_user_id);
             try {
                 const response = await fetch('/api/user/get_stripe_saved_payment_methods', {
                     method: 'POST',
@@ -8130,6 +8133,7 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
+                        user_id: my_user_id,
                         payment_method_id: paymentMethodId
                     }),
                 });
@@ -8743,6 +8747,10 @@ document
             }
         });
 
+        const oldButton = document.getElementById('refresh-cards-admin');
+        const newButton = oldButton.cloneNode(true); // true = copy child nodes
+        oldButton.parentNode.replaceChild(newButton, oldButton);
+
         document.getElementById('refresh-cards-admin').addEventListener('click', () => {
             loadSavedCardsForAdmin(userId);
         });
@@ -8766,6 +8774,7 @@ document
 
     async function loadSavedCardsForAdmin(userId) {
         const list = document.getElementById('saved-cards-list-admin');
+        // console.log('loadSavedCardsForAdmin Loading saved cards for user:', userId);
 
         try {
             const res = await fetch('/api/user/get_stripe_saved_payment_methods', {
@@ -8807,10 +8816,10 @@ document
         if (!confirm('Are you sure you want to delete this payment method?')) return;
 
         try {
-            const res = await fetch('/api/admin/delete_payment_method', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: userId, payment_method_id: paymentMethodId })
+            const res = await fetch('/api/user/delete_payment_method', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, payment_method_id: paymentMethodId })
             });
 
             if (!res.ok) throw new Error('Failed to delete card');

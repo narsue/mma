@@ -4372,6 +4372,24 @@ impl ScyllaConnector {
         Ok(None)
     }
 
+    // Get a user's primary school context (for admin operations viewing other users)
+    pub async fn get_user_school_context(&self, user_id: &Uuid) -> AppResult<Option<Uuid>> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT school_id FROM mma.user WHERE user_id = ? LIMIT 1",
+                (user_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        for row in result.rows().trace()? {
+            let (school_id,): (Uuid,) = row.trace()?;
+            return Ok(Some(school_id));
+        }
+        
+        Ok(None)
+    }
+
     // Update school settings
     pub async fn update_school_settings(
         &self, 
