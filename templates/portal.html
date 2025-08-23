@@ -7043,13 +7043,13 @@
             // Helper function to format payment method display
             function getPaymentMethodDisplay(paymentInfo) {
                 if (!paymentInfo) return 'Free/Pass';
-                if (paymentInfo.type === 'card') {
+                if (paymentInfo.type_name === 'card') {
                     return `Card (**** ${paymentInfo.last4})`;
                 }
-                if (paymentInfo.type === 'pass') {
+                if (paymentInfo.type_name === 'pass') {
                     return 'Membership Pass';
                 }
-                return paymentInfo.type || 'Unknown';
+                return paymentInfo.type_name || 'Unknown';
             }
 
             // Helper function to format payment status display
@@ -7972,7 +7972,8 @@
                             },
                             body: JSON.stringify({
                                 customer_email: email,
-                                cardholder_name: cardholderName
+                                cardholder_name: cardholderName,
+                                user_id: my_user_id
                             }),
                         });
 
@@ -8687,13 +8688,34 @@ document
             stripeResultAdmin.innerHTML = '';
 
             try {
-            const name = stripeCardholderNameAdmin.value.trim();
-            if (!name) throw new Error('Cardholder name is required');
+            // const name = stripeCardholderNameAdmin.value.trim();
+            // if (!name) throw new Error('Cardholder name is required');
 
-            const res = await fetch('/api/admin/create_setup_intent', {
+
+            const cardholderName = stripeCardholderNameAdmin.value;
+
+            if (!cardholderName.trim()) {
+                showStripeMessage('Please enter the cardholder name.', 'error');
+                stripeSubmitBtn.disabled = false;
+                stripeLoading.classList.add('hidden');
+                return;
+            }
+
+            if (!email.trim()) {
+                showStripeMessage('Email is required.', 'error');
+                stripeSubmitBtn.disabled = false;
+                stripeLoading.classList.add('hidden');
+                return;
+            }
+
+
+            const res = await fetch('/api/user/create_setup_intent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: userId })
+                body: JSON.stringify({ user_id: userId, 
+                    customer_email: email, 
+                    cardholder_name: cardholderName 
+                })
             });
 
             if (!res.ok) throw new Error('Failed to create setup intent');

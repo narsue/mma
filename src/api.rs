@@ -585,6 +585,7 @@ pub struct PaymentInfo {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateSetupIntentRequest {
+    pub user_id: Uuid, // User ID for whom the setup intent is created
     pub customer_email: String,
     pub cardholder_name: String,
 }

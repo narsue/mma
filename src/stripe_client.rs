@@ -139,6 +139,29 @@ impl StripeClient {
         }
     }
 
+    // Helper to create a client for a specific school using database settings
+    pub async fn for_school(
+        db: &crate::db::ScyllaConnector,
+        school_id: &uuid::Uuid,
+        dev_mode: bool,
+    ) -> AppResult<Self> {
+        match db.get_school_settings(school_id).await? {
+            Some(settings) => {
+                let publishable_key = settings.stripe_publishable_key
+                    .ok_or_else(|| AppError::Internal("School has no Stripe publishable key configured".to_string()))?;
+                
+                // Get the real secret key from the database
+                let secret_key = match db.get_school_stripe_secret_key(school_id).await? {
+                    Some(key) => key,
+                    None => return Err(AppError::Internal("School has no Stripe secret key configured".to_string())),
+                };
+
+                Ok(Self::with_keys(secret_key, publishable_key, dev_mode))
+            }
+            None => Err(AppError::Internal("School settings not found".to_string())),
+        }
+    }
+
     fn load_config() -> Result<StripeConfig, Box<dyn std::error::Error + Send + Sync>> {
         let config_path = Path::new("auth/stripe.json");
         

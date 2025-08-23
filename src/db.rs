@@ -3336,7 +3336,6 @@ impl ScyllaConnector {
 
             // Add session to unique set for stats (using timestamp as key)
             unique_sessions.insert(class_start_ts.0);
-
             // Get payment information if available
             let (payment_info, amount_paid, payment_status) = if let Some(payment_id) = user_payment_id {
                 self.get_payment_details(payment_id).await.unwrap_or((None, 0.0, 2))
@@ -4332,6 +4331,42 @@ impl ScyllaConnector {
                 stripe_secret_key: if stripe_secret_key.is_some() { Some("••••••••".to_string()) } else { None },
                 stripe_webhook_secret: if stripe_webhook_secret.is_some() { Some("••••••••".to_string()) } else { None },
             }));
+        }
+        
+        Ok(None)
+    }
+
+    // Get school's real Stripe secret key (unmasked) for payment processing
+    pub async fn get_school_stripe_secret_key(&self, school_id: &Uuid) -> AppResult<Option<String>> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT stripe_secret_key FROM mma.school WHERE school_id = ?",
+                (school_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        for row in result.rows().trace()? {
+            let (stripe_secret_key,): (Option<String>,) = row.trace()?;
+            return Ok(stripe_secret_key);
+        }
+        
+        Ok(None)
+    }
+
+    // Get school's webhook secret for Stripe webhook verification
+    pub async fn get_school_stripe_webhook_secret(&self, school_id: &Uuid) -> AppResult<Option<String>> {
+        let result = self.session
+            .query_unpaged(
+                "SELECT stripe_webhook_secret FROM mma.school WHERE school_id = ?",
+                (school_id,),
+            )
+            .await.trace()?
+            .into_rows_result().trace()?;
+
+        for row in result.rows().trace()? {
+            let (stripe_webhook_secret,): (Option<String>,) = row.trace()?;
+            return Ok(stripe_webhook_secret);
         }
         
         Ok(None)

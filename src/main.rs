@@ -100,15 +100,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Initialize database connection
     let db = Arc::new(ScyllaConnector::new(&["127.0.0.1:9042"], dev_mode).await?);
     // db.init_schema().await?;
-    let stripe_client = StripeClient::new(dev_mode);
-    let stripe_client = match stripe_client {
-        Ok(client) => client,
-        Err(e) => {
-            tracing::error!("Failed to initialize Stripe client: {}", e);
-            return Ok(());
-        }
-    };
-    // let stripe_client = Arc::new(stripe_client);
+    // Note: Stripe clients are now created per-school as needed, no global client required
 
     // --- Load Templates ---
     let template_cache = load_templates()?; // Load initially, panics on error here
@@ -127,14 +119,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Start HTTP server
     let processor_data = web::Data::new(state_manager.clone());
     let template_data = web::Data::new(template_cache);
-    let stripe_client_data = web::Data::new(stripe_client);
     
     tracing::info!("Starting HTTP server on 127.0.0.1:{}", port);
     let server = HttpServer::new(move || {
         App::new()
             .app_data(processor_data.clone())
             .app_data(template_data.clone())
-            .app_data(stripe_client_data.clone())
             .wrap(Logger::default())
 
             // --- Serve CSS from Cache ---

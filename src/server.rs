@@ -1734,7 +1734,6 @@ pub mod handlers {
     #[post("/api/class/set_student_attendance")] 
     pub async fn set_class_student_attendance_handler(
         state_manager: web::Data<Arc<StoreStateManager>>, // State manager for DB access
-        stripe_client: web::Data<StripeClient>,
         mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
         req: web::Json<SetClassStudentsAttendanceRequest>, // Extract query parameters from the URL
     ) -> Result<HttpResponse, ActixError> { // Handler returns Result<HttpResponse, ActixError>
@@ -1777,8 +1776,22 @@ pub mod handlers {
         let auth_user_id = school_user_id.user_id; // Use the validated user ID
         let class_start_ts = req.class_start_ts; // Extract class_start_ts from query parameters
 
+        // Create school-specific Stripe client
+        let dev_mode = std::env::var("DEV_MODE").is_ok();
+        let school_stripe_client = match StripeClient::for_school(&state_manager.db, &school_id, dev_mode).await {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::error!("Failed to create Stripe client for school {}: {}", school_id, e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("School Stripe configuration not found".to_string()),
+                }));
+            }
+        };
+
         // Call the database function to get classes based on the provided filters
-        let result: AppResult<bool> = state_manager.db.set_class_attendance(&class_id, &school_id, &req.user_ids, &req.present, class_start_ts, &stripe_client).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
+        let result: AppResult<bool> = state_manager.db.set_class_attendance(&class_id, &school_id, &req.user_ids, &req.present, class_start_ts, &school_stripe_client).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
 
         // Handle the result of the database operation explicitly
         match result {
@@ -3302,11 +3315,10 @@ pub mod handlers {
     pub async fn create_setup_intent_handler(
         state_manager: web::Data<Arc<StoreStateManager>>,
         req: web::Json<CreateSetupIntentRequest>,
-        stripe_client: web::Data<StripeClient>,
         mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
     ) -> Result<HttpResponse, ActixError> {
         // Validate the session and get the creator user_id
-        let logged_user_id = user.validate(&state_manager).await
+        let _logged_user_id = user.validate(&state_manager).await
             .map_err(|app_err| ErrorInternalServerError(app_err))?; // Convert potential AppError from validate
         let school_user_ids = user.school_user_ids;
         if school_user_ids.is_empty() {
@@ -3319,7 +3331,29 @@ pub mod handlers {
         }
         let school_user_id = school_user_ids.first().unwrap(); // Get the first school_user_id, assuming user is associated with at least one school
         let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
-        let auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let requesting_auth_user_id = school_user_id.user_id; // Use the validated user ID
+        let modify_user_id = req.user_id;
+        // state_manager.db.get_user_profile(req.user_id)
+        //     .await
+        //     .map_err(|e| {
+        //         tracing::error!("Failed to get user profile: {}", e);
+        //         ErrorInternalServerError("Failed to get user profile".to_string())
+        //     })?;
+
+
+        // Create school-specific Stripe client
+        let dev_mode = std::env::var("DEV_MODE").is_ok();
+        let school_stripe_client = match StripeClient::for_school(&state_manager.db, &school_id, dev_mode).await {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::error!("Failed to create Stripe client for school {}: {}", school_id, e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("School Stripe configuration not found".to_string()),
+                }));
+            }
+        };
 
         // Validate input
         if req.customer_email.trim().is_empty() {
@@ -3347,7 +3381,7 @@ pub mod handlers {
             }));
         }
 
-        let mut stripe_customer_id = match state_manager.db.get_stripe_customer_id(&auth_user_id).await {
+        let mut stripe_customer_id = match state_manager.db.get_stripe_customer_id(&modify_user_id).await {
             Ok(Some(customer_id)) => Some(customer_id),
             Ok(None) => None,
             Err(e) => {
@@ -3363,7 +3397,7 @@ pub mod handlers {
         if stripe_customer_id.is_none()
         {
             // Create or get existing customer
-            let customer = match stripe_client
+            let customer = match school_stripe_client
                 .create_customer(&req.customer_email, Some(&req.cardholder_name))
                 .await
             {
@@ -3379,7 +3413,7 @@ pub mod handlers {
             };
 
             let result = state_manager.db.add_stripe_customer_id(
-                &auth_user_id,
+                &modify_user_id,
                 &customer.id,
             );
             if let Err(e) = result.await {
@@ -3415,7 +3449,7 @@ pub mod handlers {
         //     None => {
                 // Create setup intent
 
-        let setup_intent = match stripe_client
+        let setup_intent = match school_stripe_client
             .create_setup_intent(&stripe_customer_id)
             .await
         {
@@ -3553,7 +3587,6 @@ pub mod handlers {
         state_manager: web::Data<Arc<StoreStateManager>>,
         mut user: LoggedUser,
         req: web::Json<UserSubscribePaymentPlan>,
-        stripe_client: web::Data<StripeClient>,
     ) -> Result<HttpResponse, ActixError> {
         // Validate the session and get the creator user_id
         let logged_user_id = user.validate(&state_manager).await
@@ -3571,7 +3604,21 @@ pub mod handlers {
         let school_id = school_user_id.school_id; // Extract the school_id from the first school_user_id
         let auth_user_id = school_user_id.user_id; // Use the validated user ID
 
-        match state_manager.db.user_subscribe_payment_plan(&stripe_client, &auth_user_id, &school_id, &req).await {
+        // Create school-specific Stripe client
+        let dev_mode = std::env::var("DEV_MODE").is_ok();
+        let school_stripe_client = match StripeClient::for_school(&state_manager.db, &school_id, dev_mode).await {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::error!("Failed to create Stripe client for school {}: {}", school_id, e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("School Stripe configuration not found".to_string()),
+                }));
+            }
+        };
+
+        match state_manager.db.user_subscribe_payment_plan(&school_stripe_client, &auth_user_id, &school_id, &req).await {
             Ok(result) => {},
             Err(_) => {
                 return Ok(HttpResponse::BadRequest().json(GenericResponse {
@@ -3720,7 +3767,6 @@ pub mod handlers {
     pub async fn get_stripe_saved_payment_methods_handler(
         state_manager: web::Data<Arc<StoreStateManager>>,
         mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
-        stripe_client: web::Data<StripeClient>,
         view_user: Option<web::Json<UserIdRequest>>,
     ) -> Result<HttpResponse, ActixError> {
         // Validate the session and get the creator user_id
@@ -3763,8 +3809,22 @@ pub mod handlers {
             }
         };
 
-        // List payment methods using Stripe client
-        let payment_methods = match stripe_client.list_payment_methods(&stripe_customer_id).await {
+        // Create school-specific Stripe client
+        let dev_mode = std::env::var("DEV_MODE").is_ok();
+        let school_stripe_client = match StripeClient::for_school(&state_manager.db, &school_id, dev_mode).await {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::error!("Failed to create Stripe client for school {}: {}", school_id, e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("School Stripe configuration not found".to_string()),
+                }));
+            }
+        };
+
+        // List payment methods using school-specific Stripe client
+        let payment_methods = match school_stripe_client.list_payment_methods(&stripe_customer_id).await {
             Ok(methods) => methods,
             Err(e) => {
                 tracing::error!("Failed to list payment methods: {}", e);
@@ -3799,7 +3859,6 @@ pub mod handlers {
         state_manager: web::Data<Arc<StoreStateManager>>,
         req: web::Json<DeletePaymentMethodRequest>,
         mut user: LoggedUser, // Require user to be logged in (authentication), but don't need user_id for this list
-        stripe_client: web::Data<StripeClient>,
     ) -> Result<HttpResponse, ActixError> {
 
 
@@ -3861,8 +3920,22 @@ pub mod handlers {
             }
         };
 
-        // Detach payment method using Stripe client
-        match stripe_client.detach_payment_method(&payment_method_id).await {
+        // Create school-specific Stripe client
+        let dev_mode = std::env::var("DEV_MODE").is_ok();
+        let school_stripe_client = match StripeClient::for_school(&state_manager.db, &school_id, dev_mode).await {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::error!("Failed to create Stripe client for school {}: {}", school_id, e);
+                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("School Stripe configuration not found".to_string()),
+                }));
+            }
+        };
+
+        // Detach payment method using school-specific Stripe client
+        match school_stripe_client.detach_payment_method(&payment_method_id).await {
             Ok(_) => {
                 state_manager.db.remove_stripe_payment_method_id(&auth_user_id, &payment_method_id).await.map_err(|e| {
                     tracing::error!("Failed to remove Stripe payment method ID from database: {}", e);
