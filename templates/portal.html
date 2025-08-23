@@ -3602,8 +3602,7 @@
             }
 
             function openEditUserModal(userId) {
-                stripeAdmin = null;
-                cardElementAdmin = null;
+                deinitStripeForAdmin(); // Deinitialize any existing Stripe setup
                 
                 fetch('/api/user/get', {
                     method: 'POST',
@@ -8663,6 +8662,26 @@ document
     // Initialize Stripe for admin modal
     var stripeAdmin = null;
     var cardElementAdmin = null;
+  
+    function deinitStripeForAdmin() {
+        if (stripeAdmin) {
+            stripeAdmin = null;
+            cardElementAdmin = null;
+            // document.getElementById('stripe-card-form-admin').cloneNode(true);
+
+            const oldButton = document.getElementById('stripe-card-form-admin');
+            const newButton = oldButton.cloneNode(true); // true = copy child nodes
+            oldButton.parentNode.replaceChild(newButton, oldButton);
+
+
+            document.getElementById('stripe-result-admin').innerHTML = '';
+            document.getElementById('card-element-admin').innerHTML = '';
+            document.getElementById('stripe-submit-btn-admin').disabled = false;
+            document.getElementById('stripe-loading-admin').classList.add('hidden');
+            document.getElementById('stripe-cardholder-name-admin').value = '';
+            document.getElementById('card-errors-admin').textContent = '';
+        }
+    }
 
     function initStripeForAdmin(userId, email, cardholderName) {
         if (stripeAdmin) return; // Don't re-initialize
@@ -8712,7 +8731,7 @@ document
                 return;
             }
 
-
+            console.log('Creating setup intent for user:', userId, 'with email:', email, 'and cardholder name:', cardholderName);
             const res = await fetch('/api/user/create_setup_intent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

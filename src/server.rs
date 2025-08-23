@@ -3841,8 +3841,29 @@ pub mod handlers {
                             error_message: Some("Target user does not exist.".to_string()),
                         }));
                     }
-
-                    auth_user_id = view_user.unwrap().user_id; // Use the target user's ID for Stripe operations
+                    let view_user_id = view_user.unwrap().user_id; // Use the target user's ID for Stripe operations
+                    if view_user_id != auth_user_id {
+                        // Check that the auth user is a hper admin or super admin
+                        let permissions = match state_manager.db.get_user_permissions(&auth_user_id).await {
+                            Ok(perms) => perms,
+                            Err(e) => {
+                                tracing::error!("Failed to get user permissions: {}", e);
+                                return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                                    success: false,
+                                    message: None,
+                                    error_message: Some("Failed to get user permissions".to_string()),
+                                }));
+                            }
+                        };
+                        if permissions.is_empty() || !permissions.iter().any(|p| (p.permission == Permissions::HyperAdmin as i32|| p.permission == Permissions::SuperAdmin as i32)) {
+                            return Ok(HttpResponse::Forbidden().json(GenericResponse {
+                                success: false,
+                                message: None,
+                                error_message: Some("You do not have permission to delete payment methods for other users.".to_string()),
+                            }));
+                        }
+                    }
+                    auth_user_id = view_user_id; // Use the target user's ID for Stripe operations
 
                 }
                 Ok(None) => {
@@ -3975,6 +3996,27 @@ pub mod handlers {
 
         let view_user_id = req.user_id;
         if view_user_id != auth_user_id {
+            // Check that the auth user is a hper admin or super admin
+            let permissions = match state_manager.db.get_user_permissions(&auth_user_id).await {
+                Ok(perms) => perms,
+                Err(e) => {
+                    tracing::error!("Failed to get user permissions: {}", e);
+                    return Ok(HttpResponse::InternalServerError().json(GenericResponse {
+                        success: false,
+                        message: None,
+                        error_message: Some("Failed to get user permissions".to_string()),
+                    }));
+                }
+            };
+            if permissions.is_empty() || !permissions.iter().any(|p| (p.permission == Permissions::HyperAdmin as i32|| p.permission == Permissions::SuperAdmin as i32)) {
+                return Ok(HttpResponse::Forbidden().json(GenericResponse {
+                    success: false,
+                    message: None,
+                    error_message: Some("You do not have permission to delete payment methods for other users.".to_string()),
+                }));
+            }
+
+
             // If viewing another user's payment method, ensure they are in the same school
             let target_school_id = match state_manager.db.get_user_school_context(&view_user_id).await {
                 Ok(Some(school_id)) => school_id,
