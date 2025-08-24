@@ -7005,10 +7005,10 @@
                 const tableBody = document.getElementById('history-table-body');
                 
                 // Update summary stats
-                document.getElementById('total-sessions').textContent = stats.totalSessions || 0;
-                document.getElementById('total-attendees').textContent = stats.totalAttendees || 0;
-                document.getElementById('total-revenue').textContent = '$' + (stats.totalRevenue || 0).toLocaleString();
-                document.getElementById('avg-attendance').textContent = stats.avgAttendance || 0;
+                document.getElementById('total-sessions').textContent = stats.total_sessions || 0;
+                document.getElementById('total-attendees').textContent = stats.total_attendees || 0;
+                document.getElementById('total-revenue').textContent = '$' + (stats.total_revenue || 0).toLocaleString();
+                document.getElementById('avg-attendance').textContent = stats.avg_attendance || 0;
                 document.getElementById('history-total-records').textContent = historyRecords.length;
 
                 if (historyRecords.length === 0) {

@@ -95,6 +95,14 @@ struct StripeConfig {
     prod_public_key: Option<String>,
 }
 
+pub enum PaymentStatus {
+    Captured,
+    Paid,
+    PartialRefund,
+    FullRefund,
+    Failed,
+}
+
 impl StripeClient {
     pub fn new(dev_mode: bool) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let config = Self::load_config()?;

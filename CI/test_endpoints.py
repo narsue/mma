@@ -161,7 +161,7 @@ def create_venue(session: requests.Session):
     resp.raise_for_status()
     data = resp.json()
     assert data["success"] is True
-    venue_id = data["class_id"]  # note: your Rust handler returns class_id for venue creation response?
+    venue_id = data["id"]  # note: your Rust handler returns class_id for venue creation response?
     return venue_id
 
 def create_style(session: requests.Session):
@@ -176,7 +176,7 @@ def create_style(session: requests.Session):
     resp.raise_for_status()
     data = resp.json()
     assert data["success"] is True
-    style_id = data["class_id"]  # same note as above for response key
+    style_id = data["id"]  # same note as above for response key
     return style_id
 
 def create_class(session: requests.Session, venue_id, style_id):
@@ -208,7 +208,7 @@ def create_class(session: requests.Session, venue_id, style_id):
     resp.raise_for_status()
     data = resp.json()
     assert data["success"] is True
-    class_id = data["class_id"]
+    class_id = data["id"]
     return class_id
 
 def get_class(session: requests.Session, class_id: str, expect_success: bool):

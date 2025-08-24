@@ -32,7 +32,7 @@ use crate::api::{ActivePaymentPlanData, ClassData, ClassFrequency, ClassFrequenc
     UserProfileData, UserWithName, VenueData, SchoolUpdatePaymentPlanRequest, UserSubscribePaymentPlan,
     ChangeUserSubscribePaymentPlan, SchoolUser, UserSchoolPermission, DetailedSchoolUserId, DashStat,
     ClassHistoryRecord, ClassHistoryStats, PaymentInfo}; 
-use crate::stripe_client::StripeClient;
+use crate::stripe_client::{StripeClient, PaymentStatus};
 use ammonia::clean;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -1761,7 +1761,6 @@ impl ScyllaConnector {
                                 .round(0)
                                 .to_i64()
                                 .unwrap();
-
                             let mut stripe_payment_id = None;
                             if *price > BigDecimal::from(0) { 
                                 // return Ok(true);
@@ -1772,7 +1771,7 @@ impl ScyllaConnector {
                             }
 
                             // let duration = PaymentPlanDuration::SingleClass as i32;
-                            let payment_status = 1; // captured
+                            let payment_status = PaymentStatus::Paid as i32; // captured
 
                             let zero_guuid = Uuid::nil();
                             let now = scylla::value::CqlTimestamp(now);
@@ -1807,17 +1806,21 @@ impl ScyllaConnector {
                                 Some(class_start_ts) => class_start_ts,
                                 None => {scylla::value::CqlTimestamp(0)}
                             };
+                            let user_payment_id = Uuid::new_v4();
 
+                            // let _result = self.session
+                            //     .query_unpaged("insert into mma.user_payment (user_id, base_payment_plan_id, payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                            //     (user_id, base_payment_plan_id, payment_plan_id, class_id, class_start_ts, now, stripe_payment_id, now, price, payment_status)) // Pass the query string and bound values
+                            //     .await.trace()?;
                             let _result = self.session
-                                .query_unpaged("insert into mma.user_payment (user_id, base_payment_plan_id, payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-                                (user_id, base_payment_plan_id, payment_plan_id, class_id, class_start_ts, now, stripe_payment_id, now, price, payment_status)) // Pass the query string and bound values
+                                .query_unpaged("insert into mma.user_payment (user_payment_id, user_id, base_payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, paid_ts, paid, amount, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                                (user_payment_id, user_id, base_payment_plan_id, class_id, class_start_ts, now, stripe_payment_id, now, now, price, price, price, payment_status)) // Pass the query string and bound values
                                 .await.trace()?;
-
 
                             if is_pass {
                                 //CREATE TABLE IF NOT EXISTS {}.user_payment_plan (user_payment_plan_id uuid, user_id uuid, base_payment_plan_id uuid, payment_plan_id uuid, group_user_ids set<uuid>, next_group_user_ids set<uuid>, created_ts timestamp, expiration_ts timestamp, subscribed boolean, PRIMARY KEY(user_id, user_payment_plan_id));
                                 let expiration_ts = match expiration_ts {
-                                    Some(ts) => scylla::value::CqlTimestamp(expiration_ts.unwrap()),
+                                    Some(_ts) => scylla::value::CqlTimestamp(expiration_ts.unwrap()),
                                     None => {
                                         tracing::error!("Attempting to use a expiration_ts that has no value. This code should never run.");
                                         scylla::value::CqlTimestamp(0)
@@ -2153,15 +2156,16 @@ impl ScyllaConnector {
                                         // result.id
                                         let stripe_payment_id = result.id;
                                         let duration = PaymentPlanDuration::SingleClass as i32;
-                                        let payment_status = 1; // captured
+                                        // let payment_status = 1; // captured
+                                        let payment_status = PaymentStatus::Paid as i32; // captured
 
                                         let zero_guuid = Uuid::nil();
                                         let now = scylla::value::CqlTimestamp(now);
                                         let class_start_ts = scylla::value::CqlTimestamp(class_start_ts);
                                         
                                         let result = self.session
-                                            .query_unpaged("insert into mma.user_payment (user_payment_id, user_id, base_payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-                                            (user_payment_id, user_id, zero_guuid, class_id, class_start_ts, now, stripe_payment_id, now, price, payment_status)) // Pass the query string and bound values
+                                            .query_unpaged("insert into mma.user_payment (user_payment_id, user_id, base_payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, paid_ts, paid, amount, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                                            (user_payment_id, user_id, zero_guuid, class_id, class_start_ts, now, stripe_payment_id, now, now, price, price, price, payment_status)) // Pass the query string and bound values
                                             .await.trace()?;
                                         return Ok((true, Some(user_payment_id), None));
                                         // CREATE TABLE IF NOT EXISTS {}.user_payment (user_payment_id uuid, user_id uuid, class_id uuid, class_start_ts timestamp, base_payment_plan_id uuid, payment_plan_id uuid, status int, stripe_payment_id text, created_ts timestamp, paid decimal, amount decimal, refunded decimal, refunded_ts timestamp, paid_ts timestamp, processing_ts timestamp, processing_node text, captured_ts timestamp, captured decimal, PRIMARY KEY (user_id, base_payment_plan_id, class_id, class_start_ts));

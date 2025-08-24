@@ -1,16 +1,16 @@
 #!/bin/bash
 
-echo "Running benchmarks"
+echo "external_bench.sh: Running benchmarks"
 
 # Fetch version from API endpoint
 APP_VERSION=$(curl -s http://127.0.0.1:1227/api/version | tr -d '\r\n"')
 
 if [[ -z "$APP_VERSION" ]]; then
-  echo "Failed to get app version from /api/version"
+  echo "external_bench.sh: Failed to get app version from /api/version"
   exit 1
 fi
 
-echo "App version: $APP_VERSION"
+echo "external_bench.sh: App version: $APP_VERSION"
 CPU_MODEL=$(grep -m1 "model name" /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')
 
 # Authenticate and get cookie
@@ -33,7 +33,7 @@ COOKIE=$(curl -s -i -X POST http://127.0.0.1:1227/api/user/login \
 SUMMARY_FILE="benchmark_results/$APP_VERSION/summary.txt"
 mkdir -p "$(dirname "$SUMMARY_FILE")"
 # echo -n "" > "$SUMMARY_FILE"  # Clear previous summary
-echo "CPU: $CPU_MODEL" | tee -a "$SUMMARY_FILE"
+echo "external_bench.sh: CPU: $CPU_MODEL" | tee -a "$SUMMARY_FILE"
 echo "" | tee -a "$SUMMARY_FILE"
 
 # Optional header
@@ -93,10 +93,10 @@ run_benchmark api/venue/get_list "hey -n 500 -c 5 -H 'Cookie: $COOKIE' http://12
 
 # Fetch first class_id using authenticated request
 CLASS_ID=$(curl -s -H "Cookie: $COOKIE" http://127.0.0.1:1227/api/class/get_list \
-  | jq -r '.[0].class_id')
+  | jq -r '.[0].id')
 
 if [[ -z "$CLASS_ID" || "$CLASS_ID" == "null" ]]; then
-  echo "Failed to fetch class_id"
+  echo "external_bench.sh: Failed to fetch class_id"
   exit 1
 fi
 
@@ -105,10 +105,10 @@ run_benchmark api/class/get_class "hey -n 500 -c 5 -m POST -H 'Content-Type: app
 
 # Fetch first class_id using authenticated request
 STYLE_ID=$(curl -s -H "Cookie: $COOKIE" http://127.0.0.1:1227/api/style/get_list \
-  | jq -r '.styles[0].style_id')
+  | jq -r '.styles[0].id')
 
 if [[ -z "$STYLE_ID" || "$STYLE_ID" == "null" ]]; then
-  echo "Failed to fetch style_id"
+  echo "external_bench.sh: Failed to fetch style_id"
   exit 1
 fi
 
