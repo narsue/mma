@@ -14,6 +14,8 @@ LOGIN_RESPONSE=$(curl -s -X POST http://localhost:1227/api/user/login \
   -c cookies.txt)
 echo $LOGIN_RESPONSE
 
+cat cookies.txt
+
 echo -e "\nChecking profile..."
 PROFILE_RESPONSE=$(curl -s -X GET http://localhost:1227/api/user/profile \
   -b cookies.txt)

@@ -16,7 +16,7 @@ CPU_MODEL=$(grep -m1 "model name" /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')
 # Authenticate and get cookie
 COOKIE=$(curl -s -i -X POST http://127.0.0.1:1227/api/user/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"narsue@school1.com","password":"test"}' \
+  -d '{"email":"narsue@school1.com","password":"Secure123!"}' \
   | awk '/^[Ss]et-[Cc]ookie:/ { 
       split($0, a, ": "); 
       split(a[2], b, ";"); 
@@ -27,7 +27,12 @@ COOKIE=$(curl -s -i -X POST http://127.0.0.1:1227/api/user/login \
       print cookies 
     }')
 
-# echo "Using cookie: $COOKIE"
+echo "Using cookie: $COOKIE"
+# If cookie is empty, exit with error
+if [[ -z "$COOKIE" ]]; then
+  echo "external_bench.sh: Failed to get authentication cookie"
+  exit 1
+fi
 
 # Create benchmark output dir
 SUMMARY_FILE="benchmark_results/$APP_VERSION/summary.txt"
@@ -93,7 +98,8 @@ run_benchmark api/venue/get_list "hey -n 500 -c 5 -H 'Cookie: $COOKIE' http://12
 
 # Fetch first class_id using authenticated request
 CLASS_ID=$(curl -s -H "Cookie: $COOKIE" http://127.0.0.1:1227/api/class/get_list \
-  | jq -r '.[0].id')
+  | jq -r '.[0].class_id')
+
 
 if [[ -z "$CLASS_ID" || "$CLASS_ID" == "null" ]]; then
   echo "external_bench.sh: Failed to fetch class_id"
@@ -105,7 +111,7 @@ run_benchmark api/class/get_class "hey -n 500 -c 5 -m POST -H 'Content-Type: app
 
 # Fetch first class_id using authenticated request
 STYLE_ID=$(curl -s -H "Cookie: $COOKIE" http://127.0.0.1:1227/api/style/get_list \
-  | jq -r '.styles[0].id')
+  | jq -r '.styles[0].style_id')
 
 if [[ -z "$STYLE_ID" || "$STYLE_ID" == "null" ]]; then
   echo "external_bench.sh: Failed to fetch style_id"
