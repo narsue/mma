@@ -1,0 +1,4 @@
+curl -s -X POST http://localhost:1228/api/user/create -H "Content-Type: application/json" -d '{"email":"bmmac.leura@outlook.com","password":"test","first_name":"Sam","surname":"Traish"}'
+curl -s -X POST http://localhost:1228/api/user/create -H "Content-Type: application/json" -d '{"email":"sam@bmmac.com","password":"test","first_name":"Sam","surname":"Traish"}'
+curl -s -X POST http://localhost:1227/api/user/create -H "Content-Type: application/json" -d '{"email":"bmmac.leura@outlook.com","password":"test","first_name":"Sam","surname":"Traish"}'
+curl -s -X POST http://localhost:1227/api/user/create -H "Content-Type: application/json" -d '{"email":"sam@bmmac.com","password":"test","first_name":"Sam","surname":"Traish"}'

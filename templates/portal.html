@@ -2734,14 +2734,27 @@
                     my_user_id = data.user_id;
                     my_school_id = data.school_id;
 
+                    console.log("User permissions:", userPermissions);
+                    console.log("Checking permissions for SuperAdmin/HyperAdmin:", hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin]));
+                    
                     if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin]))
                     {
+                        console.log("User has admin permissions - showing admin buttons");
                         document.getElementById("dashboard-nav").classList.remove("hidden");
                         document.getElementById("users-nav").classList.remove("hidden");
                         document.getElementById("add-venue-button").classList.remove("hidden");
-                        document.getElementById("createClassBtn").classList.remove("hidden");
+                        const createClassBtn = document.getElementById("createClassBtn");
+                        createClassBtn.classList.remove("hidden");
+                        createClassBtn.style.display = "inline-flex"; // Explicitly set display
+                        console.log("Create class button should now be visible");
+                        console.log("Button element:", createClassBtn);
+                        console.log("Button computed display:", window.getComputedStyle(createClassBtn).display);
+                        console.log("Button computed visibility:", window.getComputedStyle(createClassBtn).visibility);
+                        console.log("Button computed opacity:", window.getComputedStyle(createClassBtn).opacity);
+                        console.log("Button classes:", createClassBtn.classList.toString());
                     }
                     else{
+                        console.log("User does NOT have admin permissions - hiding admin buttons");
                         document.getElementById("dashboard-nav").classList.add("hidden");
                         document.getElementById("users-nav").classList.add("hidden");
                         document.getElementById("add-venue-button").classList.add("hidden");
@@ -3139,6 +3152,14 @@
                         console.log('Showing section:', section.id);
                         section.classList.add('active');
                         section.style.display = 'block'; // Or 'flex'
+                        
+                        // Debug section dimensions after showing
+                        setTimeout(() => {
+                            const rect = section.getBoundingClientRect();
+                            console.log(`${section.id} dimensions after show:`, rect.width, 'x', rect.height);
+                            console.log(`${section.id} computed display:`, getComputedStyle(section).display);
+                            console.log(`${section.id} parent:`, section.parentElement?.tagName, section.parentElement?.className);
+                        }, 100);
                     } else {
                         section.classList.remove('active');
                         section.style.display = 'none';
@@ -4882,6 +4903,28 @@
 
         // Backup initialization on window load in case DOMContentLoaded doesn't work properly
         window.addEventListener('load', () => {
+            // Fix classesSection DOM structure if it's incorrectly placed
+            const classesSection = document.getElementById('classesSection');
+            if (classesSection && classesSection.parentElement.id === 'dashboardSection') {
+                console.log('FIXING: Moving classesSection out of dashboardSection on page load');
+                const mainContainer = document.querySelector('.max-w-7xl');
+                if (mainContainer) {
+                    mainContainer.appendChild(classesSection);
+                    console.log('Moved classesSection to main container on page load');
+                    
+                    // Apply normal styling
+                    classesSection.style.cssText = `
+                        position: relative !important;
+                        background: transparent !important;
+                        border: none !important;
+                        width: auto !important;
+                        height: auto !important;
+                        z-index: auto !important;
+                        opacity: 1 !important;
+                    `;
+                }
+            }
+            
             // Check if any section is already visible
             const visibleSection = document.querySelector('.portal-section.active, .portal-section[style*="block"]');
             console.log('Window load - visible section:', visibleSection?.id);
@@ -6008,14 +6051,15 @@
                                  });
                              }
                              
-                             // Show create class button if user has permissions and attach event listener
+                             // Attach click event listener to create class button (visibility already handled globally)
                              const createBtn = document.getElementById('createClassBtn');
-                             if (createBtn && hasPermission && hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
-                                 createBtn.classList.remove('hidden');
-                                 console.log('Showing create class button for admin user');
+                             if (createBtn) {
+                                 // Remove any existing event listeners to prevent duplicates
+                                 createBtn.replaceWith(createBtn.cloneNode(true));
+                                 const newCreateBtn = document.getElementById('createClassBtn');
                                  
                                  // Attach click event listener to open modal
-                                 createBtn.addEventListener('click', async () => {
+                                 newCreateBtn.addEventListener('click', async () => {
                                      const addClassModal = document.getElementById('add-class-modal');
                                      const classMessageDiv = document.getElementById('create-class-message');
                                      const addClassForm = document.getElementById('add-class-form');
@@ -6047,8 +6091,6 @@
                                          console.error('add-class-modal not found');
                                      }
                                  });
-                             } else {
-                                 console.log('Create class button hidden - no admin permissions');
                              }
 
                         } else {
