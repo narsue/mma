@@ -67,6 +67,8 @@ COPY --from=builder --chown=65532:65532 /.env_runtime     /app/.env
 COPY --chown=65532:65532 templates         /app/templates
 COPY --chown=65532:65532 schema            /app/schema
 COPY --chown=65532:65532 auth              /app/auth
+# Required for TLS connections - e.g. sending email via SMTP with TLS
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 EXPOSE 1227
 

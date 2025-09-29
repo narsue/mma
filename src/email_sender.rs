@@ -32,12 +32,16 @@ pub async fn send_custom_email(
         .body(html.to_string())?;
 
     // Second attempt - TLS on port 465 (common secure alternative)
-    info!("Attempting SMTP connection using TLS on port 465");
+    info!("Attempting SMTP connection using TLS on port 465 - {} ", sender_email);
     let creds = Credentials::new(sender_email.to_string(), password.clone());
-    let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(mail_server_name)?
+    // let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(mail_server_name)?
+    //     .credentials(creds)
+    //     .port(465)
+    //     .build();
+    let mailer = AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(mail_server_name)? 
         .credentials(creds)
-        .port(465)
         .build();
+
 
     match mailer.send(email.clone()).await {
         Ok(_) => {
