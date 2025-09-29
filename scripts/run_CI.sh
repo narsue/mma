@@ -18,6 +18,9 @@ run_command() {
     fi
 }
 
+podman stop scylla 2>/dev/null || true
+podman rm mmapod 2>/dev/null || true
+
 echo "Starting CI pipeline..."
 
 # Create a pod

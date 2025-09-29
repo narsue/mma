@@ -314,6 +314,8 @@ def check_get_user_payment_plans(session: requests.Session, expected_plan_count:
     
     print(f"✅ Retrieved {len(plans)} user purchasable payment plans (as expected)")
 
+
+
 def test_visibility_across_schools():
     wipe_db()
 
@@ -395,12 +397,47 @@ def test_basic_logins_lists_no_cross_access():
     run_user_flow("school2")
     print(f"✅ test_basic_logins_lists_no_cross_access passed.")
 
+def get_school_users(session: requests.Session):
+    url = f"{BASE_URL}/api/school/get_users"
+    resp = session.post(url)
+    resp.raise_for_status()
+    data = resp.json()
+    assert data["success"]
+    return data["users"]
+
+def test_user_dob_update():
+    wipe_db()
+    session = requests.Session()
+    school_name = "school1"
+    create_school_user(session, school_name)
+    login_user(session, school_name)
+    users = get_school_users(session)
+    assert len(users) == 1
+
+    url = f"{BASE_URL}/api/user/update_profile"
+    payload = {"first_name":"John","surname":"Doe","gender":"","phone":"555-1234","dob":"1921/02/01","address":"","suburb":"","emergency_name":"","emergency_relationship":"","emergency_phone":"","emergency_medical":"","belt_size":"","uniform_size":"","email":"narsue@"+str(school_name)+".com","user_id":users[0]['user_id']}
+    headers = {"Content-Type": "application/json"}
+    resp = session.post(url, json=payload, headers=headers)
+    resp.raise_for_status()
+    data = resp.json()
+    assert data["success"]
+
+    profile_response = session.get(f"{BASE_URL}/api/user/profile_data")
+    profile_response.raise_for_status()
+    profile_data = profile_response.json()
+    assert profile_data["success"]
+    print(profile_data)
+    assert profile_data["user_profile"]["dob"] == "1921-02-01"
+    assert profile_data["user_profile"]["first_name"] == "John"
+    assert profile_data["user_profile"]["surname"] == "Doe"
+    assert profile_data["user_profile"]["phone"] == "555-1234"
+    print("✅ test_user_dob_update passed.")
 
 if __name__ == "__main__":
     wait_for_server()
+    test_user_dob_update()
     test_basic_logins_lists_no_cross_access()
     test_visibility_across_schools()
-    
 
     # seed_db()
     # test_endpoint_security()

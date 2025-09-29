@@ -106,7 +106,8 @@ if [[ -z "$CLASS_ID" || "$CLASS_ID" == "null" ]]; then
   exit 1
 fi
 
-# echo "Using class_id: $CLASS_ID"
+
+echo "Using class_id: $CLASS_ID"
 run_benchmark api/class/get_class "hey -n 500 -c 5 -m POST -H 'Content-Type: application/json' -H 'Cookie: $COOKIE' -d '{\"class_id\":\"$CLASS_ID\"}' http://127.0.0.1:1227/api/class/get_class"
 
 # Fetch first class_id using authenticated request
@@ -118,5 +119,5 @@ if [[ -z "$STYLE_ID" || "$STYLE_ID" == "null" ]]; then
   exit 1
 fi
 
-# echo "Using style_id: $STYLE_ID"
+echo "Using style_id: $STYLE_ID"
 run_benchmark api/class/get_style "hey -n 500 -c 5 -m POST -H 'Content-Type: application/json' -H 'Cookie: $COOKIE' -d '{\"style_id\":\"$STYLE_ID\"}' http://127.0.0.1:1227/api/style/get_class"

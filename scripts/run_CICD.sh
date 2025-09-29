@@ -10,6 +10,9 @@ run_command() {
     fi
 }
 
+podman stop scylla 2>/dev/null || true
+podman rm mmapod 2>/dev/null || true
+
 # Configuration
 IMAGE_NAME="mma_prod"
 VPS_HOST="narsue.com"

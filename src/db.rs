@@ -1094,14 +1094,19 @@ impl ScyllaConnector {
         let emergency_relationship = sanitize_address(&update_data.emergency_relationship.as_deref().unwrap_or_default(), 50);
         let gender = sanitize_gender(update_data.gender.as_deref().unwrap_or_default());
 
-        let dob = match get_age(&update_data.dob){
-            Some(age_years) => {
-                update_data.dob.clone()
-            },
-            None => {
-                None
-            }
+        // let dob = match get_age(&update_data.dob){
+        //     Some(age_years) => {
+        //         update_data.dob.clone()
+        //     },
+        //     None => {
+        //         None
+        //     }
+        // };
+        let dob: Option<NaiveDate> = match &update_data.dob {
+            Some(dob_str) => NaiveDate::parse_from_str(dob_str, "%Y/%m/%d").ok(),
+            None => None,
         };
+
 
 
         self.session

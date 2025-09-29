@@ -485,3 +485,87 @@ api/style/get_list        | 7072.4768            | 0.0007s              | 0.0008
 api/venue/get_list        | 6943.5485            | 0.0007s              | 0.0008s              | 0.0012s             
 api/class/get_class       | 49301.3311           | 0.0001s              | 0.0001s              | 0.0007s             
 api/class/get_style       | 47572.9064           | 0.0001s              | 0.0001s              | 0.0005s             
+external_bench.sh: CPU: AMD Ryzen 9 5950X 16-Core Processor
+
+Benchmark                 | Req/sec              | Avg latency          | 90%                  | 99%                 
+-----------------------------------------------------------------------------------------------
+version                   | 52141.6070           | 0.0002s              | 0.0002s              | 0.0015s             
+health                    | 50326.8452           | 0.0002s              | 0.0003s              | 0.0007s             
+home_page                 | 21499.3172           | 0.0005s              | 0.0006s              | 0.0013s             
+login_success             | [0;31m322.5125            [0m | 0.0154s              | 0.0168s              | 0.0192s             
+login_bad_password_fail   | [0;31m331.2255            [0m | 0.0149s              | 0.0163s              | 0.0189s             
+login_no_user_fail        | 22302.0746           | 0.0002s              | 0.0003s              | 0.0008s             
+api/class/get_list        | 7116.2988            | 0.0007s              | 0.0008s              | 0.0013s             
+api/style/get_list        | 8094.1288            | 0.0006s              | 0.0007s              | 0.0011s             
+api/venue/get_list        | 7499.1407            | 0.0007s              | 0.0008s              | 0.0013s             
+external_bench.sh: CPU: AMD Ryzen 9 5950X 16-Core Processor
+
+Benchmark                 | Req/sec              | Avg latency          | 90%                  | 99%                 
+-----------------------------------------------------------------------------------------------
+version                   | 57818.0965           | 0.0002s              | 0.0002s              | 0.0010s             
+health                    | 45906.6656           | 0.0002s              | 0.0003s              | 0.0009s             
+home_page                 | 21480.7654           | 0.0005s              | 0.0006s              | 0.0011s             
+login_success             | [0;31m335.4028            [0m | 0.0146s              | 0.0163s              | 0.0184s             
+login_bad_password_fail   | [0;31m328.9769            [0m | 0.0150s              | 0.0170s              | 0.0188s             
+login_no_user_fail        | 22572.4065           | 0.0002s              | 0.0003s              | 0.0009s             
+api/class/get_list        | 7540.0137            | 0.0007s              | 0.0008s              | 0.0011s             
+api/style/get_list        | 7933.3182            | 0.0006s              | 0.0007s              | 0.0012s             
+api/venue/get_list        | 7323.8670            | 0.0007s              | 0.0008s              | 0.0011s             
+external_bench.sh: CPU: AMD Ryzen 9 5950X 16-Core Processor
+
+Benchmark                 | Req/sec              | Avg latency          | 90%                  | 99%                 
+-----------------------------------------------------------------------------------------------
+version                   | 68008.0298           | 0.0001s              | 0.0002s              | 0.0014s             
+health                    | 72940.9659           | 0.0001s              | 0.0002s              | 0.0010s             
+home_page                 | 60811.7702           | 0.0002s              | 0.0002s              | 0.0011s             
+login_success             | 20728.4929           | 0.0002s              | 0.0003s              | 0.0008s             
+login_bad_password_fail   | 21912.9583           | 0.0002s              | 0.0003s              | 0.0008s             
+login_no_user_fail        | 20991.0654           | 0.0002s              | 0.0003s              | 0.0012s             
+api/class/get_list        | 45405.4250           | 0.0001s              | 0.0001s              | 0.0012s             
+api/style/get_list        | 50153.8670           | 0.0001s              | 0.0001s              | 0.0008s             
+api/venue/get_list        | 48993.3340           | 0.0001s              | 0.0001s              | 0.0008s             
+api/class/get_class       | 49120.2562           | 0.0001s              | 0.0001s              | 0.0009s             
+api/class/get_style       | 49184.7626           | 0.0001s              | 0.0001s              | 0.0009s             
+external_bench.sh: CPU: AMD Ryzen 9 5950X 16-Core Processor
+
+Benchmark                 | Req/sec              | Avg latency          | 90%                  | 99%                 
+-----------------------------------------------------------------------------------------------
+version                   | 72143.6594           | 0.0001s              | 0.0002s              | 0.0009s             
+health                    | 76259.1356           | 0.0001s              | 0.0002s              | 0.0011s             
+home_page                 | 58920.8910           | 0.0002s              | 0.0002s              | 0.0011s             
+login_success             | [0;31m432.0030            [0m | 0.0114s              | 0.0134s              | 0.0169s             
+login_bad_password_fail   | [0;31m402.1035            [0m | 0.0121s              | 0.0144s              | 0.0171s             
+login_no_user_fail        | 20988.6934           | 0.0002s              | 0.0003s              | 0.0008s             
+api/class/get_list        | 6990.9792            | 0.0007s              | 0.0008s              | 0.0014s             
+api/style/get_list        | 7232.5854            | 0.0007s              | 0.0008s              | 0.0013s             
+api/venue/get_list        | 7116.4612            | 0.0007s              | 0.0008s              | 0.0013s             
+external_bench.sh: CPU: AMD Ryzen 9 5950X 16-Core Processor
+
+Benchmark                 | Req/sec              | Avg latency          | 90%                  | 99%                 
+-----------------------------------------------------------------------------------------------
+version                   | 59491.5743           | 0.0002s              | 0.0002s              | 0.0009s             
+health                    | 46538.2001           | 0.0002s              | 0.0003s              | 0.0008s             
+home_page                 | 20692.7618           | 0.0005s              | 0.0007s              | 0.0010s             
+login_success             | [0;31m327.9412            [0m | 0.0149s              | 0.0169s              | 0.0186s             
+login_bad_password_fail   | [0;31m328.0311            [0m | 0.0152s              | 0.0169s              | 0.0193s             
+login_no_user_fail        | 21320.1560           | 0.0002s              | 0.0003s              | 0.0007s             
+api/class/get_list        | 5720.5731            | 0.0009s              | 0.0010s              | 0.0015s             
+api/style/get_list        | 7264.4206            | 0.0007s              | 0.0008s              | 0.0012s             
+api/venue/get_list        | 6844.3377            | 0.0007s              | 0.0008s              | 0.0012s             
+api/class/get_class       | 46444.4153           | 0.0001s              | 0.0001s              | 0.0010s             
+api/class/get_style       | 51309.6217           | 0.0001s              | 0.0001s              | 0.0010s             
+external_bench.sh: CPU: AMD Ryzen 9 5950X 16-Core Processor
+
+Benchmark                 | Req/sec              | Avg latency          | 90%                  | 99%                 
+-----------------------------------------------------------------------------------------------
+version                   | 60767.5771           | 0.0002s              | 0.0002s              | 0.0009s             
+health                    | 54566.9926           | 0.0002s              | 0.0003s              | 0.0008s             
+home_page                 | 20050.3782           | 0.0005s              | 0.0007s              | 0.0011s             
+login_success             | [0;31m326.5980            [0m | 0.0151s              | 0.0174s              | 0.0196s             
+login_bad_password_fail   | [0;31m327.5114            [0m | 0.0150s              | 0.0168s              | 0.0196s             
+login_no_user_fail        | 21359.7570           | 0.0002s              | 0.0003s              | 0.0008s             
+api/class/get_list        | 5054.0396            | 0.0010s              | 0.0012s              | 0.0016s             
+api/style/get_list        | 7057.7332            | 0.0007s              | 0.0008s              | 0.0014s             
+api/venue/get_list        | 6773.9063            | 0.0007s              | 0.0008s              | 0.0016s             
+api/class/get_class       | 48883.9835           | 0.0001s              | 0.0001s              | 0.0008s             
+api/class/get_style       | 50166.5026           | 0.0001s              | 0.0001s              | 0.0006s             
