@@ -1968,29 +1968,33 @@ impl ScyllaConnector {
             .single()
             .ok_or_else(|| AppError::Internal("Invalid 'now' timestamp".to_string()))?;
     
-        let now_local = now_dt_utc.with_timezone(&tz);
-        let current_date_local = now_local.date_naive();
+        let now_local: DateTime<Tz> = now_dt_utc.with_timezone(&tz);
+        let current_date_local: NaiveDate = now_local.date_naive();
 
         if duration_id == PaymentPlanDuration::CalenderMonth as i32 {
             // Get the year and month
-            let (year, month) = (current_date_local.year(), current_date_local.month());
+            // let (year, month) = (current_date_local.year(), current_date_local.month());
 
-            // Determine the first day of the next month
-            let (next_year, next_month) = if month == 12 {
-                (year + 1, 1)
-            } else {
-                (year, month + 1)
-            };
+            // // Determine the first day of the next month
+            // let (next_year, next_month) = if month == 12 {
+            //     (year + 1, 1)
+            // } else {
+            //     (year, month + 1)
+            // };
 
-            // Construct the start of the next month at midnight
-            let start_of_next_month = tz
-                .with_ymd_and_hms(next_year, next_month, 1, 0, 0, 0)
-                .single()
-                .ok_or_else(|| AppError::Internal("Failed to create next month datetime".to_string()))?;
+            // // Construct the start of the next month at midnight
+            // let start_of_next_month = tz
+            //     .with_ymd_and_hms(next_year, next_month, 1, 0, 0, 0)
+            //     .single()
+            //     .ok_or_else(|| AppError::Internal("Failed to create next month datetime".to_string()))?;
+            let next_dt_local = now_local
+                .checked_add_months(chrono::Months::new(1))
+                .ok_or_else(|| AppError::Internal("Failed to add 1 month".to_string()))?;
+
 
             // Convert to UTC and get the timestamp (in seconds)
-            let expiration_ts = start_of_next_month.with_timezone(&Utc).timestamp() * 1000;
-            tracing::info!("Expiration ts calc {:?} {:?} {:?}",now,expiration_ts, start_of_next_month);
+            let expiration_ts = next_dt_local.with_timezone(&Utc).timestamp() * 1000;
+            tracing::info!("Expiration ts calc {:?} {:?} {:?}",now,expiration_ts, next_dt_local);
 
             if expiration_ts < now {
                 return Err(AppError::Internal("Calculation of month end timestamp is before the now timestamp".to_string()))
