@@ -2384,6 +2384,95 @@
             // Add any new permissions here, continuing the sequence
         };
 
+
+        const StatWindow = {
+            1: "HOUR",
+            2: "DAY",
+            3: "WEEK",
+            4: "MONTH",
+            5: "YEAR",
+            6: "ALL",
+        };
+
+        const StatGender = {
+            1: "Male",
+            2: "Female",
+            3: "Unknown",
+        };
+
+        const StatPayType = {
+            1: "FreeLesson",
+            2: "AllPlan",
+            3: "FamilyPlan",
+            4: "IndividualPlan",
+            5: "Instructor",
+            6: "NoCharge",
+        };
+
+        const StatCountType = {
+            1: "AttendanceAll",
+            2: "AttendanceGender",
+            3: "AttendanceAge",
+            4: "AttendancePay",
+            5: "Revenue",
+            6: "PendingRevenue",
+            7: "Refunded",
+        };
+
+        const StatIdType = {
+            1: "SCHOOL",
+            2: "CLASS",
+            3: "VENUE",
+            4: "CLUB",
+        };
+
+        let attendanceChart;
+        // Dashboard -- start
+        const attendanceChartCtx = document.getElementById('attendanceChart').getContext('2d');
+
+        // Map timeFilter to StatWindow enum value
+        const timeFilterToWindow = {
+            today: 1,         // HOUR
+            yesterday: 1,     // HOUR (or handle differently if needed)
+            week: 2,          // WEEK
+            last_month: 4,    // MONTH
+            last_3_months: 4, // MONTH (or handle differently)
+            last_year: 5,     // YEAR
+            all: 6,           // ALL
+        };
+
+
+        function formatLabel(ts, window) {
+            const date = new Date(ts); // ts is in milliseconds
+            switch (window) {
+                case 1: // HOUR
+                return date.toLocaleString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                });
+                case 2: // DAY
+                return date.toLocaleDateString();
+                case 3: // WEEK
+                // Show week start date
+                return "Week of " + date.toLocaleDateString();
+                case 4: // MONTH
+                return date.toLocaleString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                });
+                case 5: // YEAR
+                return date.getFullYear().toString();
+                case 6: // ALL
+                return "All Time";
+                default:
+                return date.toLocaleString();
+            }
+        }
+
+
+
         var accounts = [];
         let userPermissions = []; // This should be set when the user logs in or is fetched from the server
         var my_user_id = null;
@@ -2715,6 +2804,1308 @@
              }
         }
 
+
+        // --- Section Switching Logic (Remains the same) ---
+        function showSection(sectionId) {
+            const sections = document.querySelectorAll('.portal-section');
+            const navLinks = document.querySelectorAll('nav ul li a[data-section]');
+
+            // Get form elements and message divs
+            const profileUpdateForm = document.getElementById('profileUpdateForm');
+            const passwordChangeForm = document.getElementById('passwordChangeForm');
+            const profileStatusMessageDiv = document.getElementById('profileStatusMessage');
+            const passwordStatusMessageDiv = document.getElementById('passwordStatusMessage');
+
+
+            console.log('showSection called with:', sectionId);
+            sections.forEach(section => {
+                if (section.id === sectionId + 'Section') {
+                    console.log('Showing section:', section.id);
+                    section.classList.add('active');
+                    section.style.display = 'block'; // Or 'flex'
+                    
+                    // Debug section dimensions after showing
+                    setTimeout(() => {
+                        const rect = section.getBoundingClientRect();
+                        console.log(`${section.id} dimensions after show:`, rect.width, 'x', rect.height);
+                        console.log(`${section.id} computed display:`, getComputedStyle(section).display);
+                        console.log(`${section.id} parent:`, section.parentElement?.tagName, section.parentElement?.className);
+                    }, 100);
+                } else {
+                    section.classList.remove('active');
+                    section.style.display = 'none';
+                }
+            });
+
+            navLinks.forEach(link => {
+                if (link.getAttribute('data-section') === sectionId) {
+                    link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
+                }
+            });
+            history.pushState(null, '', `#${sectionId}`);
+
+            
+            if (sectionId === 'frontpage') {
+                loadFrontpageStats();
+            }
+            if (sectionId === 'users') {
+                initUsersSection();
+            }
+            if (sectionId === 'dashboard') {
+                initDashboardSection();
+            }
+            if (sectionId === 'payment_plans') {
+                initPaymentPlansSection();
+            }
+            if (sectionId === 'classes') {
+                console.log('Switching to classes section, calling fetchAndDisplayClasses');
+                fetchAndDisplayClasses(); // Fetch and display classes when this section is shown
+            }
+            if (sectionId === 'venues') {
+                fetchAndDisplayVenues(); // Fetch and display venues when this section is shown
+            }
+            if (sectionId === 'kiosk') {
+                fetchAndDisplayKioskVenues(); // Fetch and display venues for kiosk mode
+            }
+            if (sectionId === 'styles') {
+                fetchAndDisplayStyles();
+            }
+            if (sectionId === 'pos') {
+                fetchAndDisplayPOS();
+            }
+                // --- Load profile data when Account section is shown ---
+                if (sectionId === 'account') {
+                init_stripe();
+                loadUserProfile();
+                } else {
+                    // Optional: Clear forms when leaving the section
+                    profileUpdateForm.reset();
+                    passwordChangeForm.reset();
+                    profileStatusMessageDiv.textContent = '';
+                    passwordStatusMessageDiv.textContent = '';
+                }
+
+                if (sectionId === 'waivers') {
+                    fetchLatestWaiver(); // Load the latest waiver when this section is shown
+                }
+                
+                if (sectionId === 'settings') {
+                    loadSchoolSettings(); // Load school settings when this section is shown
+                }
+        }
+
+
+
+        async function loadDashboardData() {
+            // const classId = document.getElementById('classFilter').value;
+            const timeFilter = document.getElementById('timeFilter').value;
+            const countType = document.getElementById('countTypeFilter').value;
+            const windowValue = timeFilterToWindow[timeFilter] || 6; // default to ALL
+            // console.log("Loading dashboard data for classId:", classId, "timeFilter:", timeFilter, "countType:", countType);
+            try {
+                const res = await fetch(`/api/school/get_dashboard_data`);
+                const { data } = await res.json();
+
+                const classIds = Array.from(
+                    new Set(
+                        data
+                        .filter(d => d.id_type === 2)
+                        .map(d => d.id)
+                    )
+                );
+
+
+                const classFilter = document.getElementById('classFilter');
+
+                // Save the current selection (if any)
+                const currentValue = classFilter.value;
+
+                // Clear existing options
+                classFilter.innerHTML = '';
+
+                // Add "All Classes" option
+                const allOption = document.createElement('option');
+                allOption.value = '';
+                allOption.textContent = 'All Classes';
+                classFilter.appendChild(allOption);
+
+                // Add options for each class ID
+                for (const classId of classIds) {
+                    const option = document.createElement('option');
+                    option.value = classId;
+                    var class_info = get_cached_value("class", classId);
+                    if (class_info === null) {
+                        await fetchAndDisplayClasses();
+                    }
+                    var class_info = get_cached_value("class", classId);
+                    if (class_info === null) {
+                        option.textContent = `Class ${classId}`;
+                    } else {
+                        option.textContent = `${class_info.title}`;
+                    }
+                    classFilter.appendChild(option);
+                }
+
+                // Restore previous selection if possible
+                if (classIds.includes(currentValue)) {
+                    classFilter.value = currentValue;
+                }
+
+
+
+                // Prepare datasets based on countType
+                let attendanceDatasets = [];
+                let revenueDatasets = [];
+                // Filter data by selected window
+                const windowData = data.filter(d => d.window === windowValue);
+
+                var labels = [];
+
+                if (countType === "AttendanceAll") {
+                    labels = windowData.map(d => formatLabel(d.ts, d.window));
+
+                    attendanceDatasets = [
+                        {
+                        label: "All",
+                        data: windowData.map((d) => d.count),
+                        borderColor: "#2563eb",
+                        backgroundColor: "#2563eb20",
+                        tension: 0.3,
+                        },
+                    ];
+                } else if (countType === "AttendanceGender") {
+                    if (windowValue === 6) {
+                            // For ALL TIME, show a histogram (bar chart) of total counts per gender
+                            const menTotal = windowData
+                                    .filter(d => d.count_type === 2 && d.v1 === 1)
+                                    .reduce((sum, d) => sum + d.count, 0);
+                                const womenTotal = windowData
+                                    .filter(d => d.count_type === 2 && d.v1 === 2)
+                                    .reduce((sum, d) => sum + d.count, 0);
+                                const unknownTotal = windowData
+                                    .filter(d => d.count_type === 2 && d.v1 === 3)
+                                    .reduce((sum, d) => sum + d.count, 0);
+
+                                labels = ["Men", "Women", "Unknown"];
+                                attendanceDatasets = [
+                                {
+                                    label: "Attendance by Gender (All Time)",
+                                    data: [menTotal, womenTotal, unknownTotal],
+                                    backgroundColor: ["#4b5563", "#10b981", "#f59e0b"],
+                                },
+                            ];
+                        } else {
+                            // Show last 7 days, even if no data
+                            function getLastNDaysTimestamps(n) {
+                                const days = [];
+                                const now = new Date();
+                                now.setHours(0, 0, 0, 0);
+                                for (let i = n - 1; i >= 0; i--) {
+                                const d = new Date(now);
+                                d.setDate(now.getDate() - i);
+                                days.push(d.getTime());
+                                }
+                                return days;
+                            }
+
+                            function buildGenderDayMap(genderValue) {
+                                const map = {};
+                                windowData
+                                .filter(d => d.count_type === 2 && d.v1 === genderValue)
+                                .forEach(d => {
+                                    const dayTs = new Date(d.ts);
+                                    dayTs.setHours(0, 0, 0, 0);
+                                    map[dayTs.getTime()] = d.count;
+                                });
+                                return map;
+                            }
+
+                            const last7Days = getLastNDaysTimestamps(7);
+
+                            const menMap = buildGenderDayMap(1);
+                            const womenMap = buildGenderDayMap(2);
+                            const unknownMap = buildGenderDayMap(3);
+
+                            const menData = last7Days.map(ts => menMap[ts] || 0);
+                            const womenData = last7Days.map(ts => womenMap[ts] || 0);
+                            const unknownData = last7Days.map(ts => unknownMap[ts] || 0);
+
+                            labels = last7Days.map(ts => {
+                                const d = new Date(ts);
+                                return d.toLocaleDateString();
+                            });
+
+                            attendanceDatasets = [
+                                {
+                                label: "Men",
+                                data: menData,
+                                borderColor: "#4b5563",
+                                backgroundColor: "#4b556320",
+                                tension: 0.3,
+                                },
+                                {
+                                label: "Women",
+                                data: womenData,
+                                borderColor: "#10b981",
+                                backgroundColor: "#10b98120",
+                                tension: 0.3,
+                                },
+                                {
+                                label: "Unknown",
+                                data: unknownData,
+                                borderColor: "#f59e0b",
+                                backgroundColor: "#f59e0b20",
+                                tension: 0.3,
+                                },
+                            ];
+                        }
+                } else if (countType === "Revenue") {
+                    attendanceDatasets = [
+                        {
+                        label: "Casual Revenue ($)",
+                        data: data.map((d) => d.casual_earned),
+                        backgroundColor: "#3b82f6",
+                        },
+                        {
+                        label: "Plan Revenue ($)",
+                        data: data.map((d) => d.plan_earned),
+                        backgroundColor: "#10b981",
+                        },
+                    ];
+                    } else if (countType === "PendingRevenue") {
+                    attendanceDatasets = [
+                        {
+                        label: "Pending Revenue ($)",
+                        data: data.map((d) => d.pending_revenue),
+                        backgroundColor: "#f59e0b",
+                        },
+                    ];
+                    } else if (countType === "Refunded") {
+                    attendanceDatasets = [
+                        {
+                        label: "Refunded ($)",
+                        data: data.map((d) => d.refunded),
+                        backgroundColor: "#ef4444",
+                        },
+                    ];
+                }
+
+                // Attendance Chart
+                if (attendanceChart) attendanceChart.destroy();
+                attendanceChart = new Chart(attendanceChartCtx, {
+                    type: "line",
+                    data: {
+                        labels,
+                        datasets: attendanceDatasets,
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                        legend: { position: "top" },
+                        title: {
+                            display: true,
+                            text:
+                            countType === "AttendanceAll"
+                                ? "Lesson Attendance Over Time"
+                                : countType === "AttendanceGender"
+                                ? "Lesson Attendance by Gender"
+                                : "",
+                        },
+                        },
+                    },
+                });
+
+
+            } catch (error) {
+                console.error("Error loading dashboard data:", error);
+            }
+        }
+
+
+
+        async function loadFrontpageStats() {
+            // Load dashboard statistics for the frontpage
+            try {
+                const response = await fetch('/api/school/get_dashboard_data');
+                if (response.ok) {
+                    const result = await response.json();
+                    const data = result.data || [];
+                    
+                    // Calculate stats from the dashboard data
+                    const stats = calculateDashboardStats(data);
+                    console.log("Frontpage stats calculated:", stats);
+                    
+                    // Update the UI elements
+                    document.getElementById('total-members-stat').textContent = stats.totalMembers.toLocaleString();
+                    document.getElementById('active-classes-stat').textContent = stats.activeClasses.toLocaleString();
+                    document.getElementById('todays-attendance-stat').textContent = stats.todaysAttendance.toLocaleString();
+                    document.getElementById('monthly-revenue-stat').textContent = '$' + stats.monthlyRevenue.toLocaleString();
+                    
+                } else {
+                    console.error('Failed to load dashboard stats:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading dashboard stats:', error);
+            }
+        }
+
+        function formatDateInTZ(ts, tz) {
+            const d = new Date(ts);
+            const f = new Intl.DateTimeFormat("en-CA", {
+                timeZone: tz,
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+            });
+            // en-CA locale gives us YYYY-MM-DD output
+            return f.format(d);
+        }
+
+
+        function calculateDashboardStats(data) {
+            // Calculate statistics from the dashboard data
+            let totalMembers = 0;
+            let activeClasses = 0;
+            let todaysAttendance = 0;
+            let monthlyRevenue = 0;
+            
+            // Get today's date for filtering
+            const today = new Date();
+            const todayStr = today.toISOString().split('T')[0];
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            if (data && data.length > 0) {
+                // Get unique class IDs for active classes count (attendance records)
+                // const classIds = new Set(data.filter(d => d.count_type === 1).map(d => d.id));
+                // activeClasses = classIds.size;
+                
+                // Calculate stats from dashboard data
+                data.forEach(d => {
+                    // const recordDate = formatDateInTZ(d.ts, 'Australia/Sydney');
+
+                    const recordDateStr = formatDateInTZ(d.ts, 'Australia/Sydney'); // "2025-09-30"
+                    const [recordYear, recordMonth, recordDay] = recordDateStr.split("-");
+
+                    // const recordMonth = recordDate.getMonth();
+                    // const recordYear = recordDate.getFullYear();
+                    
+                    // Total Active Classes (count_type = 9, window = 6 for ALL)
+                    if (d.count_type === 9 && d.window === 6) {
+                        activeClasses = d.count;
+                    }
+
+                    // Total Members (count_type = 8, window = 6 for ALL)
+                    if (d.count_type === 8 && d.window === 6) {
+                        totalMembers = d.count;
+                    }
+                    
+                    // Get the stats for today only (window == 2), id_type = 1 for SCHOOL, count_type = 1 for AttendanceAll
+                    if (d.count_type === 1 && d.window === 2 && d.id_type === 1 && recordDateStr === todayStr) {
+                        todaysAttendance += d.count || 0;
+                    }
+                    
+                    // Monthly revenue (count_type = 5 for Revenue, window = 4 for MONTH)
+                    if (d.count_type === 5 && d.window === 4 && recordMonth === currentMonth && recordYear === currentYear) {
+                        monthlyRevenue += d.count || 0;
+                    }
+                });
+            }
+            
+            return {
+                totalMembers: totalMembers,
+                activeClasses: activeClasses,
+                todaysAttendance: todaysAttendance,
+                monthlyRevenue: monthlyRevenue
+            };
+        }
+
+        function initDashboardSection() {
+
+        }
+
+
+        // --- Load User Profile Data ---
+        async function loadUserProfile() {
+            // Get form elements and message divs
+            const profileUpdateForm = document.getElementById('profileUpdateForm');
+            const passwordChangeForm = document.getElementById('passwordChangeForm');
+            const profileStatusMessageDiv = document.getElementById('profileStatusMessage');
+            const passwordStatusMessageDiv = document.getElementById('passwordStatusMessage');
+
+            // Get profile input fields by ID
+            const profileFields = {
+                email: document.getElementById('email'),
+                first_name: document.getElementById('first_name'),
+                surname: document.getElementById('surname'),
+                gender: document.getElementById('gender'), // This is now a select
+                phone: document.getElementById('phone'),
+                dob: document.getElementById('dob'), // This is now type="date"
+                address: document.getElementById('address'),
+                suburb: document.getElementById('suburb'),
+                emergency_name: document.getElementById('emergency_name'),
+                emergency_relationship: document.getElementById('emergency_relationship'),
+                emergency_phone: document.getElementById('emergency_phone'),
+                emergency_medical: document.getElementById('emergency_medical'), // Textarea
+                belt_size: document.getElementById('belt_size'), // This is now type="number"
+                uniform_size: document.getElementById('uniform_size'), // This is now type="number"
+
+            };
+
+
+            displayMessage(profileStatusMessageDiv, 'Loading profile...', false);
+            try {
+                    const response = await fetch('/api/user/profile_data', {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                // Check if response is OK (status 2xx)
+                if (!response.ok) {
+                    // If not OK, it might be 401 Unauthorized if session expired
+                    if (response.status === 401) {
+                        console.warn('Session expired while loading profile.');
+                        alert('Your session has expired. Please log in again.');
+                        window.location.href = '/#login'; // Redirect to login
+                        return; // Stop further processing
+                    }
+                        // Handle other non-OK statuses
+                    const errorResult = await response.json(); // Try to parse JSON error
+                    console.error('Failed to load profile (HTTP error):', response.status, errorResult);
+                    displayMessage(profileStatusMessageDiv, errorResult.error_message || `HTTP error ${response.status}`, false);
+                    return; // Stop further processing
+                }
+
+
+                const result = await response.json();
+
+                if (result.success && result.user_profile) {
+                    const profile = result.user_profile;
+
+                    // Populate form fields
+                    profileFields.email.value = profile.email; // Email (read-only)
+                    profileFields.first_name.value = profile.first_name || '';
+                    profileFields.surname.value = profile.surname || '';
+                    profileFields.gender.value = profile.gender || ''; // Set select value
+                    profileFields.phone.value = profile.phone || '';
+                    profileFields.dob.value = profile.dob
+                        ? profile.dob.replace(/\//g, '-')
+                        : '';
+                    profileFields.address.value = profile.address || '';
+                    profileFields.suburb.value = profile.suburb || '';
+                    profileFields.emergency_name.value = profile.emergency_name || '';
+                    profileFields.emergency_relationship.value = profile.emergency_relationship || '';
+                    profileFields.emergency_phone.value = profile.emergency_phone || '';
+                    profileFields.emergency_medical.value = profile.emergency_medical || ''; // Textarea
+                        // Handle number inputs - ensure they are numbers or empty strings
+                    profileFields.belt_size.value = profile.belt_size !== null && profile.belt_size !== undefined ? profile.belt_size : '';
+                    profileFields.uniform_size.value = profile.uniform_size !== null && profile.uniform_size !== undefined ? profile.uniform_size : '';
+
+
+                    displayMessage(profileStatusMessageDiv, 'Profile loaded.', true);
+                } else {
+                        console.error('Failed to load profile:', result.error_message);
+                        displayMessage(profileStatusMessageDiv, result.error_message || 'Failed to load profile.', false);
+                }
+
+            } catch (error) {
+                console.error('Fetch error loading profile:', error);
+                displayMessage(profileStatusMessageDiv, 'Failed to connect to the server to load profile.', false);
+            }
+        }
+
+        // --- School Settings Functions ---
+        async function loadSchoolSettings() {
+            const schoolNameInput = document.getElementById('school-name');
+            const schoolTimezoneSelect = document.getElementById('school-timezone');
+            const stripePublishableKey = document.getElementById('stripe-publishable-key');
+            const stripeSecretKey = document.getElementById('stripe-secret-key');
+            const stripeWebhookSecret = document.getElementById('stripe-webhook-secret');
+            const settingsStatusMessage = document.getElementById('settingsStatusMessage');
+
+            try {
+                settingsStatusMessage.textContent = 'Loading settings...';
+                settingsStatusMessage.className = 'text-blue-600 mt-4 p-4 rounded-lg';
+                settingsStatusMessage.classList.remove('hidden');
+
+                const response = await fetch('/api/school/get_settings', {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success && result.settings) {
+                        const settings = result.settings;
+                        
+                        schoolNameInput.value = settings.school_name || '';
+                        schoolTimezoneSelect.value = settings.timezone || 'Australia/Sydney';
+                        stripePublishableKey.value = settings.stripe_publishable_key || '';
+                        stripeSecretKey.value = settings.stripe_secret_key ? '••••••••' : '';
+                        stripeWebhookSecret.value = settings.stripe_webhook_secret ? '••••••••' : '';
+
+                        settingsStatusMessage.textContent = 'Settings loaded successfully';
+                        settingsStatusMessage.className = 'text-green-600 mt-4 p-4 rounded-lg';
+                        settingsStatusMessage.classList.remove('hidden');
+                    } else {
+                        settingsStatusMessage.textContent = result.error_message || 'Failed to load settings';
+                        settingsStatusMessage.className = 'text-red-600 mt-4 p-4 rounded-lg';
+                        settingsStatusMessage.classList.remove('hidden');
+                    }
+                } else {
+                    settingsStatusMessage.textContent = `Error: ${response.status}`;
+                    settingsStatusMessage.className = 'text-red-600';
+                }
+            } catch (error) {
+                console.error('Error loading school settings:', error);
+                settingsStatusMessage.textContent = 'Network error loading settings';
+                settingsStatusMessage.className = 'text-red-600';
+            }
+        }
+
+        async function saveSchoolSettings() {
+            const schoolNameInput = document.getElementById('school-name');
+            const schoolTimezoneSelect = document.getElementById('school-timezone');
+            const stripePublishableKey = document.getElementById('stripe-publishable-key');
+            const stripeSecretKey = document.getElementById('stripe-secret-key');
+            const stripeWebhookSecret = document.getElementById('stripe-webhook-secret');
+            const settingsStatusMessage = document.getElementById('settingsStatusMessage');
+
+            try {
+                settingsStatusMessage.textContent = 'Saving settings...';
+                settingsStatusMessage.className = 'text-blue-600 mt-4 p-4 rounded-lg';
+                settingsStatusMessage.classList.remove('hidden');
+
+                const settingsData = {
+                    school_name: schoolNameInput.value.trim(),
+                    timezone: schoolTimezoneSelect.value,
+                    stripe_publishable_key: stripePublishableKey.value.trim(),
+                };
+
+                if (stripeSecretKey.value.trim() && stripeSecretKey.value !== '••••••••') {
+                    settingsData.stripe_secret_key = stripeSecretKey.value.trim();
+                }
+
+                if (stripeWebhookSecret.value.trim() && stripeWebhookSecret.value !== '••••••••') {
+                    settingsData.stripe_webhook_secret = stripeWebhookSecret.value.trim();
+                }
+
+                const response = await fetch('/api/school/update_settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settingsData)
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    settingsStatusMessage.textContent = 'Settings saved successfully!';
+                    settingsStatusMessage.className = 'text-green-600 mt-4 p-4 rounded-lg';
+                    settingsStatusMessage.classList.remove('hidden');
+                    
+                    if (stripeSecretKey.value.trim() && stripeSecretKey.value !== '••••••••') {
+                        stripeSecretKey.value = '••••••••';
+                    }
+                    if (stripeWebhookSecret.value.trim() && stripeWebhookSecret.value !== '••••••••') {
+                        stripeWebhookSecret.value = '••••••••';
+                    }
+                } else {
+                    settingsStatusMessage.textContent = result.error_message || 'Failed to save settings';
+                    settingsStatusMessage.className = 'text-red-600';
+                }
+            } catch (error) {
+                console.error('Error saving school settings:', error);
+                settingsStatusMessage.textContent = 'Network error saving settings';
+                settingsStatusMessage.className = 'text-red-600';
+            }
+        }
+
+        function resetSchoolSettings() {
+            loadSchoolSettings();
+        }
+
+
+        // Function to fetch and display the list of venues as cards
+        async function fetchAndDisplayVenues() {
+            // --- Venue Section Logic ---
+            const addVenueButton = document.getElementById('add-venue-button');
+            const addVenueModal = document.getElementById('add-venue-modal');
+            const addVenueForm = document.getElementById('add-venue-form');
+            const submitCreateVenueButton = document.getElementById('submit-create-venue');
+            const createVenueMessageDiv = document.getElementById('create-venue-message');
+            const venueListDiv = document.getElementById('venue-list'); // Assuming this exists in your HTML
+
+            // Filter and Sort Elements for Venues
+            const venueSearchInput = document.getElementById('venue-search');
+            const venueSortBySelect = document.getElementById('venue-sort-by');
+            const applyVenueFiltersButton = document.getElementById('apply-venue-filters-button');
+
+            // Edit Venue Modal Elements
+            const editVenueModal = document.getElementById('edit-venue-modal');
+            const editVenueForm = document.getElementById('edit-venue-form');
+            const submitEditVenueButton = document.getElementById('submit-edit-venue');
+            const editVenueIdInput = document.getElementById('edit-venue-id');
+            const editVenueTitleInput = document.getElementById('edit-venue-title');
+            const editVenueDescriptionInput = document.getElementById('edit-venue-description');
+            const editVenueAddressInput = document.getElementById('edit-venue-address');
+            const editVenueSuburbInput = document.getElementById('edit-venue-suburb');
+            const editVenueStateInput = document.getElementById('edit-venue-state');
+            const editVenuePostcodeInput = document.getElementById('edit-venue-postcode');
+            const editVenueCountryInput = document.getElementById('edit-venue-country');
+            const editVenueLatitudeInput = document.getElementById('edit-venue-latitude');
+            const editVenueLongitudeInput = document.getElementById('edit-venue-longitude');
+            const editVenueContactPhoneInput = document.getElementById('edit-venue-contact-phone');
+            const editVenueMessageDiv = document.getElementById('edit-venue-message');
+
+
+
+            venueListDiv.innerHTML = '<p class="text-gray-600 italic">Loading venues...</p>';
+
+            // Get filter and sort parameters for venues
+            const searchTerm = venueSearchInput.value.trim();
+            const sortBy = venueSortBySelect.value;
+
+            // Construct query parameters
+            const queryParams = new URLSearchParams();
+            if (searchTerm) queryParams.append('search', searchTerm);
+            if (sortBy) queryParams.append('sort_by', sortBy);
+
+            const url = `/api/venue/get_list${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+
+            try {
+                const response = await fetch(url, { method: 'GET' });
+
+                if (response.ok) {
+                    const result = await response.json(); // Assuming backend returns { success: true, venues: [...] }
+
+                    if (result.success && result.venues) {
+                    const venues = result.venues;
+                        if (venues.length > 0) {
+                            let html = '';
+                            venues.forEach(venue => {
+                                var edit_btn = "";
+                                if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])){
+                                edit_btn = `<button class="edit-venue-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-venue-id="${venue.venue_id}">Edit</button>`;
+                                }
+
+                                add_cached_value("venue", venue.venue_id, venue); // Cache the venue data
+                                html += `
+                                    <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
+                                        <h3 class="text-xl font-semibold text-gray-900 mb-2">${venue.title}</h3>
+                                        <p class="text-gray-700 mb-4">${venue.description || 'No description'}</p>
+
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
+                                            <div>
+                                                <p><strong class="font-medium">Address:</strong> ${venue.address || 'N/A'}, ${venue.suburb || ''}, ${venue.state || ''} ${venue.postcode || ''}, ${venue.country || ''}</p>
+                                                <p><strong class="font-medium">Contact Phone:</strong> ${venue.contact_phone || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                ${venue.latitude && venue.longitude ?
+                                                    `<p><strong class="font-medium">Location:</strong> ${parseFloat(venue.latitude).toFixed(4)}, ${parseFloat(venue.longitude).toFixed(4)}</p>`
+                                                    : '<p><strong class="font-medium">Location:</strong> N/A</p>'}
+                                                <p><strong class="font-medium">Distance:</strong> ${venue.distance || 'N/A'}</p> <!-- Assuming backend provides distance -->
+                                            </div>
+                                        </div>
+
+                                        <div class="flex flex-wrap gap-3">
+                                            <!-- Add buttons like View Details (opens venue info modal) or Edit -->
+                                            <button class="view-venue-button py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 text-sm" data-venue-id="${venue.venue_id}">View Details</button>
+                                            ${edit_btn}
+                                            <!-- Add Delete button if needed -->
+                                        </div>
+                                    </div>
+                                `;
+                            });
+                            venueListDiv.innerHTML = html;
+
+                        // Attach event listeners after rendering
+                        attachVenueButtonListeners(); // Attach listeners to Edit button
+                        attachViewVenueButtonListeners(); // Attach listeners to View Details button
+
+                        } else {
+                            venueListDiv.innerHTML = '<p class="text-gray-600 italic">No venues found matching your criteria.</p>';
+                        }
+                    } else {
+                        // Handle cases where response is OK but success is false (backend level error)
+                        venueListDiv.innerHTML = `<p class="text-red-600">Error loading venues: ${result.error_message || 'Unknown error'}</p>`;
+                        console.error('Backend success: false for venues:', result.error_message);
+                    }
+
+                } else if (response.status === 401 || response.status === 403) {
+                    venueListDiv.innerHTML = '<p class="text-red-600">Error: You are not authorized to view venues.</p>';
+                    console.error("Authorization error fetching venues:", response.status);
+                }
+                else {
+                    // Handle other HTTP errors
+                    const errorText = await response.text();
+                    venueListDiv.innerHTML = `<p class="text-red-600">Error loading venues: ${response.status} - ${errorText.substring(0, 100)}...</p>`;
+                    console.error("Error fetching venues:", response.status, errorText);
+                }
+            } catch (error) {
+                // Handle network errors
+                venueListDiv.innerHTML = `<p class="text-red-600">Network error loading venues.</p>`;
+                console.error("Fetch error for venue list:", error);
+            }
+        }
+
+        // Function to attach event listeners to dynamically created venue buttons
+        function attachVenueButtonListeners() {
+            // --- Venue Section Logic ---
+            const venueListDiv = document.getElementById('venue-list'); // Assuming this exists in your HTML
+
+            // Edit Button Listener
+            venueListDiv.querySelectorAll('.edit-venue-button').forEach(button => {
+                button.addEventListener('click', async () => {
+                    const venueId = button.getAttribute('data-venue-id');
+                    console.log('Attempting to edit venue:', venueId);
+                    // Fetch venue data and open edit modal
+                    fetchVenueForEdit(venueId);
+                });
+            });
+            // Add Delete button listener here if needed
+        }
+
+        // Function to attach event listeners to View Details buttons
+        function attachViewVenueButtonListeners() {
+            // --- Venue Section Logic ---
+            const venueListDiv = document.getElementById('venue-list'); // Assuming this exists in your HTML
+
+            venueListDiv.querySelectorAll('.view-venue-button').forEach(button => {
+                button.addEventListener('click', async () => {
+                    const venueId = button.getAttribute('data-venue-id');
+                    console.log('Attempting to view venue details for:', venueId);
+                    fetchAndDisplayVenueInfo(venueId); // Reuse the venue info modal logic
+                });
+            });
+        }
+
+
+        // Function to fetch venue data for editing and populate the modal
+        async function fetchVenueForEdit(venueId) {
+            // --- Venue Section Logic ---
+            const addVenueButton = document.getElementById('add-venue-button');
+            const addVenueModal = document.getElementById('add-venue-modal');
+            const addVenueForm = document.getElementById('add-venue-form');
+            const submitCreateVenueButton = document.getElementById('submit-create-venue');
+            const createVenueMessageDiv = document.getElementById('create-venue-message');
+            const venueListDiv = document.getElementById('venue-list'); // Assuming this exists in your HTML
+
+            // Filter and Sort Elements for Venues
+            const venueSearchInput = document.getElementById('venue-search');
+            const venueSortBySelect = document.getElementById('venue-sort-by');
+            const applyVenueFiltersButton = document.getElementById('apply-venue-filters-button');
+
+            // Edit Venue Modal Elements
+            const editVenueModal = document.getElementById('edit-venue-modal');
+            const editVenueForm = document.getElementById('edit-venue-form');
+            const submitEditVenueButton = document.getElementById('submit-edit-venue');
+            const editVenueIdInput = document.getElementById('edit-venue-id');
+            const editVenueTitleInput = document.getElementById('edit-venue-title');
+            const editVenueDescriptionInput = document.getElementById('edit-venue-description');
+            const editVenueAddressInput = document.getElementById('edit-venue-address');
+            const editVenueSuburbInput = document.getElementById('edit-venue-suburb');
+            const editVenueStateInput = document.getElementById('edit-venue-state');
+            const editVenuePostcodeInput = document.getElementById('edit-venue-postcode');
+            const editVenueCountryInput = document.getElementById('edit-venue-country');
+            const editVenueLatitudeInput = document.getElementById('edit-venue-latitude');
+            const editVenueLongitudeInput = document.getElementById('edit-venue-longitude');
+            const editVenueContactPhoneInput = document.getElementById('edit-venue-contact-phone');
+            const editVenueMessageDiv = document.getElementById('edit-venue-message');
+
+
+
+            editVenueMessageDiv.textContent = '';
+            editVenueMessageDiv.className = 'message text-center';
+            editVenueMessageDiv.style.display = 'none';
+
+            try {
+                // Use POST request body for venue ID
+                const response = await fetch('/api/venue/get', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ venue_id: venueId })
+                });
+
+                if (response.ok) {
+                    const result = await response.json(); // Assuming backend returns { success: true, venue: {...} } OR just the venue data
+
+                    if (!result.success) {
+                        console.error('Backend success: false fetching venue for editing:', result.error_message || 'Invalid data received');
+                        alert('Error fetching venue for editing: ' + (result.error_message || 'Invalid data received'));
+                        return;
+                    }
+                const venue = result.venue; // Adjust based on actual API response structure
+
+                    if (venue && venue.venue_id) {
+                        // Populate the edit modal form
+                        editVenueIdInput.value = venue.venue_id;
+                        editVenueTitleInput.value = venue.title || '';
+                        editVenueDescriptionInput.value = venue.description || '';
+                        editVenueAddressInput.value = venue.address || '';
+                        editVenueSuburbInput.value = venue.suburb || '';
+                        editVenueStateInput.value = venue.state || '';
+                        editVenuePostcodeInput.value = venue.postcode || '';
+                        editVenueCountryInput.value = venue.country || '';
+                        editVenueLatitudeInput.value = venue.latitude !== null ? parseFloat(venue.latitude) : '';
+                        editVenueLongitudeInput.value = venue.longitude !== null ? parseFloat(venue.longitude) : '';
+                        editVenueContactPhoneInput.value = venue.contact_phone || '';
+
+                        // Show the edit modal
+                        editVenueModal.style.display = 'block';
+                        add_cached_value("venue", venue.venue_id, venue); // Cache the venue data
+
+                    } else {
+                        alert('Error fetching venue for editing: ' + (result.error_message || 'Invalid data received'));
+                        console.error('Backend success: false fetching venue for editing:', result.error_message || 'Invalid data received');
+                    }
+
+                } else if (response.status === 404) {
+                    alert('Venue not found.');
+                    console.warn('Venue not found for editing:', venueId);
+                }
+                else if (response.status === 401 || response.status === 403) {
+                    alert('You are not authorized to edit this venue.');
+                    console.error("Authorization error fetching venue for editing:", response.status);
+                }
+                else {
+                    const errorText = await response.text();
+                    alert(`Error fetching venue for editing: ${response.status}`);
+                    console.error("Error fetching venue for editing:", response.status, errorText);
+                }
+            } catch (error) {
+                console.error('Fetch error fetching venue for editing:', error);
+                alert('Network error fetching venue for editing.');
+            }
+        }
+
+        // Function to fetch and display venues for kiosk mode
+        async function fetchAndDisplayKioskVenues() {
+            const kioskVenuesListDiv = document.getElementById('kiosk-venues-list');
+            if (!kioskVenuesListDiv) {
+                console.error('Kiosk venues list div not found!');
+                return;
+            }
+            
+            kioskVenuesListDiv.innerHTML = '<p class="text-gray-600 italic col-span-full text-center py-8">Loading venues...</p>';
+            
+            try {
+                const response = await fetch('/api/venue/get_list', { method: 'GET' });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    if (result.success && Array.isArray(result.venues)) {
+                        if (result.venues.length > 0) {
+                            let html = '';
+                            
+                            result.venues.forEach(venue => {
+                                html += `
+                                    <div class="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 hover:border-indigo-200">
+                                        <div class="flex items-center justify-between mb-4">
+                                            <div>
+                                                <h3 class="text-xl font-bold text-gray-900 mb-2">${venue.title || 'Unnamed Venue'}</h3>
+                                                <p class="text-gray-600 text-sm">${venue.description || 'No description'}</p>
+                                            </div>
+                                        </div>
+                                        <div class="space-y-2 mb-4">
+                                            <p class="text-sm text-gray-600"><strong>Address:</strong> ${venue.address || 'N/A'}</p>
+                                            <p class="text-sm text-gray-600"><strong>Phone:</strong> ${venue.contact_phone || 'N/A'}</p>
+                                        </div>
+                                        <button 
+                                            class="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition duration-300 transform hover:scale-105 start-kiosk-btn"
+                                            data-venue-id="${venue.venue_id}"
+                                            data-venue-name="${venue.title}"
+                                        >
+                                            <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.01M15 10h1.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                            </svg>
+                                            Start Kiosk
+                                        </button>
+                                    </div>
+                                `;
+                            });
+                            
+                            kioskVenuesListDiv.innerHTML = html;
+                            
+                            // Add event listeners to Start Kiosk buttons
+                            attachKioskButtonListeners();
+                        } else {
+                            kioskVenuesListDiv.innerHTML = '<p class="text-gray-600 italic col-span-full text-center py-8">No venues found.</p>';
+                        }
+                    } else {
+                        kioskVenuesListDiv.innerHTML = `<p class="text-red-600 col-span-full text-center py-8">Error: ${result.error_message || 'Failed to load venues'}</p>`;
+                    }
+                } else {
+                    kioskVenuesListDiv.innerHTML = '<p class="text-red-600 col-span-full text-center py-8">Failed to load venues.</p>';
+                }
+            } catch (error) {
+                console.error('Error fetching venues for kiosk:', error);
+                kioskVenuesListDiv.innerHTML = '<p class="text-red-600 col-span-full text-center py-8">Network error loading venues.</p>';
+            }
+        }
+        
+        // Function to attach event listeners to kiosk buttons
+        function attachKioskButtonListeners() {
+            const kioskButtons = document.querySelectorAll('.start-kiosk-btn');
+            kioskButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const venueId = this.getAttribute('data-venue-id');
+                    const venueName = this.getAttribute('data-venue-name');
+                    startKioskMode(venueId, venueName);
+                });
+            });
+        }
+        
+        // Function to start kiosk mode for a specific venue
+        function startKioskMode(venueId, venueName) {
+            // Redirect to kiosk mode in the same window
+            const kioskUrl = `/kiosk?venue_id=${venueId}&venue_name=${encodeURIComponent(venueName)}`;
+            window.location.href = kioskUrl;
+        }
+
+
+        async function fetchAndDisplayPOS() {
+            await fetchAndDisplayClasses();
+        }
+
+
+
+        // Function to fetch and display the list of styles as cards
+        async function fetchAndDisplayStyles() {
+            // --- Styles Section Logic ---
+            const addStyleButton = document.getElementById('add-style-button');
+            const addStyleModal = document.getElementById('add-style-modal');
+            const addStyleForm = document.getElementById('add-style-form');
+            const submitCreateStyleButton = document.getElementById('submit-create-style');
+            const createStyleMessageDiv = document.getElementById('create-style-message');
+            const styleListDiv = document.getElementById('style-list');
+
+            // Filter and Sort Elements for Styles
+            const styleSearchInput = document.getElementById('style-search'); // Add this
+            const styleSortBySelect = document.getElementById('style-sort-by'); // Add this
+            const applyStyleFiltersButton = document.getElementById('apply-style-filters-button'); // Add this
+
+            // Edit Style Modal Elements
+            const editStyleModal = document.getElementById('edit-style-modal'); // Add this
+            const editStyleForm = document.getElementById('edit-style-form'); // Add this
+            const submitEditStyleButton = document.getElementById('submit-edit-style'); // Add this
+            const editStyleIdInput = document.getElementById('edit-style-id'); // Add this
+            const editStyleTitleInput = document.getElementById('edit-style-title'); // Add this
+            const editStyleDescriptionInput = document.getElementById('edit-style-description'); // Add this
+            const editStyleMessageDiv = document.getElementById('edit-style-message'); // Add this
+
+
+            styleListDiv.innerHTML = '<p class="text-gray-600 italic">Loading styles...</p>';
+
+            // Get filter and sort parameters for styles
+            const searchTerm = styleSearchInput.value.trim();
+            const sortBy = styleSortBySelect.value;
+
+            // Construct query parameters
+            const queryParams = new URLSearchParams();
+            if (searchTerm) queryParams.append('search', searchTerm);
+            if (sortBy) queryParams.append('sort_by', sortBy);
+
+            const url = `/api/style/get_list${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+
+            try {
+                const response = await fetch(url, { method: 'GET' });
+
+                if (response.ok) {
+                    const result = await response.json();
+
+                    if (result.success && result.styles) {
+                        const styles = result.styles;
+                        if (styles.length > 0) {
+                            let html = '';
+                            styles.forEach(style => {
+
+                            let edit_btn = "";
+                            if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
+                                edit_btn=  `
+                                        <div class="flex flex-wrap gap-3 mt-4">
+                                            <button class="edit-style-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-style-id="${style.style_id}">Edit</button>
+                                            <!-- Add Delete button if needed -->
+                                        </div>
+                                `;
+                            }
+
+                            //has Permissions
+                                html += `
+                                    <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
+                                        <h3 class="text-xl font-semibold text-gray-900 mb-2">${style.title}</h3>
+                                        <p class="text-gray-700">${style.description || 'No description'}</p>
+                                        ${edit_btn}
+                                    </div>
+                                `;
+                            });
+                            styleListDiv.innerHTML = html;
+
+                            attachStyleButtonListeners(); // Attach listeners to Edit button
+
+                        } else {
+                            styleListDiv.innerHTML = '<p class="text-gray-600 italic">No styles found matching your criteria.</p>';
+                        }
+                    } else {
+                        displayMessage(styleListDiv, `Error loading styles: ${result.error_message || 'Unknown error'}`, 'error');
+                        console.error('Backend success: false for styles:', result.error_message);
+                    }
+                } else if (response.status === 401 || response.status === 403) {
+                    displayMessage(styleListDiv, 'Error: You are not authorized to view styles.', 'error');
+                    console.error("Authorization error fetching styles:", response.status);
+                }
+                else {
+                    const errorText = await response.text();
+                    displayMessage(styleListDiv, `Error loading styles: ${response.status} - ${errorText.substring(0, 100) + '...'}`, 'error');
+                    console.error("Error fetching styles:", response.status, errorText);
+                }
+            } catch (error) {
+                console.error('Error fetching styles:', error);
+                displayMessage(styleListDiv, 'Network error loading styles.', 'error');
+            }
+        }
+
+            // Function to attach event listeners to dynamically created style buttons
+        function attachStyleButtonListeners() {
+            const styleListDiv = document.getElementById('style-list');
+
+            // Edit Button Listener
+            styleListDiv.querySelectorAll('.edit-style-button').forEach(button => {
+                button.addEventListener('click', async () => {
+                    const styleId = button.getAttribute('data-style-id');
+                    console.log('Attempting to edit style:', styleId);
+                    // Fetch style data and open edit modal
+                    fetchStyleForEdit(styleId);
+                });
+            });
+            // Add Delete button listener here if needed
+        }
+
+
+        // Function to fetch style data for editing and populate the modal
+        async function fetchStyleForEdit(styleId) {
+            // Edit Style Modal Elements
+            const editStyleModal = document.getElementById('edit-style-modal'); // Add this
+            const editStyleForm = document.getElementById('edit-style-form'); // Add this
+            const submitEditStyleButton = document.getElementById('submit-edit-style'); // Add this
+            const editStyleIdInput = document.getElementById('edit-style-id'); // Add this
+            const editStyleTitleInput = document.getElementById('edit-style-title'); // Add this
+            const editStyleDescriptionInput = document.getElementById('edit-style-description'); // Add this
+            const editStyleMessageDiv = document.getElementById('edit-style-message'); // Add this
+
+            editStyleMessageDiv.textContent = '';
+            editStyleMessageDiv.className = 'message text-center';
+            editStyleMessageDiv.style.display = 'none';
+
+            try {
+                console.log('Fetching style for editing:', styleId);
+
+
+                const requestBody = {
+                    style_id: styleId, // Include the style ID for update
+                };
+
+                // Assuming you have a GET /api/style/{id} endpoint
+                const response = await fetch(`/api/style/get`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+            //  const response = await fetch(`/api/style/${styleId}`, { method: 'GET' });
+                const result = await response.json(); // Assuming backend returns { success: true, style: {...} }
+
+                if (response.ok && result.success && result.style) {
+                    const style = result.style;
+                    // Populate the edit modal form
+                    editStyleIdInput.value = style.style_id;
+                    editStyleTitleInput.value = style.title || '';
+                    editStyleDescriptionInput.value = style.description || '';
+
+                    // Show the edit modal
+                    editStyleModal.style.display = 'block';
+
+                } else if (response.ok && result.error_message) {
+                    alert('Error fetching style for editing: ' + (result.error_message || 'Unknown error'));
+                    console.error('Backend success: false fetching style for editing:', result.error_message);
+                } else if (response.status === 404) {
+                    alert('Style not found.');
+                    console.warn('Style not found for editing:', styleId);
+                }
+                else if (response.status === 401 || response.status === 403) {
+                    alert('You are not authorized to edit this style.');
+                    console.error("Authorization error fetching style for editing:", response.status);
+                }
+                else {
+                    const errorText = await response.text();
+                    alert(`Error fetching style for editing: ${response.status}`);
+                    console.error("Error fetching style for editing:", response.status, errorText);
+                }
+            } catch (error) {
+                console.error('Fetch error fetching style for editing:', error);
+                alert('Network error fetching style for editing.');
+            }
+        }
+
+
+        function initUsersSection() {
+            const userList = document.getElementById("user-list");
+            const userSearch = document.getElementById("userSearch");
+            const userSort = document.getElementById("userSort");
+
+            let allUsers = [];
+
+            // Render users to the UI
+            function renderUsers(users) {
+                if (users.length === 0) {
+                    userList.innerHTML = '<p class="text-gray-600 italic">No users found.</p>';
+                    return;
+                }
+
+                userList.innerHTML = '';
+                users.forEach(user => {
+                    const userDiv = document.createElement("div");
+                    userDiv.className = "bg-white shadow p-4 rounded flex items-center justify-between";
+
+                    userDiv.innerHTML = `
+                        <div class="flex items-center gap-4">
+                            <img src="${user.img || '/default-avatar.png'}" alt="avatar" class="w-10 h-10 rounded-full object-cover bg-gray-200" />
+                            <div>
+                                <p class="text-gray-900 font-medium">${user.first_name} ${user.surname}</p>
+                                <p class="text-gray-600 text-sm">${user.email}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm ${user.email_verified ? 'text-green-600' : 'text-red-500'}">
+                                ${user.email_verified ? 'Verified' : 'Unverified'}
+                            </span>
+                            <button class="editUserBtn text-sm bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded" data-user-id="${user.user_id}">
+                                Edit
+                            </button>
+                        </div>
+                    `;
+                    const editBtn = userDiv.querySelector('.editUserBtn');
+                    editBtn.addEventListener('click', () => openEditUserModal(user.user_id));
+                    userList.appendChild(userDiv);
+                });
+            }
+
+            // Filter and sort users
+            function updateDisplayedUsers() {
+                const searchTerm = userSearch.value.toLowerCase().trim();
+                const sortBy = userSort.value;
+
+                let filtered = allUsers.filter(user =>
+                    `${user.first_name} ${user.surname}`.toLowerCase().includes(searchTerm) ||
+                    user.email.toLowerCase().includes(searchTerm)
+                );
+
+                if (sortBy === "name") {
+                    filtered.sort((a, b) => {
+                        const nameA = `${a.first_name} ${a.surname}`.toLowerCase();
+                        const nameB = `${b.first_name} ${b.surname}`.toLowerCase();
+                        return nameA.localeCompare(nameB);
+                    });
+                } else if (sortBy === "email") {
+                    filtered.sort((a, b) => a.email.toLowerCase().localeCompare(b.email.toLowerCase()));
+                }
+
+                renderUsers(filtered);
+            }
+
+            // Fetch users from the backend
+            fetch("/api/school/get_users", {
+                method: "POST"
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && Array.isArray(data.users)) {
+                    allUsers = data.users;
+                    updateDisplayedUsers();
+                } else {
+                    userList.innerHTML = '<p class="text-red-600">Failed to load users.</p>';
+                }
+            })
+            .catch(err => {
+                console.error("Error loading users:", err);
+                userList.innerHTML = '<p class="text-red-600">Error loading users.</p>';
+            });
+
+            // Event listeners for sorting and filtering
+            userSearch.addEventListener("input", updateDisplayedUsers);
+            userSort.addEventListener("change", updateDisplayedUsers);
+        }
+
+
+        function openNewUserModal() {
+                        
+            // Fill form fields
+            document.getElementById('edit_user_id').value = '00000000-0000-0000-0000-000000000000';
+            document.getElementById('edit_email').value = '';
+            document.getElementById('edit_first_name').value = '';
+            document.getElementById('edit_surname').value = '';
+            document.getElementById('edit_gender').value = '';
+            document.getElementById('edit_phone').value = '';
+            document.getElementById('edit_dob').value = '';
+            document.getElementById('edit_address').value = '';
+            document.getElementById('edit_suburb').value = '';
+            document.getElementById('edit_emergency_name').value = '';
+            document.getElementById('edit_emergency_relationship').value = '';
+            document.getElementById('edit_emergency_phone').value = '';
+            document.getElementById('edit_emergency_medical').value = '';
+            document.getElementById('edit_belt_size').value = '';
+            document.getElementById('edit_uniform_size').value = '';
+
+            userEditModal.classList.remove('hidden');
+            document.getElementById("admin-stripe-section").classList.add('hidden');
+            document.getElementById("inviteUserBtn").classList.add('hidden');
+            
+            
+            // initStripeForAdmin(u.user_id, u.email, `${u.first_name || ''} ${u.surname || ''}`.trim());
+        }
+
+        function openEditUserModal(userId) {
+            deinitStripeForAdmin(); // Deinitialize any existing Stripe setup
+            
+            fetch('/api/user/get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({'user_id': userId})
+            })
+                .then(res => res.json())
+                .then(data => {
+                if (data.success && data.user_profile) {
+                    const u = data.user_profile;
+
+                    
+                    // Fill form fields
+                    document.getElementById('edit_user_id').value = u.user_id;
+                    document.getElementById('edit_email').value = u.email || '';
+                    document.getElementById('edit_first_name').value = u.first_name || '';
+                    document.getElementById('edit_surname').value = u.surname || '';
+                    document.getElementById('edit_gender').value = u.gender || '';
+                    document.getElementById('edit_phone').value = u.phone || '';
+                    document.getElementById('edit_dob').value = u.dob ? u.dob.replace(/\//g, '-'): '';
+                    document.getElementById('edit_address').value = u.address || '';
+                    document.getElementById('edit_suburb').value = u.suburb || '';
+                    document.getElementById('edit_emergency_name').value = u.emergency_name || '';
+                    document.getElementById('edit_emergency_relationship').value = u.emergency_relationship || '';
+                    document.getElementById('edit_emergency_phone').value = u.emergency_phone || '';
+                    document.getElementById('edit_emergency_medical').value = u.emergency_medical || '';
+                    document.getElementById('edit_belt_size').value = u.belt_size || '';
+                    document.getElementById('edit_uniform_size').value = u.uniform_size || '';
+
+                    userEditModal.classList.remove('hidden');
+                    document.getElementById("inviteUserBtn").classList.remove('hidden');
+
+                    initStripeForAdmin(u.user_id, u.email, `${u.first_name || ''} ${u.surname || ''}`.trim());
+                } else {
+                    alert('User not found.');
+                }
+            });
+        }
+
         // Wait for the DOM to be fully loaded
         document.addEventListener('DOMContentLoaded', () => {
             async function loadPermissionsData() {
@@ -2783,318 +4174,14 @@
 
             // userPermissions
 
-            // Dashboard -- start
-            const attendanceChartCtx = document.getElementById('attendanceChart').getContext('2d');
-
-            let attendanceChart;
-
-            const StatWindow = {
-                1: "HOUR",
-                2: "DAY",
-                3: "WEEK",
-                4: "MONTH",
-                5: "YEAR",
-                6: "ALL",
-            };
-
-            const StatGender = {
-                1: "Male",
-                2: "Female",
-                3: "Unknown",
-            };
-
-            const StatPayType = {
-                1: "FreeLesson",
-                2: "AllPlan",
-                3: "FamilyPlan",
-                4: "IndividualPlan",
-                5: "Instructor",
-                6: "NoCharge",
-            };
-
-            const StatCountType = {
-                1: "AttendanceAll",
-                2: "AttendanceGender",
-                3: "AttendanceAge",
-                4: "AttendancePay",
-                5: "Revenue",
-                6: "PendingRevenue",
-                7: "Refunded",
-            };
-
-            const StatIdType = {
-                1: "SCHOOL",
-                2: "CLASS",
-                3: "VENUE",
-                4: "CLUB",
-            };
-
-            // Map timeFilter to StatWindow enum value
-            const timeFilterToWindow = {
-                today: 1,         // HOUR
-                yesterday: 1,     // HOUR (or handle differently if needed)
-                week: 2,          // WEEK
-                last_month: 4,    // MONTH
-                last_3_months: 4, // MONTH (or handle differently)
-                last_year: 5,     // YEAR
-                all: 6,           // ALL
-            };
-
-
-            function formatLabel(ts, window) {
-                const date = new Date(ts); // ts is in milliseconds
-                switch (window) {
-                    case 1: // HOUR
-                    return date.toLocaleString(undefined, {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                    });
-                    case 2: // DAY
-                    return date.toLocaleDateString();
-                    case 3: // WEEK
-                    // Show week start date
-                    return "Week of " + date.toLocaleDateString();
-                    case 4: // MONTH
-                    return date.toLocaleString(undefined, {
-                        year: "numeric",
-                        month: "short",
-                    });
-                    case 5: // YEAR
-                    return date.getFullYear().toString();
-                    case 6: // ALL
-                    return "All Time";
-                    default:
-                    return date.toLocaleString();
-                }
-            }
-
-
-            async function loadDashboardData() {
-                // const classId = document.getElementById('classFilter').value;
-                const timeFilter = document.getElementById('timeFilter').value;
-                const countType = document.getElementById('countTypeFilter').value;
-                const windowValue = timeFilterToWindow[timeFilter] || 6; // default to ALL
-                // console.log("Loading dashboard data for classId:", classId, "timeFilter:", timeFilter, "countType:", countType);
-                try {
-                    const res = await fetch(`/api/school/get_dashboard_data`);
-                    const { data } = await res.json();
-
-                    const classIds = Array.from(
-                        new Set(
-                            data
-                            .filter(d => d.id_type === 2)
-                            .map(d => d.id)
-                        )
-                    );
-
-
-                    const classFilter = document.getElementById('classFilter');
-
-                    // Save the current selection (if any)
-                    const currentValue = classFilter.value;
-
-                    // Clear existing options
-                    classFilter.innerHTML = '';
-
-                    // Add "All Classes" option
-                    const allOption = document.createElement('option');
-                    allOption.value = '';
-                    allOption.textContent = 'All Classes';
-                    classFilter.appendChild(allOption);
-
-                    // Add options for each class ID
-                    for (const classId of classIds) {
-                        const option = document.createElement('option');
-                        option.value = classId;
-                        var class_info = get_cached_value("class", classId);
-                        if (class_info === null) {
-                            await fetchAndDisplayClasses();
-                        }
-                        var class_info = get_cached_value("class", classId);
-                        if (class_info === null) {
-                            option.textContent = `Class ${classId}`;
-                        } else {
-                            option.textContent = `${class_info.title}`;
-                        }
-                        classFilter.appendChild(option);
-                    }
-
-                    // Restore previous selection if possible
-                    if (classIds.includes(currentValue)) {
-                        classFilter.value = currentValue;
-                    }
 
 
 
-                    // Prepare datasets based on countType
-                    let attendanceDatasets = [];
-                    let revenueDatasets = [];
-                    // Filter data by selected window
-                    const windowData = data.filter(d => d.window === windowValue);
-
-                    var labels = [];
-
-                    if (countType === "AttendanceAll") {
-                        labels = windowData.map(d => formatLabel(d.ts, d.window));
-
-                        attendanceDatasets = [
-                            {
-                            label: "All",
-                            data: windowData.map((d) => d.count),
-                            borderColor: "#2563eb",
-                            backgroundColor: "#2563eb20",
-                            tension: 0.3,
-                            },
-                        ];
-                    } else if (countType === "AttendanceGender") {
-                        if (windowValue === 6) {
-                                // For ALL TIME, show a histogram (bar chart) of total counts per gender
-                                const menTotal = windowData
-                                        .filter(d => d.count_type === 2 && d.v1 === 1)
-                                        .reduce((sum, d) => sum + d.count, 0);
-                                    const womenTotal = windowData
-                                        .filter(d => d.count_type === 2 && d.v1 === 2)
-                                        .reduce((sum, d) => sum + d.count, 0);
-                                    const unknownTotal = windowData
-                                        .filter(d => d.count_type === 2 && d.v1 === 3)
-                                        .reduce((sum, d) => sum + d.count, 0);
-
-                                    labels = ["Men", "Women", "Unknown"];
-                                    attendanceDatasets = [
-                                    {
-                                        label: "Attendance by Gender (All Time)",
-                                        data: [menTotal, womenTotal, unknownTotal],
-                                        backgroundColor: ["#4b5563", "#10b981", "#f59e0b"],
-                                    },
-                                ];
-                            } else {
-                                // Show last 7 days, even if no data
-                                function getLastNDaysTimestamps(n) {
-                                    const days = [];
-                                    const now = new Date();
-                                    now.setHours(0, 0, 0, 0);
-                                    for (let i = n - 1; i >= 0; i--) {
-                                    const d = new Date(now);
-                                    d.setDate(now.getDate() - i);
-                                    days.push(d.getTime());
-                                    }
-                                    return days;
-                                }
-
-                                function buildGenderDayMap(genderValue) {
-                                    const map = {};
-                                    windowData
-                                    .filter(d => d.count_type === 2 && d.v1 === genderValue)
-                                    .forEach(d => {
-                                        const dayTs = new Date(d.ts);
-                                        dayTs.setHours(0, 0, 0, 0);
-                                        map[dayTs.getTime()] = d.count;
-                                    });
-                                    return map;
-                                }
-
-                                const last7Days = getLastNDaysTimestamps(7);
-
-                                const menMap = buildGenderDayMap(1);
-                                const womenMap = buildGenderDayMap(2);
-                                const unknownMap = buildGenderDayMap(3);
-
-                                const menData = last7Days.map(ts => menMap[ts] || 0);
-                                const womenData = last7Days.map(ts => womenMap[ts] || 0);
-                                const unknownData = last7Days.map(ts => unknownMap[ts] || 0);
-
-                                labels = last7Days.map(ts => {
-                                    const d = new Date(ts);
-                                    return d.toLocaleDateString();
-                                });
-
-                                attendanceDatasets = [
-                                    {
-                                    label: "Men",
-                                    data: menData,
-                                    borderColor: "#4b5563",
-                                    backgroundColor: "#4b556320",
-                                    tension: 0.3,
-                                    },
-                                    {
-                                    label: "Women",
-                                    data: womenData,
-                                    borderColor: "#10b981",
-                                    backgroundColor: "#10b98120",
-                                    tension: 0.3,
-                                    },
-                                    {
-                                    label: "Unknown",
-                                    data: unknownData,
-                                    borderColor: "#f59e0b",
-                                    backgroundColor: "#f59e0b20",
-                                    tension: 0.3,
-                                    },
-                                ];
-                            }
-                    } else if (countType === "Revenue") {
-                        attendanceDatasets = [
-                            {
-                            label: "Casual Revenue ($)",
-                            data: data.map((d) => d.casual_earned),
-                            backgroundColor: "#3b82f6",
-                            },
-                            {
-                            label: "Plan Revenue ($)",
-                            data: data.map((d) => d.plan_earned),
-                            backgroundColor: "#10b981",
-                            },
-                        ];
-                        } else if (countType === "PendingRevenue") {
-                        attendanceDatasets = [
-                            {
-                            label: "Pending Revenue ($)",
-                            data: data.map((d) => d.pending_revenue),
-                            backgroundColor: "#f59e0b",
-                            },
-                        ];
-                        } else if (countType === "Refunded") {
-                        attendanceDatasets = [
-                            {
-                            label: "Refunded ($)",
-                            data: data.map((d) => d.refunded),
-                            backgroundColor: "#ef4444",
-                            },
-                        ];
-                    }
-
-                    // Attendance Chart
-                    if (attendanceChart) attendanceChart.destroy();
-                    attendanceChart = new Chart(attendanceChartCtx, {
-                        type: "line",
-                        data: {
-                            labels,
-                            datasets: attendanceDatasets,
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: {
-                            legend: { position: "top" },
-                            title: {
-                                display: true,
-                                text:
-                                countType === "AttendanceAll"
-                                    ? "Lesson Attendance Over Time"
-                                    : countType === "AttendanceGender"
-                                    ? "Lesson Attendance by Gender"
-                                    : "",
-                            },
-                            },
-                        },
-                    });
 
 
-                } catch (error) {
-                    console.error("Error loading dashboard data:", error);
-                }
-            }
+
+
+
 
             document.getElementById("refreshDashboard").addEventListener("click", loadDashboardData);
             document.getElementById("classFilter").addEventListener("change", loadDashboardData);
@@ -3144,277 +4231,17 @@
             const confirmNewPasswordField = document.getElementById('confirmNewPassword');
 
 
-            // --- Section Switching Logic (Remains the same) ---
-            function showSection(sectionId) {
-                console.log('showSection called with:', sectionId);
-                sections.forEach(section => {
-                    if (section.id === sectionId + 'Section') {
-                        console.log('Showing section:', section.id);
-                        section.classList.add('active');
-                        section.style.display = 'block'; // Or 'flex'
-                        
-                        // Debug section dimensions after showing
-                        setTimeout(() => {
-                            const rect = section.getBoundingClientRect();
-                            console.log(`${section.id} dimensions after show:`, rect.width, 'x', rect.height);
-                            console.log(`${section.id} computed display:`, getComputedStyle(section).display);
-                            console.log(`${section.id} parent:`, section.parentElement?.tagName, section.parentElement?.className);
-                        }, 100);
-                    } else {
-                        section.classList.remove('active');
-                        section.style.display = 'none';
-                    }
-                });
-
-                navLinks.forEach(link => {
-                    if (link.getAttribute('data-section') === sectionId) {
-                        link.classList.add('active');
-                    } else {
-                        link.classList.remove('active');
-                    }
-                });
-                history.pushState(null, '', `#${sectionId}`);
-
-                
-                if (sectionId === 'frontpage') {
-                    loadFrontpageStats();
-                }
-				if (sectionId === 'users') {
-					initUsersSection();
-				}
-                if (sectionId === 'dashboard') {
-					initDashboardSection();
-				}
-				if (sectionId === 'payment_plans') {
-					initPaymentPlansSection();
-				}
-                if (sectionId === 'classes') {
-                    console.log('Switching to classes section, calling fetchAndDisplayClasses');
-                    fetchAndDisplayClasses(); // Fetch and display classes when this section is shown
-                }
-                if (sectionId === 'venues') {
-                    fetchAndDisplayVenues(); // Fetch and display venues when this section is shown
-                }
-                if (sectionId === 'kiosk') {
-                    fetchAndDisplayKioskVenues(); // Fetch and display venues for kiosk mode
-                }
-                if (sectionId === 'styles') {
-                    fetchAndDisplayStyles();
-                }
-                if (sectionId === 'pos') {
-                    fetchAndDisplayPOS();
-                }
-                 // --- Load profile data when Account section is shown ---
-                 if (sectionId === 'account') {
-                    init_stripe();
-                    loadUserProfile();
-                 } else {
-                     // Optional: Clear forms when leaving the section
-                     profileUpdateForm.reset();
-                     passwordChangeForm.reset();
-                     profileStatusMessageDiv.textContent = '';
-                     passwordStatusMessageDiv.textContent = '';
-                 }
-
-                 if (sectionId === 'waivers') {
-                     fetchLatestWaiver(); // Load the latest waiver when this section is shown
-                 }
-                 
-                 if (sectionId === 'settings') {
-                     loadSchoolSettings(); // Load school settings when this section is shown
-                 }
-            }
+            
 
             document.getElementById('addUserBtn').addEventListener('click', () => {
                 openNewUserModal(); // Pass `null` to trigger blank form
             });
 
-            async function loadFrontpageStats() {
-                // Load dashboard statistics for the frontpage
-                try {
-                    const response = await fetch('/api/school/get_dashboard_data');
-                    if (response.ok) {
-                        const result = await response.json();
-                        const data = result.data || [];
-                        
-                        // Calculate stats from the dashboard data
-                        const stats = calculateDashboardStats(data);
-                        console.log("Frontpage stats calculated:", stats);
-                        
-                        // Update the UI elements
-                        document.getElementById('total-members-stat').textContent = stats.totalMembers.toLocaleString();
-                        document.getElementById('active-classes-stat').textContent = stats.activeClasses.toLocaleString();
-                        document.getElementById('todays-attendance-stat').textContent = stats.todaysAttendance.toLocaleString();
-                        document.getElementById('monthly-revenue-stat').textContent = '$' + stats.monthlyRevenue.toLocaleString();
-                        
-                    } else {
-                        console.error('Failed to load dashboard stats:', response.status);
-                    }
-                } catch (error) {
-                    console.error('Error loading dashboard stats:', error);
-                }
-            }
 
-            function formatDateInTZ(ts, tz) {
-                const d = new Date(ts);
-                const f = new Intl.DateTimeFormat("en-CA", {
-                    timeZone: tz,
-                    year: "numeric",
-                    month: "2-digit",
-                    day: "2-digit",
-                });
-                // en-CA locale gives us YYYY-MM-DD output
-                return f.format(d);
-            }
 
-            function calculateDashboardStats(data) {
-                // Calculate statistics from the dashboard data
-                let totalMembers = 0;
-                let activeClasses = 0;
-                let todaysAttendance = 0;
-                let monthlyRevenue = 0;
-                
-                // Get today's date for filtering
-                const today = new Date();
-                const todayStr = today.toISOString().split('T')[0];
-                const currentMonth = today.getMonth();
-                const currentYear = today.getFullYear();
-                if (data && data.length > 0) {
-                    // Get unique class IDs for active classes count (attendance records)
-                    // const classIds = new Set(data.filter(d => d.count_type === 1).map(d => d.id));
-                    // activeClasses = classIds.size;
-                    
-                    // Calculate stats from dashboard data
-                    data.forEach(d => {
-                        // const recordDate = formatDateInTZ(d.ts, 'Australia/Sydney');
+            
 
-                        const recordDateStr = formatDateInTZ(d.ts, 'Australia/Sydney'); // "2025-09-30"
-                        const [recordYear, recordMonth, recordDay] = recordDateStr.split("-");
 
-                        // const recordMonth = recordDate.getMonth();
-                        // const recordYear = recordDate.getFullYear();
-                        
-                        // Total Active Classes (count_type = 9, window = 6 for ALL)
-                        if (d.count_type === 9 && d.window === 6) {
-                            activeClasses = d.count;
-                        }
-
-                        // Total Members (count_type = 8, window = 6 for ALL)
-                        if (d.count_type === 8 && d.window === 6) {
-                            totalMembers = d.count;
-                        }
-                        
-                        // Get the stats for today only (window == 2), id_type = 1 for SCHOOL, count_type = 1 for AttendanceAll
-                        if (d.count_type === 1 && d.window === 2 && d.id_type === 1 && recordDateStr === todayStr) {
-                            todaysAttendance += d.count || 0;
-                        }
-                        
-                        // Monthly revenue (count_type = 5 for Revenue, window = 4 for MONTH)
-                        if (d.count_type === 5 && d.window === 4 && recordMonth === currentMonth && recordYear === currentYear) {
-                            monthlyRevenue += d.count || 0;
-                        }
-                    });
-                }
-                
-                return {
-                    totalMembers: totalMembers,
-                    activeClasses: activeClasses,
-                    todaysAttendance: todaysAttendance,
-                    monthlyRevenue: monthlyRevenue
-                };
-            }
-
-            function initDashboardSection() {
-
-            }
-
-            function initUsersSection() {
-                const userList = document.getElementById("user-list");
-                const userSearch = document.getElementById("userSearch");
-                const userSort = document.getElementById("userSort");
-
-                let allUsers = [];
-
-                // Render users to the UI
-                function renderUsers(users) {
-                    if (users.length === 0) {
-                        userList.innerHTML = '<p class="text-gray-600 italic">No users found.</p>';
-                        return;
-                    }
-
-                    userList.innerHTML = '';
-                    users.forEach(user => {
-                        const userDiv = document.createElement("div");
-                        userDiv.className = "bg-white shadow p-4 rounded flex items-center justify-between";
-
-                        userDiv.innerHTML = `
-                            <div class="flex items-center gap-4">
-                                <img src="${user.img || '/default-avatar.png'}" alt="avatar" class="w-10 h-10 rounded-full object-cover bg-gray-200" />
-                                <div>
-                                    <p class="text-gray-900 font-medium">${user.first_name} ${user.surname}</p>
-                                    <p class="text-gray-600 text-sm">${user.email}</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-sm ${user.email_verified ? 'text-green-600' : 'text-red-500'}">
-                                    ${user.email_verified ? 'Verified' : 'Unverified'}
-                                </span>
-                                <button class="editUserBtn text-sm bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded" data-user-id="${user.user_id}">
-                                    Edit
-                                </button>
-                            </div>
-                        `;
-                        const editBtn = userDiv.querySelector('.editUserBtn');
-                        editBtn.addEventListener('click', () => openEditUserModal(user.user_id));
-                        userList.appendChild(userDiv);
-                    });
-                }
-
-                // Filter and sort users
-                function updateDisplayedUsers() {
-                    const searchTerm = userSearch.value.toLowerCase().trim();
-                    const sortBy = userSort.value;
-
-                    let filtered = allUsers.filter(user =>
-                        `${user.first_name} ${user.surname}`.toLowerCase().includes(searchTerm) ||
-                        user.email.toLowerCase().includes(searchTerm)
-                    );
-
-                    if (sortBy === "name") {
-                        filtered.sort((a, b) => {
-                            const nameA = `${a.first_name} ${a.surname}`.toLowerCase();
-                            const nameB = `${b.first_name} ${b.surname}`.toLowerCase();
-                            return nameA.localeCompare(nameB);
-                        });
-                    } else if (sortBy === "email") {
-                        filtered.sort((a, b) => a.email.toLowerCase().localeCompare(b.email.toLowerCase()));
-                    }
-
-                    renderUsers(filtered);
-                }
-
-                // Fetch users from the backend
-                fetch("/api/school/get_users", {
-                    method: "POST"
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success && Array.isArray(data.users)) {
-                        allUsers = data.users;
-                        updateDisplayedUsers();
-                    } else {
-                        userList.innerHTML = '<p class="text-red-600">Failed to load users.</p>';
-                    }
-                })
-                .catch(err => {
-                    console.error("Error loading users:", err);
-                    userList.innerHTML = '<p class="text-red-600">Error loading users.</p>';
-                });
-
-                // Event listeners for sorting and filtering
-                userSearch.addEventListener("input", updateDisplayedUsers);
-                userSort.addEventListener("change", updateDisplayedUsers);
-            }
 
             navLinks.forEach(link => {
                 link.addEventListener('click', (event) => {
@@ -3425,178 +4252,7 @@
             });
 
 
-            // --- Load User Profile Data ---
-            async function loadUserProfile() {
-                displayMessage(profileStatusMessageDiv, 'Loading profile...', false);
-                try {
-                     const response = await fetch('/api/user/profile_data', {
-                        method: 'GET',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-
-                    // Check if response is OK (status 2xx)
-                    if (!response.ok) {
-                        // If not OK, it might be 401 Unauthorized if session expired
-                        if (response.status === 401) {
-                            console.warn('Session expired while loading profile.');
-                            alert('Your session has expired. Please log in again.');
-                            window.location.href = '/#login'; // Redirect to login
-                            return; // Stop further processing
-                        }
-                         // Handle other non-OK statuses
-                        const errorResult = await response.json(); // Try to parse JSON error
-                        console.error('Failed to load profile (HTTP error):', response.status, errorResult);
-                        displayMessage(profileStatusMessageDiv, errorResult.error_message || `HTTP error ${response.status}`, false);
-                        return; // Stop further processing
-                    }
-
-
-                    const result = await response.json();
-
-                    if (result.success && result.user_profile) {
-                        const profile = result.user_profile;
-
-                        // Populate form fields
-                        profileFields.email.value = profile.email; // Email (read-only)
-                        profileFields.first_name.value = profile.first_name || '';
-                        profileFields.surname.value = profile.surname || '';
-                        profileFields.gender.value = profile.gender || ''; // Set select value
-                        profileFields.phone.value = profile.phone || '';
-                        profileFields.dob.value = profile.dob
-                            ? profile.dob.replace(/\//g, '-')
-                            : '';
-                        profileFields.address.value = profile.address || '';
-                        profileFields.suburb.value = profile.suburb || '';
-                        profileFields.emergency_name.value = profile.emergency_name || '';
-                        profileFields.emergency_relationship.value = profile.emergency_relationship || '';
-                        profileFields.emergency_phone.value = profile.emergency_phone || '';
-                        profileFields.emergency_medical.value = profile.emergency_medical || ''; // Textarea
-                         // Handle number inputs - ensure they are numbers or empty strings
-                        profileFields.belt_size.value = profile.belt_size !== null && profile.belt_size !== undefined ? profile.belt_size : '';
-                        profileFields.uniform_size.value = profile.uniform_size !== null && profile.uniform_size !== undefined ? profile.uniform_size : '';
-
-
-                        displayMessage(profileStatusMessageDiv, 'Profile loaded.', true);
-                    } else {
-                         console.error('Failed to load profile:', result.error_message);
-                         displayMessage(profileStatusMessageDiv, result.error_message || 'Failed to load profile.', false);
-                    }
-
-                } catch (error) {
-                    console.error('Fetch error loading profile:', error);
-                    displayMessage(profileStatusMessageDiv, 'Failed to connect to the server to load profile.', false);
-                }
-            }
-
-            // --- School Settings Functions ---
-            async function loadSchoolSettings() {
-                const schoolNameInput = document.getElementById('school-name');
-                const schoolTimezoneSelect = document.getElementById('school-timezone');
-                const stripePublishableKey = document.getElementById('stripe-publishable-key');
-                const stripeSecretKey = document.getElementById('stripe-secret-key');
-                const stripeWebhookSecret = document.getElementById('stripe-webhook-secret');
-                const settingsStatusMessage = document.getElementById('settingsStatusMessage');
-
-                try {
-                    settingsStatusMessage.textContent = 'Loading settings...';
-                    settingsStatusMessage.className = 'text-blue-600 mt-4 p-4 rounded-lg';
-                    settingsStatusMessage.classList.remove('hidden');
-
-                    const response = await fetch('/api/school/get_settings', {
-                        method: 'GET',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-
-                    if (response.ok) {
-                        const result = await response.json();
-                        if (result.success && result.settings) {
-                            const settings = result.settings;
-                            
-                            schoolNameInput.value = settings.school_name || '';
-                            schoolTimezoneSelect.value = settings.timezone || 'Australia/Sydney';
-                            stripePublishableKey.value = settings.stripe_publishable_key || '';
-                            stripeSecretKey.value = settings.stripe_secret_key ? '••••••••' : '';
-                            stripeWebhookSecret.value = settings.stripe_webhook_secret ? '••••••••' : '';
-
-                            settingsStatusMessage.textContent = 'Settings loaded successfully';
-                            settingsStatusMessage.className = 'text-green-600 mt-4 p-4 rounded-lg';
-                            settingsStatusMessage.classList.remove('hidden');
-                        } else {
-                            settingsStatusMessage.textContent = result.error_message || 'Failed to load settings';
-                            settingsStatusMessage.className = 'text-red-600 mt-4 p-4 rounded-lg';
-                            settingsStatusMessage.classList.remove('hidden');
-                        }
-                    } else {
-                        settingsStatusMessage.textContent = `Error: ${response.status}`;
-                        settingsStatusMessage.className = 'text-red-600';
-                    }
-                } catch (error) {
-                    console.error('Error loading school settings:', error);
-                    settingsStatusMessage.textContent = 'Network error loading settings';
-                    settingsStatusMessage.className = 'text-red-600';
-                }
-            }
-
-            async function saveSchoolSettings() {
-                const schoolNameInput = document.getElementById('school-name');
-                const schoolTimezoneSelect = document.getElementById('school-timezone');
-                const stripePublishableKey = document.getElementById('stripe-publishable-key');
-                const stripeSecretKey = document.getElementById('stripe-secret-key');
-                const stripeWebhookSecret = document.getElementById('stripe-webhook-secret');
-                const settingsStatusMessage = document.getElementById('settingsStatusMessage');
-
-                try {
-                    settingsStatusMessage.textContent = 'Saving settings...';
-                    settingsStatusMessage.className = 'text-blue-600 mt-4 p-4 rounded-lg';
-                    settingsStatusMessage.classList.remove('hidden');
-
-                    const settingsData = {
-                        school_name: schoolNameInput.value.trim(),
-                        timezone: schoolTimezoneSelect.value,
-                        stripe_publishable_key: stripePublishableKey.value.trim(),
-                    };
-
-                    if (stripeSecretKey.value.trim() && stripeSecretKey.value !== '••••••••') {
-                        settingsData.stripe_secret_key = stripeSecretKey.value.trim();
-                    }
-
-                    if (stripeWebhookSecret.value.trim() && stripeWebhookSecret.value !== '••••••••') {
-                        settingsData.stripe_webhook_secret = stripeWebhookSecret.value.trim();
-                    }
-
-                    const response = await fetch('/api/school/update_settings', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(settingsData)
-                    });
-
-                    const result = await response.json();
-
-                    if (response.ok && result.success) {
-                        settingsStatusMessage.textContent = 'Settings saved successfully!';
-                        settingsStatusMessage.className = 'text-green-600 mt-4 p-4 rounded-lg';
-                        settingsStatusMessage.classList.remove('hidden');
-                        
-                        if (stripeSecretKey.value.trim() && stripeSecretKey.value !== '••••••••') {
-                            stripeSecretKey.value = '••••••••';
-                        }
-                        if (stripeWebhookSecret.value.trim() && stripeWebhookSecret.value !== '••••••••') {
-                            stripeWebhookSecret.value = '••••••••';
-                        }
-                    } else {
-                        settingsStatusMessage.textContent = result.error_message || 'Failed to save settings';
-                        settingsStatusMessage.className = 'text-red-600';
-                    }
-                } catch (error) {
-                    console.error('Error saving school settings:', error);
-                    settingsStatusMessage.textContent = 'Network error saving settings';
-                    settingsStatusMessage.className = 'text-red-600';
-                }
-            }
-
-            function resetSchoolSettings() {
-                loadSchoolSettings();
-            }
+            
 
             // Add event listeners for school settings
             document.getElementById('saveSettingsBtn').addEventListener('click', saveSchoolSettings);
@@ -3616,73 +4272,7 @@
             const editUserForm = document.getElementById('editUserForm');
             const editUserStatusMessage = document.getElementById('editUserStatusMessage');
 
-            function openNewUserModal() {
-                        
-                // Fill form fields
-                document.getElementById('edit_user_id').value = '00000000-0000-0000-0000-000000000000';
-                document.getElementById('edit_email').value = '';
-                document.getElementById('edit_first_name').value = '';
-                document.getElementById('edit_surname').value = '';
-                document.getElementById('edit_gender').value = '';
-                document.getElementById('edit_phone').value = '';
-                document.getElementById('edit_dob').value = '';
-                document.getElementById('edit_address').value = '';
-                document.getElementById('edit_suburb').value = '';
-                document.getElementById('edit_emergency_name').value = '';
-                document.getElementById('edit_emergency_relationship').value = '';
-                document.getElementById('edit_emergency_phone').value = '';
-                document.getElementById('edit_emergency_medical').value = '';
-                document.getElementById('edit_belt_size').value = '';
-                document.getElementById('edit_uniform_size').value = '';
-
-                userEditModal.classList.remove('hidden');
-                document.getElementById("admin-stripe-section").classList.add('hidden');
-                document.getElementById("inviteUserBtn").classList.add('hidden');
-                
-                
-                // initStripeForAdmin(u.user_id, u.email, `${u.first_name || ''} ${u.surname || ''}`.trim());
-            }
-
-            function openEditUserModal(userId) {
-                deinitStripeForAdmin(); // Deinitialize any existing Stripe setup
-                
-                fetch('/api/user/get', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({'user_id': userId})
-                })
-                    .then(res => res.json())
-                    .then(data => {
-                    if (data.success && data.user_profile) {
-                        const u = data.user_profile;
-
-                        
-                        // Fill form fields
-                        document.getElementById('edit_user_id').value = u.user_id;
-                        document.getElementById('edit_email').value = u.email || '';
-                        document.getElementById('edit_first_name').value = u.first_name || '';
-                        document.getElementById('edit_surname').value = u.surname || '';
-                        document.getElementById('edit_gender').value = u.gender || '';
-                        document.getElementById('edit_phone').value = u.phone || '';
-                        document.getElementById('edit_dob').value = u.dob ? u.dob.replace(/\//g, '-'): '';
-                        document.getElementById('edit_address').value = u.address || '';
-                        document.getElementById('edit_suburb').value = u.suburb || '';
-                        document.getElementById('edit_emergency_name').value = u.emergency_name || '';
-                        document.getElementById('edit_emergency_relationship').value = u.emergency_relationship || '';
-                        document.getElementById('edit_emergency_phone').value = u.emergency_phone || '';
-                        document.getElementById('edit_emergency_medical').value = u.emergency_medical || '';
-                        document.getElementById('edit_belt_size').value = u.belt_size || '';
-                        document.getElementById('edit_uniform_size').value = u.uniform_size || '';
-
-                        userEditModal.classList.remove('hidden');
-                        document.getElementById("inviteUserBtn").classList.remove('hidden');
-
-                        initStripeForAdmin(u.user_id, u.email, `${u.first_name || ''} ${u.surname || ''}`.trim());
-                    } else {
-                        alert('User not found.');
-                    }
-                });
-            }
+            
 
             closeModalBtn.addEventListener('click', () => {
                 userEditModal.classList.add('hidden');
@@ -4177,188 +4767,7 @@
             });
 
 
-            // Function to fetch and display the list of venues as cards
-            async function fetchAndDisplayVenues() {
-                 venueListDiv.innerHTML = '<p class="text-gray-600 italic">Loading venues...</p>';
-
-                 // Get filter and sort parameters for venues
-                 const searchTerm = venueSearchInput.value.trim();
-                 const sortBy = venueSortBySelect.value;
-
-                 // Construct query parameters
-                 const queryParams = new URLSearchParams();
-                 if (searchTerm) queryParams.append('search', searchTerm);
-                 if (sortBy) queryParams.append('sort_by', sortBy);
-
-                 const url = `/api/venue/get_list${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-
-                 try {
-                     const response = await fetch(url, { method: 'GET' });
-
-                     if (response.ok) {
-                         const result = await response.json(); // Assuming backend returns { success: true, venues: [...] }
-
-                         if (result.success && result.venues) {
-                            const venues = result.venues;
-                             if (venues.length > 0) {
-                                 let html = '';
-                                 venues.forEach(venue => {
-                                     var edit_btn = "";
-                                     if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])){
-                                        edit_btn = `<button class="edit-venue-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-venue-id="${venue.venue_id}">Edit</button>`;
-                                     }
-
-                                     add_cached_value("venue", venue.venue_id, venue); // Cache the venue data
-                                     html += `
-                                         <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
-                                             <h3 class="text-xl font-semibold text-gray-900 mb-2">${venue.title}</h3>
-                                             <p class="text-gray-700 mb-4">${venue.description || 'No description'}</p>
-
-                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
-                                                 <div>
-                                                     <p><strong class="font-medium">Address:</strong> ${venue.address || 'N/A'}, ${venue.suburb || ''}, ${venue.state || ''} ${venue.postcode || ''}, ${venue.country || ''}</p>
-                                                      <p><strong class="font-medium">Contact Phone:</strong> ${venue.contact_phone || 'N/A'}</p>
-                                                 </div>
-                                                  <div>
-                                                      ${venue.latitude && venue.longitude ?
-                                                         `<p><strong class="font-medium">Location:</strong> ${parseFloat(venue.latitude).toFixed(4)}, ${parseFloat(venue.longitude).toFixed(4)}</p>`
-                                                         : '<p><strong class="font-medium">Location:</strong> N/A</p>'}
-                                                       <p><strong class="font-medium">Distance:</strong> ${venue.distance || 'N/A'}</p> <!-- Assuming backend provides distance -->
-                                                  </div>
-                                             </div>
-
-                                              <div class="flex flex-wrap gap-3">
-                                                  <!-- Add buttons like View Details (opens venue info modal) or Edit -->
-                                                   <button class="view-venue-button py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 text-sm" data-venue-id="${venue.venue_id}">View Details</button>
-                                                  ${edit_btn}
-                                                   <!-- Add Delete button if needed -->
-                                              </div>
-                                         </div>
-                                     `;
-                                 });
-                                 venueListDiv.innerHTML = html;
-
-                                // Attach event listeners after rendering
-                                attachVenueButtonListeners(); // Attach listeners to Edit button
-                                attachViewVenueButtonListeners(); // Attach listeners to View Details button
-
-                             } else {
-                                 venueListDiv.innerHTML = '<p class="text-gray-600 italic">No venues found matching your criteria.</p>';
-                             }
-                         } else {
-                              // Handle cases where response is OK but success is false (backend level error)
-                              venueListDiv.innerHTML = `<p class="text-red-600">Error loading venues: ${result.error_message || 'Unknown error'}</p>`;
-                              console.error('Backend success: false for venues:', result.error_message);
-                         }
-
-                     } else if (response.status === 401 || response.status === 403) {
-                          venueListDiv.innerHTML = '<p class="text-red-600">Error: You are not authorized to view venues.</p>';
-                         console.error("Authorization error fetching venues:", response.status);
-                     }
-                     else {
-                          // Handle other HTTP errors
-                          const errorText = await response.text();
-                           venueListDiv.innerHTML = `<p class="text-red-600">Error loading venues: ${response.status} - ${errorText.substring(0, 100)}...</p>`;
-                          console.error("Error fetching venues:", response.status, errorText);
-                     }
-                 } catch (error) {
-                     // Handle network errors
-                     venueListDiv.innerHTML = `<p class="text-red-600">Network error loading venues.</p>`;
-                     console.error("Fetch error for venue list:", error);
-                 }
-             }
-
-            // Function to attach event listeners to dynamically created venue buttons
-            function attachVenueButtonListeners() {
-                 // Edit Button Listener
-                 venueListDiv.querySelectorAll('.edit-venue-button').forEach(button => {
-                     button.addEventListener('click', async () => {
-                         const venueId = button.getAttribute('data-venue-id');
-                         console.log('Attempting to edit venue:', venueId);
-                         // Fetch venue data and open edit modal
-                         fetchVenueForEdit(venueId);
-                     });
-                 });
-                 // Add Delete button listener here if needed
-            }
-
-             // Function to attach event listeners to View Details buttons
-             function attachViewVenueButtonListeners() {
-                  venueListDiv.querySelectorAll('.view-venue-button').forEach(button => {
-                      button.addEventListener('click', async () => {
-                          const venueId = button.getAttribute('data-venue-id');
-                          console.log('Attempting to view venue details for:', venueId);
-                          fetchAndDisplayVenueInfo(venueId); // Reuse the venue info modal logic
-                      });
-                  });
-             }
-
-
-             // Function to fetch venue data for editing and populate the modal
-            async function fetchVenueForEdit(venueId) {
-                 editVenueMessageDiv.textContent = '';
-                 editVenueMessageDiv.className = 'message text-center';
-                 editVenueMessageDiv.style.display = 'none';
-
-                 try {
-                     // Use POST request body for venue ID
-                     const response = await fetch('/api/venue/get', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ venue_id: venueId })
-                     });
-
-                     if (response.ok) {
-                         const result = await response.json(); // Assuming backend returns { success: true, venue: {...} } OR just the venue data
-
-                         if (!result.success) {
-                                console.error('Backend success: false fetching venue for editing:', result.error_message || 'Invalid data received');
-                                alert('Error fetching venue for editing: ' + (result.error_message || 'Invalid data received'));
-                                return;
-                         }
-                        const venue = result.venue; // Adjust based on actual API response structure
-
-                         if (venue && venue.venue_id) {
-                             // Populate the edit modal form
-                             editVenueIdInput.value = venue.venue_id;
-                             editVenueTitleInput.value = venue.title || '';
-                             editVenueDescriptionInput.value = venue.description || '';
-                             editVenueAddressInput.value = venue.address || '';
-                             editVenueSuburbInput.value = venue.suburb || '';
-                             editVenueStateInput.value = venue.state || '';
-                             editVenuePostcodeInput.value = venue.postcode || '';
-                             editVenueCountryInput.value = venue.country || '';
-                             editVenueLatitudeInput.value = venue.latitude !== null ? parseFloat(venue.latitude) : '';
-                             editVenueLongitudeInput.value = venue.longitude !== null ? parseFloat(venue.longitude) : '';
-                             editVenueContactPhoneInput.value = venue.contact_phone || '';
-
-                             // Show the edit modal
-                             editVenueModal.style.display = 'block';
-                             add_cached_value("venue", venue.venue_id, venue); // Cache the venue data
-
-                         } else {
-                              alert('Error fetching venue for editing: ' + (result.error_message || 'Invalid data received'));
-                              console.error('Backend success: false fetching venue for editing:', result.error_message || 'Invalid data received');
-                         }
-
-                     } else if (response.status === 404) {
-                         alert('Venue not found.');
-                         console.warn('Venue not found for editing:', venueId);
-                     }
-                     else if (response.status === 401 || response.status === 403) {
-                         alert('You are not authorized to edit this venue.');
-                          console.error("Authorization error fetching venue for editing:", response.status);
-                     }
-                     else {
-                         const errorText = await response.text();
-                         alert(`Error fetching venue for editing: ${response.status}`);
-                         console.error("Error fetching venue for editing:", response.status, errorText);
-                     }
-                 } catch (error) {
-                     console.error('Fetch error fetching venue for editing:', error);
-                     alert('Network error fetching venue for editing.');
-                 }
-            }
+            
 
 
             // Submit Edit Venue Form
@@ -4581,241 +4990,7 @@
              });
 
 
-            // Function to fetch and display venues for kiosk mode
-            async function fetchAndDisplayKioskVenues() {
-                const kioskVenuesListDiv = document.getElementById('kiosk-venues-list');
-                if (!kioskVenuesListDiv) {
-                    console.error('Kiosk venues list div not found!');
-                    return;
-                }
-                
-                kioskVenuesListDiv.innerHTML = '<p class="text-gray-600 italic col-span-full text-center py-8">Loading venues...</p>';
-                
-                try {
-                    const response = await fetch('/api/venue/get_list', { method: 'GET' });
-                    
-                    if (response.ok) {
-                        const result = await response.json();
-                        
-                        if (result.success && Array.isArray(result.venues)) {
-                            if (result.venues.length > 0) {
-                                let html = '';
-                                
-                                result.venues.forEach(venue => {
-                                    html += `
-                                        <div class="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 hover:border-indigo-200">
-                                            <div class="flex items-center justify-between mb-4">
-                                                <div>
-                                                    <h3 class="text-xl font-bold text-gray-900 mb-2">${venue.title || 'Unnamed Venue'}</h3>
-                                                    <p class="text-gray-600 text-sm">${venue.description || 'No description'}</p>
-                                                </div>
-                                            </div>
-                                            <div class="space-y-2 mb-4">
-                                                <p class="text-sm text-gray-600"><strong>Address:</strong> ${venue.address || 'N/A'}</p>
-                                                <p class="text-sm text-gray-600"><strong>Phone:</strong> ${venue.contact_phone || 'N/A'}</p>
-                                            </div>
-                                            <button 
-                                                class="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition duration-300 transform hover:scale-105 start-kiosk-btn"
-                                                data-venue-id="${venue.venue_id}"
-                                                data-venue-name="${venue.title}"
-                                            >
-                                                <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.01M15 10h1.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                </svg>
-                                                Start Kiosk
-                                            </button>
-                                        </div>
-                                    `;
-                                });
-                                
-                                kioskVenuesListDiv.innerHTML = html;
-                                
-                                // Add event listeners to Start Kiosk buttons
-                                attachKioskButtonListeners();
-                            } else {
-                                kioskVenuesListDiv.innerHTML = '<p class="text-gray-600 italic col-span-full text-center py-8">No venues found.</p>';
-                            }
-                        } else {
-                            kioskVenuesListDiv.innerHTML = `<p class="text-red-600 col-span-full text-center py-8">Error: ${result.error_message || 'Failed to load venues'}</p>`;
-                        }
-                    } else {
-                        kioskVenuesListDiv.innerHTML = '<p class="text-red-600 col-span-full text-center py-8">Failed to load venues.</p>';
-                    }
-                } catch (error) {
-                    console.error('Error fetching venues for kiosk:', error);
-                    kioskVenuesListDiv.innerHTML = '<p class="text-red-600 col-span-full text-center py-8">Network error loading venues.</p>';
-                }
-            }
             
-            // Function to attach event listeners to kiosk buttons
-            function attachKioskButtonListeners() {
-                const kioskButtons = document.querySelectorAll('.start-kiosk-btn');
-                kioskButtons.forEach(button => {
-                    button.addEventListener('click', function() {
-                        const venueId = this.getAttribute('data-venue-id');
-                        const venueName = this.getAttribute('data-venue-name');
-                        startKioskMode(venueId, venueName);
-                    });
-                });
-            }
-            
-            // Function to start kiosk mode for a specific venue
-            function startKioskMode(venueId, venueName) {
-                // Redirect to kiosk mode in the same window
-                const kioskUrl = `/kiosk?venue_id=${venueId}&venue_name=${encodeURIComponent(venueName)}`;
-                window.location.href = kioskUrl;
-            }
-
-
-            async function fetchAndDisplayPOS() {
-                await fetchAndDisplayClasses();
-
-            }
-
-
-
-            // Function to fetch and display the list of styles as cards
-            async function fetchAndDisplayStyles() {
-                 styleListDiv.innerHTML = '<p class="text-gray-600 italic">Loading styles...</p>';
-
-                 // Get filter and sort parameters for styles
-                 const searchTerm = styleSearchInput.value.trim();
-                 const sortBy = styleSortBySelect.value;
-
-                 // Construct query parameters
-                 const queryParams = new URLSearchParams();
-                 if (searchTerm) queryParams.append('search', searchTerm);
-                 if (sortBy) queryParams.append('sort_by', sortBy);
-
-                 const url = `/api/style/get_list${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-
-                 try {
-                     const response = await fetch(url, { method: 'GET' });
-
-                     if (response.ok) {
-                         const result = await response.json();
-
-                         if (result.success && result.styles) {
-                             const styles = result.styles;
-                             if (styles.length > 0) {
-                                 let html = '';
-                                 styles.forEach(style => {
-
-                                    let edit_btn = "";
-                                    if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
-                                        edit_btn=  `
-                                                <div class="flex flex-wrap gap-3 mt-4">
-                                                  <button class="edit-style-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-style-id="${style.style_id}">Edit</button>
-                                                  <!-- Add Delete button if needed -->
-                                                </div>
-                                        `;
-                                    }
-
-                                    //has Permissions
-                                     html += `
-                                         <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
-                                             <h3 class="text-xl font-semibold text-gray-900 mb-2">${style.title}</h3>
-                                             <p class="text-gray-700">${style.description || 'No description'}</p>
-                                             ${edit_btn}
-                                         </div>
-                                     `;
-                                 });
-                                 styleListDiv.innerHTML = html;
-
-                                 attachStyleButtonListeners(); // Attach listeners to Edit button
-
-                             } else {
-                                 styleListDiv.innerHTML = '<p class="text-gray-600 italic">No styles found matching your criteria.</p>';
-                             }
-                         } else {
-                             displayMessage(styleListDiv, `Error loading styles: ${result.error_message || 'Unknown error'}`, 'error');
-                              console.error('Backend success: false for styles:', result.error_message);
-                         }
-                     } else if (response.status === 401 || response.status === 403) {
-                          displayMessage(styleListDiv, 'Error: You are not authorized to view styles.', 'error');
-                          console.error("Authorization error fetching styles:", response.status);
-                     }
-                     else {
-                         const errorText = await response.text();
-                         displayMessage(styleListDiv, `Error loading styles: ${response.status} - ${errorText.substring(0, 100) + '...'}`, 'error');
-                         console.error("Error fetching styles:", response.status, errorText);
-                     }
-                 } catch (error) {
-                      console.error('Error fetching styles:', error);
-                     displayMessage(styleListDiv, 'Network error loading styles.', 'error');
-                 }
-             }
-
-             // Function to attach event listeners to dynamically created style buttons
-            function attachStyleButtonListeners() {
-                 // Edit Button Listener
-                 styleListDiv.querySelectorAll('.edit-style-button').forEach(button => {
-                     button.addEventListener('click', async () => {
-                         const styleId = button.getAttribute('data-style-id');
-                         console.log('Attempting to edit style:', styleId);
-                         // Fetch style data and open edit modal
-                         fetchStyleForEdit(styleId);
-                     });
-                 });
-                 // Add Delete button listener here if needed
-            }
-
-
-             // Function to fetch style data for editing and populate the modal
-            async function fetchStyleForEdit(styleId) {
-                 editStyleMessageDiv.textContent = '';
-                 editStyleMessageDiv.className = 'message text-center';
-                 editStyleMessageDiv.style.display = 'none';
-
-                 try {
-                    console.log('Fetching style for editing:', styleId);
-
-   
-                    const requestBody = {
-                        style_id: styleId, // Include the style ID for update
-                    };
-
-                     // Assuming you have a GET /api/style/{id} endpoint
-                     const response = await fetch(`/api/style/get`, {
-                         method: 'POST',
-                         headers: { 'Content-Type': 'application/json' },
-                         body: JSON.stringify(requestBody)
-                     });
-
-                    //  const response = await fetch(`/api/style/${styleId}`, { method: 'GET' });
-                     const result = await response.json(); // Assuming backend returns { success: true, style: {...} }
-
-                     if (response.ok && result.success && result.style) {
-                         const style = result.style;
-                         // Populate the edit modal form
-                         editStyleIdInput.value = style.style_id;
-                         editStyleTitleInput.value = style.title || '';
-                         editStyleDescriptionInput.value = style.description || '';
-
-                         // Show the edit modal
-                         editStyleModal.style.display = 'block';
-
-                     } else if (response.ok && result.error_message) {
-                          alert('Error fetching style for editing: ' + (result.error_message || 'Unknown error'));
-                          console.error('Backend success: false fetching style for editing:', result.error_message);
-                     } else if (response.status === 404) {
-                         alert('Style not found.');
-                         console.warn('Style not found for editing:', styleId);
-                     }
-                     else if (response.status === 401 || response.status === 403) {
-                         alert('You are not authorized to edit this style.');
-                          console.error("Authorization error fetching style for editing:", response.status);
-                     }
-                     else {
-                         const errorText = await response.text();
-                         alert(`Error fetching style for editing: ${response.status}`);
-                         console.error("Error fetching style for editing:", response.status, errorText);
-                     }
-                 } catch (error) {
-                     console.error('Fetch error fetching style for editing:', error);
-                     alert('Network error fetching style for editing.');
-                 }
-            }
 
 
             // Submit Edit Style Form

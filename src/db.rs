@@ -879,6 +879,7 @@ impl ScyllaConnector {
                 if new_school {
                     self.create_school(&user_id, &school_id, &None, &None).await.trace()?;
                 }
+                self.increment_user_count(&school_id).await.trace()?;
             }
         }
 
