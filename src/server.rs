@@ -1320,6 +1320,7 @@ pub mod handlers {
             Ok(_) => {
                 // Class created successfully
                 tracing::info!("Class {} created successfully by user {}", class_id, creator_user_id);
+                
                 // Return a success response with the newly created class ID
                 Ok(HttpResponse::Ok().json(CreateClassResponse {
                     success: true,

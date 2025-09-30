@@ -109,8 +109,8 @@ fn sanitize_email(input: &String) -> Option<String> {
 
 
 /// Truncates a timestamp (in milliseconds) to the start of the given StatWindow.
-pub fn truncate_timestamp(ts_millis: i64, window: StatWindow) -> i64 {
-    let dt = Utc.timestamp_millis_opt(ts_millis).unwrap();
+pub fn truncate_timestamp(now: DateTime<Tz>, window: StatWindow) -> i64 {
+    let dt = now;
 
     let truncated = match window {
         StatWindow::HOUR => dt
@@ -135,15 +135,16 @@ pub fn truncate_timestamp(ts_millis: i64, window: StatWindow) -> i64 {
             // Start of the ISO week (Monday)
             let num_days_from_monday = dt.weekday().num_days_from_monday() as i64;
             let start_of_week = dt.date_naive() - Duration::days(num_days_from_monday);
-            Utc.with_ymd_and_hms(start_of_week.year(), start_of_week.month(), start_of_week.day(), 0, 0, 0).unwrap()
+            now.timezone().with_ymd_and_hms(start_of_week.year(), start_of_week.month(), start_of_week.day(), 0, 0, 0).unwrap()
+            // r.with_timezone(&now.timezone())
         }
 
         StatWindow::MONTH => {
-            Utc.with_ymd_and_hms(dt.year(), dt.month(), 1, 0, 0, 0).unwrap()
+            now.timezone().with_ymd_and_hms(dt.year(), dt.month(), 1, 0, 0, 0).unwrap()
         }
 
         StatWindow::YEAR => {
-            Utc.with_ymd_and_hms(dt.year(), 1, 1, 0, 0, 0).unwrap()
+            now.timezone().with_ymd_and_hms(dt.year(), 1, 1, 0, 0, 0).unwrap()
         },
 
         StatWindow::ALL => {
@@ -317,6 +318,7 @@ fn calculate_age(dob_str: &String) -> Option<i32> {
 
     Some(age)
 }
+
 
 
 pub fn get_time() -> i64
@@ -528,6 +530,40 @@ impl ScyllaConnector {
             school_ids.extend(schools.into_iter().map(|(school_id, user_id)| SchoolUserId { school_id, user_id }));
         }
         return Ok(school_ids);
+    }
+
+    pub async fn get_tz_time(&self, school_id: &Uuid) -> Result<DateTime<Tz>> {
+        let now = get_time();
+        // Query the database
+        let timezone_str = self.get_timezone(school_id, None).await.trace()?;
+
+        // Parse timezone string
+        let tz: Tz = timezone_str
+            .parse()
+            .map_err(|_| AppError::Internal(format!("Invalid timezone: {}", timezone_str)))?;
+
+        // Convert `now` (timestamp) to `DateTime<Utc>` and then to local time
+        let now_dt_utc: DateTime<Utc> = Utc
+            .timestamp_opt(now / 1000, 0)
+            .single()
+            .ok_or_else(|| AppError::Internal("Invalid 'now' timestamp".to_string()))?;
+
+        Ok(now_dt_utc.with_timezone(&tz))
+    }
+
+    pub fn get_tz_ts(&self, timezone_str: &String, timestamp: i64) -> Result<DateTime<Tz>> {
+        // Parse timezone string
+        let tz: Tz = timezone_str
+            .parse()
+            .map_err(|_| AppError::Internal(format!("Invalid timezone: {}", timezone_str)))?;
+
+        // Convert `timestamp` (milliseconds since epoch) to `DateTime<Utc>` and then to local time
+        let dt_utc: DateTime<Utc> = Utc
+            .timestamp_opt(timestamp / 1000, 0)
+            .single()
+            .ok_or_else(|| AppError::Internal("Invalid 'timestamp'".to_string()))?;
+
+        Ok(dt_utc.with_timezone(&tz))
     }
 
     pub async fn get_school_user_titles(&self, school_users: &Vec<SchoolUserId>) -> Result<Vec<DetailedSchoolUserId>> {
@@ -1055,8 +1091,10 @@ impl ScyllaConnector {
             }
         };
         
+        let mut new_user = false;
         if *user_id == Uuid::nil() {
             ref_user_id = Uuid::new_v4();
+            new_user = true;
         } else {
             // Check the user exists before allowing an edit / Because update on scylla will add a user if it doesnt exist
             let result = self.session
@@ -1109,7 +1147,7 @@ impl ScyllaConnector {
 
 
 
-        self.session
+        let result = self.session
             .query_unpaged(
                 "UPDATE mma.user \
                 SET first_name = ?, surname = ?, gender = ?, phone = ?, dob = ?, \
@@ -1137,7 +1175,10 @@ impl ScyllaConnector {
             )
             .await.trace()?;
 
-        
+        if new_user {
+            self.increment_user_count(&school_id).await?;
+        }
+
         Ok(())
     }
 
@@ -1322,11 +1363,13 @@ impl ScyllaConnector {
                 .await.trace()?;
         }
 
+        self.change_class_count(school_id, 1).await?;
+
         Ok(())
     }
 
 
-    // Function to create a new waiver and make it current
+    
     pub async fn update_class(&self, school_id: &Uuid, _creator_user_id: &Uuid, class_id: &Uuid, title: &String, description: &String, venue_id: &Uuid, style_ids :&Vec<Uuid>, grading_ids :&Vec<Uuid>, price: Option<BigDecimal>, publish_mode: i32, capacity: i32, class_frequency: &Vec<ClassFrequencyId>, notify_booking: bool, waiver_id: Option<Uuid>, free_lessons: Option<i32>) -> AppResult<()> {
         
         match waiver_id {
@@ -2251,6 +2294,22 @@ impl ScyllaConnector {
         result
     }
 
+    /// Thread-safe atomic increment of user count for dashboard stats using generic locking
+    /// This function is safe for concurrent operations across multiple threads and nodes
+    pub async fn change_class_count(&self, school_id: &Uuid, delta: i32) -> AppResult<()> {
+        let lock_key = format!("class_count:{}", school_id);
+        
+        // Use generic locking mechanism
+        self.acquire_lock(&lock_key).await?;
+        
+        let result = self.update_class_count_locked_section(school_id, delta).await;
+        
+        self.release_lock(&lock_key).await?;
+        
+        result
+    }
+
+
     /// Generic lock acquisition using LWT with string-based keys
     /// This can be used for any type of distributed locking across the cluster
     pub async fn acquire_lock(&self, lock_key: &str) -> AppResult<()> {
@@ -2317,9 +2376,81 @@ impl ScyllaConnector {
         result
     }
 
+
+/// Increment user count in locked section - safe read-modify-write
+    pub async fn update_class_count_locked_section(&self, school_id: &Uuid, delta: i32) -> AppResult<()> {
+        // let now = get_time();
+        let now_local = self.get_tz_time(school_id).await.trace()?;
+
+
+
+
+        // Define all the stat combinations we need to increment
+        let mut stat_keys = vec![
+            // ALL window - no timestamp
+            (school_id, school_id, StatIdType::SCHOOL as i8, StatWindow::ALL as i8, StatCountType::ActiveClasses as i8, 0i16, 0i16, CqlTimestamp(0)),
+        ];
+        
+        // Add time-windowed stats
+        let windows = [StatWindow::WEEK, StatWindow::MONTH, StatWindow::YEAR];
+        for window in windows.iter() {
+            let truncated_ts = truncate_timestamp(now_local, *window);
+            stat_keys.push((
+                school_id, 
+                school_id, 
+                StatIdType::SCHOOL as i8, 
+                *window as i8, 
+                StatCountType::ActiveClasses as i8, 
+                0i16, 
+                0i16, 
+                CqlTimestamp(truncated_ts)
+            ));
+        }
+        
+        // For each stat, read current value, increment, and write back
+        for (school_id_param, id, id_type, window, count_type, v1, v2, ts) in stat_keys {
+            // Read current count
+            let result = self.session
+                .query_unpaged(
+                    "SELECT count FROM mma.dash_stats WHERE school_id = ? AND id = ? AND id_type = ? AND window = ? AND count_type = ? AND v1 = ? AND v2 = ? AND ts = ?",
+                    (school_id_param, id, id_type, window, count_type, v1, v2, ts)
+                )
+                .await.trace()?
+                .into_rows_result().trace()?;
+
+            let current_count = if result.rows_num() > 0 {
+                let mut count = 0;
+                for row in result.rows().trace()? {
+                    let (existing_count,): (i32,) = row.trace()?;
+                    count = existing_count;
+                    break;
+                }
+                count
+            } else {
+                0
+            };
+
+            let new_count = current_count + delta;
+            
+            // Insert or update with new count
+            self.session
+                .query_unpaged(
+                    "INSERT INTO mma.dash_stats (school_id, id, id_type, window, count, count_type, v1, v2, ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (school_id_param, id, id_type, window, new_count, count_type, v1, v2, ts)
+                )
+                .await.trace()?;
+        }
+        println!("Changed class count for school: Delta: {}", delta);
+        tracing::info!("Changed class count for school: {}", school_id);
+        Ok(())
+    }
+
+
+
     /// Increment user count in locked section - safe read-modify-write
     pub async fn increment_user_count_locked_section(&self, school_id: &Uuid) -> AppResult<()> {
-        let now = get_time();
+        // let now = get_time();
+        let now_local = self.get_tz_time(school_id).await.trace()?;
         
         // Define all the stat combinations we need to increment
         let mut stat_keys = vec![
@@ -2330,7 +2461,7 @@ impl ScyllaConnector {
         // Add time-windowed stats
         let windows = [StatWindow::WEEK, StatWindow::MONTH, StatWindow::YEAR];
         for window in windows.iter() {
-            let truncated_ts = truncate_timestamp(now, *window);
+            let truncated_ts = truncate_timestamp(now_local, *window);
             stat_keys.push((
                 school_id, 
                 school_id, 
@@ -2428,6 +2559,7 @@ impl ScyllaConnector {
         }
 
         // let mut attendance_data = Vec::new();
+        let timezone_str = self.get_timezone(school_id, None).await.trace()?;
 
         let mut count_total = HashMap::new();
 
@@ -2468,57 +2600,57 @@ impl ScyllaConnector {
                     // Class Stats all
                     *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceAll as i8, 0, 0 as i16, 0)).or_insert(0) += 1;
 
-                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
+                    let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::HOUR);
                     *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
-                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
+                    let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::DAY);
                     *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
-                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
+                    let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::WEEK);
                     *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
-                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
+                    let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::MONTH);
                     *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
-                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
+                    let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::YEAR);
                     *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
 
                     if *gender_id == Some(StatGender::Male) {
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
 
-                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
+                        let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::HOUR);
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
 
-                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
+                        let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::DAY);
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
 
-                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
+                        let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::WEEK);
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
 
-                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
+                        let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::MONTH);
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
 
-                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
+                        let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::YEAR);
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceGender as i8, StatGender::Male as i16, 0, trunc_ts)).or_insert(0) += 1;
                     }
 
                     if *gender_id == Some(StatGender::Female) {
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::ALL as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
 
-                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
+                        let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::HOUR);
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::HOUR as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
 
-                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
+                        let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::DAY);
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::DAY as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
 
-                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
+                        let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::WEEK);
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::WEEK as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
 
-                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
+                        let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::MONTH);
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::MONTH as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
 
-                        let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
+                        let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::YEAR);
                         *count_total.entry((class_id, StatIdType::CLASS as i8, StatWindow::YEAR as i8, StatCountType::AttendanceGender as i8, StatGender::Female as i16, 0, trunc_ts)).or_insert(0) += 1;
                     }
 
@@ -2526,19 +2658,19 @@ impl ScyllaConnector {
                     // School Stats all
                     *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::ALL as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
-                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::HOUR);
+                    let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::HOUR);
                     *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::HOUR as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
-                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::DAY);
+                    let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::DAY);
                     *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::DAY as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
-                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::WEEK);
+                    let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::WEEK);
                     *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::WEEK as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
-                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::MONTH);
+                    let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::MONTH);
                     *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::MONTH as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
-                    let trunc_ts = truncate_timestamp(cql_class_start_ts.0, StatWindow::YEAR);
+                    let trunc_ts = truncate_timestamp(self.get_tz_ts(&timezone_str, cql_class_start_ts.0).trace()?, StatWindow::YEAR);
                     *count_total.entry((*school_id, StatIdType::SCHOOL as i8, StatWindow::YEAR as i8, StatCountType::AttendanceAll as i8, 0, 0, trunc_ts)).or_insert(0) += 1;
 
 

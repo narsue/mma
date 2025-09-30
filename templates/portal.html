@@ -3239,6 +3239,7 @@
                         
                         // Calculate stats from the dashboard data
                         const stats = calculateDashboardStats(data);
+                        console.log("Frontpage stats calculated:", stats);
                         
                         // Update the UI elements
                         document.getElementById('total-members-stat').textContent = stats.totalMembers.toLocaleString();
@@ -3254,6 +3255,18 @@
                 }
             }
 
+            function formatDateInTZ(ts, tz) {
+                const d = new Date(ts);
+                const f = new Intl.DateTimeFormat("en-CA", {
+                    timeZone: tz,
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                });
+                // en-CA locale gives us YYYY-MM-DD output
+                return f.format(d);
+            }
+
             function calculateDashboardStats(data) {
                 // Calculate statistics from the dashboard data
                 let totalMembers = 0;
@@ -3266,25 +3279,33 @@
                 const todayStr = today.toISOString().split('T')[0];
                 const currentMonth = today.getMonth();
                 const currentYear = today.getFullYear();
-                
                 if (data && data.length > 0) {
                     // Get unique class IDs for active classes count (attendance records)
-                    const classIds = new Set(data.filter(d => d.count_type === 1).map(d => d.id));
-                    activeClasses = classIds.size;
+                    // const classIds = new Set(data.filter(d => d.count_type === 1).map(d => d.id));
+                    // activeClasses = classIds.size;
                     
                     // Calculate stats from dashboard data
                     data.forEach(d => {
-                        const recordDate = new Date(d.ts);
-                        const recordMonth = recordDate.getMonth();
-                        const recordYear = recordDate.getFullYear();
+                        // const recordDate = formatDateInTZ(d.ts, 'Australia/Sydney');
+
+                        const recordDateStr = formatDateInTZ(d.ts, 'Australia/Sydney'); // "2025-09-30"
+                        const [recordYear, recordMonth, recordDay] = recordDateStr.split("-");
+
+                        // const recordMonth = recordDate.getMonth();
+                        // const recordYear = recordDate.getFullYear();
                         
+                        // Total Active Classes (count_type = 9, window = 6 for ALL)
+                        if (d.count_type === 9 && d.window === 6) {
+                            activeClasses = d.count;
+                        }
+
                         // Total Members (count_type = 8, window = 6 for ALL)
                         if (d.count_type === 8 && d.window === 6) {
                             totalMembers = d.count;
                         }
                         
-                        // Today's attendance (count_type = 1 for AttendanceAll, window = 2 for DAY)
-                        if (d.count_type === 1 && d.window === 2 && recordDate.toISOString().split('T')[0] === todayStr) {
+                        // Get the stats for today only (window == 2), id_type = 1 for SCHOOL, count_type = 1 for AttendanceAll
+                        if (d.count_type === 1 && d.window === 2 && d.id_type === 1 && recordDateStr === todayStr) {
                             todaysAttendance += d.count || 0;
                         }
                         
@@ -6053,10 +6074,16 @@
                              
                              // Attach click event listener to create class button (visibility already handled globally)
                              const createBtn = document.getElementById('createClassBtn');
+                             console.log('Create Class Button:', createBtn);
                              if (createBtn) {
                                  // Remove any existing event listeners to prevent duplicates
                                  createBtn.replaceWith(createBtn.cloneNode(true));
                                  const newCreateBtn = document.getElementById('createClassBtn');
+                                 if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
+                                     newCreateBtn.style.display = 'inline-flex';
+                                 } else {
+                                     newCreateBtn.style.display = 'none';
+                                 }
                                  
                                  // Attach click event listener to open modal
                                  newCreateBtn.addEventListener('click', async () => {
