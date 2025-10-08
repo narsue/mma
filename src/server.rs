@@ -614,10 +614,10 @@ pub mod handlers {
             Ok(_) => {
                 // --- Security Enhancement: Invalidate other sessions ---
                 // Forces user to re-login on other devices after password change
-                if let Err(e) = state_manager.db.invalidate_all_user_sessions(logged_user_id).await {
-                    // Log the error but don't necessarily fail the password change itself
-                    tracing::warn!("Failed to invalidate other sessions for user {} after password change: {:?}", logged_user_id, e);
-                }
+                // if let Err(e) = state_manager.db.invalidate_all_user_sessions(logged_user_id).await {
+                //     // Log the error but don't necessarily fail the password change itself
+                //     tracing::warn!("Failed to invalidate other sessions for user {} after password change: {:?}", logged_user_id, e);
+                // }
                 // Note: The current session cookie will still be valid until it expires or they explicitly log out THIS session.
 
                 Ok(HttpResponse::Ok().json(ChangePasswordResponse {
@@ -2639,7 +2639,9 @@ pub mod handlers {
         
         // Check if the code is valid and mark it as used
         match state_manager.db.check_and_use_forgotten_password_code(email, code).await {
-            Ok(Some((user_id, school_id))) => {
+            Ok(Some((school_user_id, logged_user_id))) => {
+                let user_id = school_user_id.user_id;
+                let school_id = school_user_id.school_id;
                 // Hash the new password
                 let new_password_hash = match hash_password(new_password) {
                     Ok(hash) => hash,
@@ -2654,7 +2656,7 @@ pub mod handlers {
                 };
                 
                 // Update the password in the database
-                match state_manager.db.update_password_hash(user_id, new_password_hash).await {
+                match state_manager.db.update_password_hash(logged_user_id, new_password_hash).await {
                     Ok(_) => {
                         tracing::info!("Password successfully reset for user ID: {}", user_id);
                         

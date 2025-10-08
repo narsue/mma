@@ -735,16 +735,16 @@ impl ScyllaConnector {
     }
     
     // Invalidate all sessions for a user (force logout everywhere)
-    pub async fn invalidate_all_user_sessions(&self, user_id: Uuid) -> Result<()> {
-        self.session
-            .query_unpaged(
-                "UPDATE mma.session SET is_active = false WHERE logged_user_id = ?",
-                (user_id,),
-            )
-            .await.trace()?;
+    // pub async fn invalidate_all_user_sessions(&self, user_id: Uuid) -> Result<()> {
+    //     self.session
+    //         .query_unpaged(
+    //             "UPDATE mma.session SET is_active = false WHERE logged_user_id = ?",
+    //             (user_id,),
+    //         )
+    //         .await.trace()?;
         
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
 
     // Add user creation method
@@ -4286,7 +4286,7 @@ impl ScyllaConnector {
 
 
     // Check if a code is valid for an email and mark it as used if it is
-    pub async fn check_and_use_forgotten_password_code(&self, email: &str, code: &str) -> Result<Option<(Uuid, Uuid)>> {
+    pub async fn check_and_use_forgotten_password_code(&self, email: &str, code: &str) -> Result<Option<(SchoolUserId, Uuid)>> {
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
@@ -4320,7 +4320,7 @@ impl ScyllaConnector {
         
         // If valid, mark the code as used
         if is_valid {
-            if let Some(_id) = logged_user_id {
+            if let Some(logged_user_id) = logged_user_id {
                 self.session
                     .query_unpaged(
                         "UPDATE mma.forgotten_password_codes SET is_used = true WHERE email = ? and code = ?",
@@ -4331,20 +4331,21 @@ impl ScyllaConnector {
 
                 let result = self.session
                 .query_unpaged(
-                    "SELECT school_id FROM mma.user WHERE logged_user_id = ?",
+                    "SELECT school_user_ids FROM mma.logged_user WHERE logged_user_id = ?",
                     (logged_user_id,),
                 )
                 .await.trace()?
                 .into_rows_result().trace()?;
 
-                let mut school_id: Option<Uuid> = None;
-                for row in result.rows().trace()? {
-                    let (id,): (Uuid,) = row.trace()?;
-                    school_id = Some(id);
+                let mut school_ids = Vec::new();
+                for row in result.rows::<(Vec<(Uuid, Uuid)>,)>().trace()? {
+                    let (schools,): (Vec<(Uuid, Uuid)>,) = row.trace()?;
+                    school_ids.extend(schools.into_iter().map(|(school_id, user_id)| SchoolUserId { school_id, user_id }));
                 }
-                match school_id {
-                    Some(id) => {
-                        return Ok(Some((id, id)));
+
+                match school_ids.pop() {
+                    Some(school_user_id) => {
+                        return Ok(Some((school_user_id, logged_user_id)));
                     },
                     None => {
                         return Ok(None);
