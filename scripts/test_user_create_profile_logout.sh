@@ -87,6 +87,14 @@ echo $CLASS_RESPONSE
 CLASS_ID=$(echo "$CLASS_RESPONSE" | jq -r .id)
 echo "Created class with ID: $CLASS_ID"
 
+# Create a student account for this school
+echo "Creating student user..."
+CREATE_RESPONSE=$(curl -s -X POST http://localhost:1227/api/user/update_profile \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"00000000-0000-0000-0000-000000000001","first_name":"Jason","surname":"Traish","gender":"male","phone":"","dob":"2025/11/13","address":"","suburb":"","emergency_name":"","emergency_relationship":"","emergency_phone":"","emergency_medical":"","belt_size":"","uniform_size":"","email":"narsue@hotmail.com"}' \
+  -b cookies.txt)
+echo $CREATE_RESPONSE
+
 
 echo -e "\nLogging out..."
 LOGOUT_RESPONSE=$(curl -s -X POST http://localhost:1227/api/user/logout \

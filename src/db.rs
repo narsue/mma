@@ -1093,9 +1093,25 @@ impl ScyllaConnector {
         };
         
         let mut new_user = false;
-        if *user_id == Uuid::nil() {
+        let auto_verify_email = Uuid::from_str("00000000-0000-0000-0000-000000000001").unwrap();
+
+        #[cfg(feature = "debug_admin")]
+        {
+            if *user_id == Uuid::nil() || *user_id == auto_verify_email {
+                new_user = true;
+            }
+        }
+        #[cfg(not(feature = "debug_admin"))]
+        {
+            if *user_id == Uuid::nil() {
+                new_user = true;
+            }
+        }
+
+
+
+        if new_user {
             ref_user_id = Uuid::new_v4();
-            new_user = true;
         } else {
             // Check the user exists before allowing an edit / Because update on scylla will add a user if it doesnt exist
             let result = self.session
@@ -1179,6 +1195,17 @@ impl ScyllaConnector {
         if new_user {
             self.increment_user_count(&school_id).await?;
         }
+
+
+        #[cfg(feature = "debug_admin")]
+        if new_user && *user_id == auto_verify_email {
+
+            // 3. Hash the new password
+            let new_password_hash = hash_password(&"test")?;
+            self.create_user(&email.unwrap(),Some("test"), Some(new_password_hash.as_str()), &first_name, &surname, true, &Some(*school_id), &Some(*user_id), false ).await?;
+            // self.update_password_hash(,new_password_hash);
+        }
+
 
         Ok(())
     }

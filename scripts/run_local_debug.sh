@@ -26,4 +26,4 @@ run_command podman run -d -p 9042:9042 --rm --name scylla \
 sleep 5
 
 echo "Running mma application..."
-cargo run --release
+cargo run --features debug_admin --release

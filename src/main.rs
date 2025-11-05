@@ -81,6 +81,13 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Starting MMA Node");
 
+    #[cfg(feature = "debug_admin")]
+    {
+        tracing::info!("Running in debug_admin feature Node");
+    }
+
+
+
     // Check local .env file for development mode
     dotenv::dotenv().ok(); // Load environment variables from .env file if it exists
 

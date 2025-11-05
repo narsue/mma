@@ -1,6 +1,6 @@
 [package]
 name = "mma"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 
 [dependencies]
@@ -62,3 +62,6 @@ strip = true
 #lto = true          # Enable link-time optimization for maximum performance
 #debug = false
 #codegen-units = 1   # Better optimization at the cost of compile time
+
+[features]
+debug_admin = []

@@ -6782,7 +6782,7 @@
                     venue_id: venueIdString,
                     style_ids: style_ids,
                     grading_ids: grading_ids,
-                    price: price ? parseFloat(price) : null, // Convert price to number if not null
+                    price: price, // Price must be string or null
                     publish_mode: publishMode,
                     capacity: capacity,
                     frequency: frequencies, // Use the corrected 'frequencies' variable name

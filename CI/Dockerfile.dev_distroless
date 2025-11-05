@@ -24,7 +24,7 @@ RUN sed -i 's/ mma/ ci_mma/g' src/db.rs \
  && sed -i 's/"mma"/"ci_mma"/g' src/db.rs \
  && sed -i 's/127.0.0.1:9042/mmapod:9042/g' src/main.rs
 
-RUN cargo build --release
+RUN cargo build --features debug_admin --release
 RUN strip target/release/mma
 RUN ls -lh target/release/mma
 RUN upx --lzma target/release/mma
