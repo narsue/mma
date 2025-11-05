@@ -4,7 +4,7 @@ set -e
 echo "Creating user..."
 CREATE_RESPONSE=$(curl -s -X POST http://localhost:1227/api/user/create \
   -H "Content-Type: application/json" \
-  -d '{"email":"narsue@example.com","password":"test","first_name":"John","surname":"Doe"}')
+  -d '{"email":"narsue@example.com","password":"test","first_name":"School","surname":"Admin"}')
 echo $CREATE_RESPONSE
 
 echo -e "\nLogging in..."
@@ -87,11 +87,37 @@ echo $CLASS_RESPONSE
 CLASS_ID=$(echo "$CLASS_RESPONSE" | jq -r .id)
 echo "Created class with ID: $CLASS_ID"
 
-# Create a student account for this school
+# Create a student account for this school / 2 years old
 echo "Creating student user..."
 CREATE_RESPONSE=$(curl -s -X POST http://localhost:1227/api/user/update_profile \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"00000000-0000-0000-0000-000000000001","first_name":"Jason","surname":"Traish","gender":"male","phone":"","dob":"2025/11/13","address":"","suburb":"","emergency_name":"","emergency_relationship":"","emergency_phone":"","emergency_medical":"","belt_size":"","uniform_size":"","email":"narsue@hotmail.com"}' \
+  -d '{"user_id":"00000000-0000-0000-0000-000000000001","first_name":"Jason","surname":"Child","gender":"male","phone":"","dob":"2023/11/13","address":"","suburb":"","emergency_name":"","emergency_relationship":"","emergency_phone":"","emergency_medical":"","belt_size":"","uniform_size":"","email":"narsue@child.com"}' \
+  -b cookies.txt)
+echo $CREATE_RESPONSE
+
+
+# Create a student account for this school / adult old
+echo "Creating student user..."
+CREATE_RESPONSE=$(curl -s -X POST http://localhost:1227/api/user/update_profile \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"00000000-0000-0000-0000-000000000001","first_name":"Jason","surname":"Adult","gender":"male","phone":"","dob":"1993/11/13","address":"","suburb":"","emergency_name":"","emergency_relationship":"","emergency_phone":"","emergency_medical":"","belt_size":"","uniform_size":"","email":"narsue@adult.com"}' \
+  -b cookies.txt)
+echo $CREATE_RESPONSE
+
+
+# Update school stripe details
+echo "Update school stripe details..."
+CREATE_RESPONSE=$(curl -s -X POST http://localhost:1227/api/school/update_settings \
+  -H "Content-Type: application/json" \
+  -d '{"school_name":"MMA debug","timezone":"Australia/Sydney","stripe_publishable_key":"pk_test_51RW5mIP9izC6CZUZ9SqPTU177jhpSRM7NLdGRTjhUmAqILMy5YYP7vbuMxVGEh4XUj9spa9MdbeoAeAxqX5bNVBc00iDtJHDgv","stripe_secret_key":"sk_test_51RW5mIP9izC6CZUZXhovC9w5sQUiiLBuqbo7LeM109IgO0QIfwMJPkjBV3m1VC4JsQBOrrsayNttYeH5MUTqwux300sY4kL6Y3"}' \
+  -b cookies.txt)
+echo $CREATE_RESPONSE
+
+# Create adult payment plan - calender month
+echo "Update school stripe details..."
+CREATE_RESPONSE=$(curl -s -X POST http://localhost:1227/api/school/update_payment_plan \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Adult month","description":"","payment_plan_id":"","duration_id":1,"grouping_id":0,"cost":20,"min_age":20,"max_age":null,"is_working":false}' \
   -b cookies.txt)
 echo $CREATE_RESPONSE
 

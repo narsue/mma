@@ -7638,7 +7638,7 @@
                     throw new Error("Event ID is required to add an event.");
                 }
 
-            
+                
                 const event = {
                     id: eventId,
                     startTime: new Date(startTime),
@@ -7780,7 +7780,9 @@
                 try {
                     document.getElementById('loading-indicator').classList.remove('hidden');
                     console.log('Loading students for class:', this.currentEvent.classId);
-                    const timeSegment = this.getTimeSegment(this.currentEvent.startTime);
+                    // const timeSegment = this.getTimeSegment(this.currentEvent.startTime);
+                    let timeSegment = get_event_today_timestamp(this.currentEvent.startTime);
+
                     const response = await fetch('/api/class/get_students', {
                         method: 'POST',
                         headers: {
@@ -7815,8 +7817,9 @@
                     document.getElementById('search-results').classList.add('hidden');
                     return;
                 }
+                let timeSegment = get_event_today_timestamp(this.currentEvent.startTime);
 
-                const timeSegment = this.getTimeSegment(this.currentEvent.startTime);
+                // const timeSegment = this.getTimeSegment(this.currentEvent.startTime);
                 try {
                     document.getElementById('loading-indicator').classList.remove('hidden');
                     const response = await fetch('/api/class/get_students', {
@@ -7959,8 +7962,21 @@
 
             async toggleStudentAttendance(studentId, attended) {
                 try {
-                    const timeSegment = this.getTimeSegment(this.currentEvent.startTime);
-                    
+                    console.log("toggleStudentAttendance", this.currentEvent)
+                    // const now = new Date();
+                    // let timeSegment = new Date(
+                    //     now.getFullYear(),
+                    //     now.getMonth(),
+                    //     now.getDate(),
+                    //     this.currentEvent.startTime.getHours(),
+                    //     this.currentEvent.startTime.getMinutes(),
+                    //     this.currentEvent.startTime.getSeconds(),
+                    //     this.currentEvent.startTime.getMilliseconds()
+                    // );
+                    // timeSegment = this.getTimeSegment(timeSegment);
+                    let timeSegment = get_event_today_timestamp(this.currentEvent.startTime);
+
+
                     const response = await fetch('/api/class/set_student_attendance', {
                         method: 'POST',
                         headers: {
@@ -8519,11 +8535,18 @@
                         btn.className =
                         'mt-3 px-3 py-1 bg-green-500 text-white rounded text-sm';
                         btn.addEventListener('click', async () => {
-                        await fetch('/api/user/subscribe_payment_plan', {
+                        const res = await fetch('/api/user/subscribe_payment_plan', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ payment_plan_id: p.payment_plan_id, base_payment_plan_id: p.base_payment_plan_id })
                         });
+                        const data = await res.json();
+                        if (!res.ok || data.success === false) {
+                            const msg = data.error_message || data.message || 'Subscription failed.';
+                            alert(`Error: ${msg}`);
+                            return;
+                        }
+
                         await renderUserMemberships();
                         });
                         card.appendChild(btn);
@@ -8925,6 +8948,20 @@ document
             document.getElementById('stripe-cardholder-name-admin').value = '';
             document.getElementById('card-errors-admin').textContent = '';
         }
+    }
+
+    function get_event_today_timestamp(event_start_datetime) {
+        const now = new Date();
+        let timeSegment = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            event_start_datetime.getHours(),
+            event_start_datetime.getMinutes(),
+            event_start_datetime.getSeconds(),
+            event_start_datetime.getMilliseconds()
+        );
+        return Math.floor(timeSegment.getTime());
     }
 
     function initStripeForAdmin(userId, email, cardholderName) {

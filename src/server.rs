@@ -3648,11 +3648,11 @@ pub mod handlers {
 
         match state_manager.db.user_subscribe_payment_plan(&school_stripe_client, &auth_user_id, &school_id, &req).await {
             Ok(result) => {},
-            Err(_) => {
+            Err(err) => {
                 return Ok(HttpResponse::BadRequest().json(GenericResponse {
                     success: false,
                     message: None,
-                    error_message: Some("Error subscribing to payment plan".to_string()),
+                    error_message: Some(format!("Error subscribing to payment plan: {}", err)),
                 }));
             }
         };

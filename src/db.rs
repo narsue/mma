@@ -1202,7 +1202,7 @@ impl ScyllaConnector {
 
             // 3. Hash the new password
             let new_password_hash = hash_password(&"test")?;
-            self.create_user(&email.unwrap(),Some("test"), Some(new_password_hash.as_str()), &first_name, &surname, true, &Some(*school_id), &Some(*user_id), false ).await?;
+            self.create_user(&email.unwrap(),Some("test"), Some(new_password_hash.as_str()), &first_name, &surname, true, &Some(*school_id), &Some(ref_user_id), false ).await?;
             // self.update_password_hash(,new_password_hash);
         }
 
@@ -1933,8 +1933,9 @@ impl ScyllaConnector {
             }, 
             None => {}
         }
-        tracing::warn!("Pay method - failed");
-        Ok(false)
+        // tracing::warn!("Pay method - failed");
+        // Ok(false)
+        return Err(AppError::BadRequest("No payment options for user. Please check credit card details are valid.".to_string()))
     }
 
     pub async fn get_timezone(
@@ -3842,7 +3843,7 @@ impl ScyllaConnector {
         let user_result = self.session
             .query_unpaged(
                 "SELECT dob FROM mma.user where user_id = ?;",
-                (school_id,),
+                (user_id,),
             )
             .await.trace()?
             .into_rows_result().trace()?;
@@ -3858,6 +3859,8 @@ impl ScyllaConnector {
                 // None => None
             //};
         }
+        println!("Years {:?}",age_years);
+
 
         let result = self.session
             .query_unpaged(
