@@ -644,7 +644,7 @@
                             <li><a href="#" data-section="locations" class="nav-link">🗺️ Locations</a></li>
                             <li><a href="#" data-section="pos" class="nav-link">📅 Today</a></li>
                             <li><a href="#" data-section="payment_plans" class="nav-link">💳 Plans</a></li>
-                            <li><a href="#" data-section="kiosk" class="nav-link">🖥️ Kiosk</a></li>
+                            <li id="kiosk-nav" class="nav-item hidden"><a href="#" data-section="kiosk" class="nav-link">🖥️ Kiosk</a></li>
                             <li id="users-nav" class="nav-item hidden"><a href="#" data-section="users" class="nav-link">👥 Users</a></li>
                             <li id="settings-nav" class="nav-item hidden"><a href="#" data-section="settings" class="nav-link">🏫 School Settings</a></li>
                             <li><a href="#" data-section="account" class="nav-link">⚙️ Account</a></li>
@@ -1554,6 +1554,7 @@
 					<select id="edit-pp-duration" disabled class="w-full">
 						<option value="1">Calendar Month</option>
 						<option value="2">School Term</option>
+						<option value="3">Life Time</option>
 					</select>
 					</div>
 					<div class="form-group">
@@ -1572,8 +1573,8 @@
 					<input type="number" id="edit-pp-max-age" class="w-full" />
 					</div>
 					<div class="form-group checkbox-group">
-					<input type="checkbox" id="edit-pp-is-working" />
-					<label for="edit-pp-is-working">Applies if Working</label>
+					<input type="checkbox" id="edit-pp-is-admin-restricted" />
+					<label for="edit-pp-is-admin-restricted">Applies if Working</label>
 					</div>
 				</form>
 				<div id="edit-pp-message" class="message text-center"></div>
@@ -4133,6 +4134,7 @@
                         console.log("User has admin permissions - showing admin buttons");
                         document.getElementById("dashboard-nav").classList.remove("hidden");
                         document.getElementById("users-nav").classList.remove("hidden");
+                        document.getElementById("kiosk-nav").classList.remove("hidden");
                         document.getElementById("add-venue-button").classList.remove("hidden");
                         const createClassBtn = document.getElementById("createClassBtn");
                         createClassBtn.classList.remove("hidden");
@@ -4148,6 +4150,7 @@
                         console.log("User does NOT have admin permissions - hiding admin buttons");
                         document.getElementById("dashboard-nav").classList.add("hidden");
                         document.getElementById("users-nav").classList.add("hidden");
+                        document.getElementById("kiosk-nav").classList.add("hidden");
                         document.getElementById("add-venue-button").classList.add("hidden");
                         document.getElementById("createClassBtn").classList.add("hidden");
                     }
@@ -5947,7 +5950,10 @@
                                 if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
                                     editbtn = `<button class="edit-class-button py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Edit</button>`;
                                 }
-
+                                var historybtn = ``;
+                                if (hasPermission(userPermissions, [Permissions.SuperAdmin, Permissions.HyperAdmin])) {
+                                    historybtn = `<button class="history-class-button py-2 px-4 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition duration-200 text-sm" data-class-id="${cls.class_id}" data-class-title="${cls.title}">📊 History</button>`;
+                                }
 
                                  html += `
                                      <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
@@ -5983,7 +5989,7 @@
                                          <div class="flex flex-wrap gap-3">
                                               ${joinButtonHtml}
                                              <!-- <button class="checkin-class-button py-2 px-4 bg-yellow-500 text-gray-900 rounded-md hover:bg-yellow-600 transition duration-200 text-sm" data-class-id="${cls.class_id}">Check-in</button> -->
-                                             <button class="history-class-button py-2 px-4 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition duration-200 text-sm" data-class-id="${cls.class_id}" data-class-title="${cls.title}">📊 History</button>
+                                             ${historybtn}
                                              ${editbtn}
                                              <!-- Add Delete button if needed -->
                                          </div>
@@ -7185,6 +7191,13 @@
 
             // --- Class History Modal Functions ---
 
+            function formatDateForInput(date) {
+                // Ensures correct local date for <input type="date"> values
+                const tzOffset = date.getTimezoneOffset() * 60000; // offset in ms
+                const localISOTime = new Date(date - tzOffset).toISOString().split('T')[0];
+                return localISOTime;
+            }
+
             // Function to open the class history modal
             async function openClassHistoryModal(classId, classTitle) {
                 const modal = document.getElementById('classHistoryModal');
@@ -7201,13 +7214,16 @@
                 modal.classList.remove('hidden');
                 
                 // Set default date range (last 30 days)
+                // const today = new Date();
+                // const thirtyDaysAgo = new Date(today);
+                // thirtyDaysAgo.setDate(today.getDate() - 30);
                 const today = new Date();
-                const thirtyDaysAgo = new Date(today);
+                const thirtyDaysAgo = new Date();
                 thirtyDaysAgo.setDate(today.getDate() - 30);
-                
-                document.getElementById('history-date-to').value = today.toISOString().split('T')[0];
-                document.getElementById('history-date-from').value = thirtyDaysAgo.toISOString().split('T')[0];
-                
+
+                document.getElementById('history-date-to').value = formatDateForInput(today);
+                document.getElementById('history-date-from').value = formatDateForInput(thirtyDaysAgo);
+
                 // Load history data
                 await loadClassHistory(classId);
             }
@@ -8741,70 +8757,101 @@
 		// }
 
 		async function renderAdminPaymentPlans() {
-		const grid = document.getElementById('adminPlansGrid');
-		grid.innerHTML = '<p>Loading admin plans…</p>';
-		try {
-			const res = await fetch('/api/school/current_payment_plans', {
-			method: 'POST'
-			});
-			const { payment_plans } = await res.json();
-			// bucket by duration×type×age×working
-			const byCell = {};
-			payment_plans.forEach((p) => {
-			// determine rowKey
-			let row;
-			if (p.type_id === 1) row = 'family';
-			else if (p.is_working) row = 'ind_adult';
-			else if (p.max_age <= 18) row = 'ind_child';
-			else row = 'ind_nonworking';
-			byCell[`${p.duration_id}_${row}`] = p;
-			});
-			grid.innerHTML = '';
-			const rows = [
-			['ind_adult', 'Individual Adult'],
-			['ind_child', 'Individual Child'],
-			['ind_nonworking', 'Individual Adult Non-working'],
-			['family', 'Family']
-			];
-			rows.forEach(([rowKey, label]) => {
-			[1, 2].forEach((dur) => {
-				const p = byCell[`${dur}_${rowKey}`];
-				const card = document.createElement('div');
-				card.className =
-				'p-4 rounded shadow flex flex-col justify-between';
-				if (!p) {
-				card.classList.add('bg-gray-200');
-				card.innerHTML = `<p class="italic">${label} / ${
-					dur === 1 ? 'Month' : 'Term'
-				} not set.</p>`;
-				} else {
-				card.classList.add('bg-white');
-				card.innerHTML = `
-					<h4 class="font-semibold">${label}</h4>
-					<p>Cost: $${parseFloat(p.cost).toFixed(2)}</p>
-					<p>Age: ${p.min_age}–${p.max_age}</p>
-					<p>Working: ${p.is_working ? 'Yes' : 'No'}</p>
-				`;
-				}
-				const btn = document.createElement('button');
-				btn.textContent = p ? 'Update' : 'Add';
-				btn.className =
-				'mt-2 px-2 py-1 bg-blue-500 text-white rounded text-sm';
-				btn.addEventListener('click', () =>
-				openEditPPModal(p || { duration_id: dur, type_id: rowKey })
-				);
-				card.appendChild(btn);
-				grid.appendChild(card);
-			});
-			});
-		} catch (e) {
-			console.error(e);
-			grid.innerHTML =
-			'<p class="col-span-2 text-red-600">Error loading admin plans.</p>';
-		}
+            const grid = document.getElementById('adminPlansGrid');
+            grid.innerHTML = '<p>Loading admin plans…</p>';
+            try {
+                const res = await fetch('/api/school/current_payment_plans', {
+                method: 'POST'
+                });
+                const { payment_plans } = await res.json();
+                // bucket by duration×type×age×working
+                const byCell = {};
+                payment_plans.forEach((p) => {
+                    // determine rowKey
+                    let row;
+                    if (p.type_id === 1) row = 'family';
+                    // else if (p.is_working) row = 'ind_adult';
+                    else if (p.min_age >= 18) row = 'ind_adult';
+                    else if (p.max_age <= 18) row = 'ind_child';
+                    else row = 'ind_nonworking';
+                    byCell[`${p.duration_id}_${row}`] = p;
+                });
+                grid.innerHTML = '';
+                const rows = [
+                ['ind_adult', 'Individual Adult'],
+                ['ind_child', 'Individual Child'],
+                // ['ind_nonworking', 'Individual Adult Non-working'],
+                // ['family', 'Family']
+                ];
+                rows.forEach(([rowKey, label]) => {
+                    [1, 2].forEach((dur) => {
+                        const p = byCell[`${dur}_${rowKey}`];
+                        const card = document.createElement('div');
+                        card.className =
+                        'p-4 rounded shadow flex flex-col justify-between';
+                        if (!p) {
+                        card.classList.add('bg-gray-200');
+                        card.innerHTML = `<p class="italic">${label} / ${
+                            dur === 1 ? 'Month' : 'Term'
+                        } not set.</p>`;
+                        } else {
+                        card.classList.add('bg-white');
+                        card.innerHTML = `
+                            <h4 class="font-semibold">${label}</h4>
+                            <p>Cost: $${parseFloat(p.cost).toFixed(2)}</p>
+                            <p>Age: ${p.min_age}–${p.max_age}</p>
+                        `;
+                        }
+                        let min_age = rowKey.includes('child') ? "" : 18;
+                        let max_age = rowKey.includes('child') ? 18 : "";
+                        const btn = document.createElement('button');
+                        btn.textContent = p ? 'Update' : 'Add';
+                        btn.className =
+                        'mt-2 px-2 py-1 bg-blue-500 text-white rounded text-sm';
+                        btn.addEventListener('click', () =>
+                            openEditPPModal(p || { duration_id: `${dur}`, type_id: `0`, title: `${label}`, min_age: min_age, max_age: max_age })
+                        );
+                        card.appendChild(btn);
+                        grid.appendChild(card);
+                    });
+                });
+                {
+                    const p = byCell[`3_free`];
+                    const card = document.createElement('div');
+                    card.className =
+                    'p-4 rounded shadow flex flex-col justify-between';
+                    if (!p) {
+                    card.classList.add('bg-gray-200');
+                    card.innerHTML = `<p class="italic">Free / ${
+                        'Free'
+                    } not set.</p>`;
+                    } else {
+                    card.classList.add('bg-white');
+                    card.innerHTML = `
+                        <h4 class="font-semibold">Free</h4>
+                        <p>Cost: Free</p>
+                    `;
+                    }
+                    const btn = document.createElement('button');
+                    btn.textContent = p ? 'Update' : 'Add';
+                    btn.className =
+                    'mt-2 px-2 py-1 bg-blue-500 text-white rounded text-sm';
+                    btn.addEventListener('click', () =>
+                        openEditPPModal(p || { duration_id: "3", type_id: "0", title: 'free', cost: "0" })
+                    );
+                    card.appendChild(btn);
+                    grid.appendChild(card);
+                }
+
+            } catch (e) {
+                console.error(e);
+                grid.innerHTML =
+                '<p class="col-span-2 text-red-600">Error loading admin plans.</p>';
+            }
 		}
 
 		function openEditPPModal(pp) {
+            console.log('openEditPPModal', pp);
             const modal = document.getElementById('edit-paymentplan-modal');
             document.getElementById('edit-pp-id').value =
                 pp.payment_plan_id || '';
@@ -8816,8 +8863,8 @@
             document.getElementById('edit-pp-type').value = pp.type_id || '';
             document.getElementById('edit-pp-min-age').value = pp.min_age || '';
             document.getElementById('edit-pp-max-age').value = pp.max_age || '';
-            document.getElementById('edit-pp-is-working').checked =
-                pp.is_working || false;
+            document.getElementById('edit-pp-is-admin-restricted').checked =
+                pp.is_admin_restricted || false;
             modal.style.display = 'block';
 		}
 
@@ -8841,7 +8888,8 @@
                     document.getElementById('edit-pp-max-age').value,
                     10
                 ),
-                is_working: document.getElementById('edit-pp-is-working').checked
+                // is_working: false
+                admin_restricted: document.getElementById('edit-pp-is-admin-restricted').checked
 			};
 			try {
 			await fetch('/api/school/update_payment_plan', {
@@ -8870,22 +8918,22 @@
 //   }
 // }
 
-function openEditPPModal(pp) {
-  const modal = document.getElementById('edit-paymentplan-modal');
-  document.getElementById('edit-pp-id').value =
-    pp.payment_plan_id || '';
-  document.getElementById('edit-pp-title').value = pp.title || '';
-  document.getElementById('edit-pp-desc').value = pp.description || '';
-  document.getElementById('edit-pp-cost').value = pp.cost || '';
-  document.getElementById('edit-pp-duration').value =
-    pp.duration_id || '';
-  document.getElementById('edit-pp-type').value = pp.type_id || '';
-  document.getElementById('edit-pp-min-age').value = pp.min_age || '';
-  document.getElementById('edit-pp-max-age').value = pp.max_age || '';
-  document.getElementById('edit-pp-is-working').checked =
-    pp.is_working || false;
-  modal.style.display = 'block';
-}
+// function openEditPPModal(pp) {
+//   const modal = document.getElementById('edit-paymentplan-modal');
+//   document.getElementById('edit-pp-id').value =
+//     pp.payment_plan_id || '';
+//   document.getElementById('edit-pp-title').value = pp.title || '';
+//   document.getElementById('edit-pp-desc').value = pp.description || '';
+//   document.getElementById('edit-pp-cost').value = pp.cost || '';
+//   document.getElementById('edit-pp-duration').value =
+//     pp.duration_id || '';
+//   document.getElementById('edit-pp-type').value = pp.type_id || '';
+//   document.getElementById('edit-pp-min-age').value = pp.min_age || '';
+//   document.getElementById('edit-pp-max-age').value = pp.max_age || '';
+//   document.getElementById('edit-pp-is-working').checked =
+//     pp.is_working || false;
+//   modal.style.display = 'block';
+// }
 
 document
   .getElementById('submit-edit-paymentplan')
@@ -8903,7 +8951,7 @@ document
         document.getElementById('edit-pp-max-age').value,
         10
       ),
-      is_working: document.getElementById('edit-pp-is-working').checked
+      admin_restricted: document.getElementById('edit-pp-is-admin-restricted').checked
     };
     try {
       await fetch('/api/school/update_payment_plan', {
@@ -8966,7 +9014,7 @@ document
 
     function initStripeForAdmin(userId, email, cardholderName) {
         if (stripeAdmin) return; // Don't re-initialize
-
+        // todo change to your own publishable key
         stripeAdmin = Stripe('pk_test_51RW5mIP9izC6CZUZ9SqPTU177jhpSRM7NLdGRTjhUmAqILMy5YYP7vbuMxVGEh4XUj9spa9MdbeoAeAxqX5bNVBc00iDtJHDgv');
         const elements = stripeAdmin.elements();
 

@@ -246,7 +246,7 @@ pub struct PaymentPlanData {
     grouping_id: i32,
     min_age: Option<i32>,
     max_age: Option<i32>,
-    working: Option<bool>,
+    admin_restricted: Option<bool>,
     title: String,
     description: String,
     cost: BigDecimal,
@@ -416,7 +416,7 @@ pub async fn init_schema(session: &Session) -> Result<()> {
         
     // Set up tables if empty otherwise migrate tables if old schema
     let migration = MigrationTool::new("mma".to_string(), PathBuf::from("schema"));
-    migration.migrate_to_version(session, 1).await.trace()?;
+    migration.migrate_to_version(session, 2).await.trace()?;
 
     println!("Schema initialized");
     Ok(())
@@ -1203,7 +1203,7 @@ impl ScyllaConnector {
             // 3. Hash the new password
             let new_password_hash = hash_password(&"test")?;
             self.create_user(&email.unwrap(),Some("test"), Some(new_password_hash.as_str()), &first_name, &surname, true, &Some(*school_id), &Some(ref_user_id), false ).await?;
-            // self.update_password_hash(,new_password_hash);
+            self.add_stripe_customer_id(&ref_user_id, &"cus_TMuyEPogTd4OYr".to_string()).await?;
         }
 
 
@@ -1858,8 +1858,8 @@ impl ScyllaConnector {
                             };
 
                             let base_payment_plan_id = match base_payment_plan_id {
-                                Some(base_payment_plan_id) => {base_payment_plan_id},
-                                None => &zero_guuid
+                                Some(base_payment_plan_id) => {Some(base_payment_plan_id)},
+                                None => None
                             };
                             
                             
@@ -1869,13 +1869,13 @@ impl ScyllaConnector {
                             };
 
                             let payment_plan_id = match payment_plan_id {
-                                Some(payment_plan_id) => {payment_plan_id},
-                                None => &zero_guuid
+                                Some(payment_plan_id) => {Some(payment_plan_id)},
+                                None => None
                             };
 
                             let class_id = match class_id {
-                                Some(class_id) => class_id,
-                                None => &zero_guuid
+                                Some(class_id) => Some(class_id),
+                                None => None
                             };
 
                             let class_start_ts = match class_start_ts {
@@ -1889,8 +1889,13 @@ impl ScyllaConnector {
                             //     (user_id, base_payment_plan_id, payment_plan_id, class_id, class_start_ts, now, stripe_payment_id, now, price, payment_status)) // Pass the query string and bound values
                             //     .await.trace()?;
                             let _result = self.session
-                                .query_unpaged("insert into mma.user_payment (user_payment_id, user_id, base_payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, paid_ts, paid, amount, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-                                (user_payment_id, user_id, base_payment_plan_id, class_id, class_start_ts, now, stripe_payment_id, now, now, price, price, price, payment_status)) // Pass the query string and bound values
+                                .query_unpaged("insert into mma.user_payment (user_payment_id, user_id, base_payment_plan_id, payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, paid_ts, paid, amount, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                                (user_payment_id, user_id, base_payment_plan_id, payment_plan_id, class_id, class_start_ts, now, stripe_payment_id, now, now, price, price, price, payment_status)) // Pass the query string and bound values
+                                .await.trace()?;
+
+                            let _result = self.session
+                                .query_unpaged("insert into mma.user_payment_history (user_payment_id, user_id, captured, captured_ts) values (?, ?, ?, ?)", 
+                                (user_payment_id, user_id, price, now)) // Pass the query string and bound values
                                 .await.trace()?;
 
                             if is_pass {
@@ -1998,6 +2003,10 @@ impl ScyllaConnector {
     
         let now_local: DateTime<Tz> = now_dt_utc.with_timezone(&tz);
         let current_date_local: NaiveDate = now_local.date_naive();
+        if duration_id == PaymentPlanDuration::LifeTime as i32 {
+            // Return a far future timestamp for lifetime plans
+            return Ok(32503680000000); // Corresponds to year 3000
+        }
 
         if duration_id == PaymentPlanDuration::CalenderMonth as i32 {
             // Get the year and month
@@ -2245,9 +2254,15 @@ impl ScyllaConnector {
                                         let class_start_ts = scylla::value::CqlTimestamp(class_start_ts);
                                         
                                         let result = self.session
-                                            .query_unpaged("insert into mma.user_payment (user_payment_id, user_id, base_payment_plan_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, paid_ts, paid, amount, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-                                            (user_payment_id, user_id, zero_guuid, class_id, class_start_ts, now, stripe_payment_id, now, now, price, price, price, payment_status)) // Pass the query string and bound values
+                                            .query_unpaged("insert into mma.user_payment (user_payment_id, user_id, class_id, class_start_ts, created_ts, stripe_payment_id, captured_ts, paid_ts, paid, amount, captured, status) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                                            (user_payment_id, user_id, class_id, class_start_ts, now, stripe_payment_id, now, now, price, price, price, payment_status)) // Pass the query string and bound values
                                             .await.trace()?;
+
+                                        let _result = self.session
+                                            .query_unpaged("insert into mma.user_payment_history (user_payment_id, user_id, captured, captured_ts) values (?, ?, ?, ?)", 
+                                            (user_payment_id, user_id, price, now)) // Pass the query string and bound values
+                                            .await.trace()?;
+
                                         return Ok((true, Some(user_payment_id), None));
                                         // CREATE TABLE IF NOT EXISTS {}.user_payment (user_payment_id uuid, user_id uuid, class_id uuid, class_start_ts timestamp, base_payment_plan_id uuid, payment_plan_id uuid, status int, stripe_payment_id text, created_ts timestamp, paid decimal, amount decimal, refunded decimal, refunded_ts timestamp, paid_ts timestamp, processing_ts timestamp, processing_node text, captured_ts timestamp, captured decimal, PRIMARY KEY (user_id, base_payment_plan_id, class_id, class_start_ts));
 
@@ -2716,8 +2731,8 @@ impl ScyllaConnector {
 
         // Step 4: Insert results into dash_stats
         for ((id, id_type, stat_window, stat_count_type, v1, v2, ts), count) in count_total {
-            println!("Inserting stat: id: {}, id_type: {}, window: {}, count_type: {}, v1: {}, v2: {}, ts: {}, count: {}", 
-                id, id_type, stat_window, stat_count_type, v1, v2, ts, count);
+            // println!("Inserting stat: id: {}, id_type: {}, window: {}, count_type: {}, v1: {}, v2: {}, ts: {}, count: {}", 
+                // id, id_type, stat_window, stat_count_type, v1, v2, ts, count);
             self.session
                 .query_unpaged(
                     "insert into mma.dash_stats (school_id, id, id_type, window, count, count_type, v1, v2, ts)
@@ -2941,6 +2956,7 @@ impl ScyllaConnector {
 
     pub async fn set_class_attendance (
         &self,
+        auth_user_id: &Uuid,
         class_id: &Uuid,
         school_id: &Uuid,
         user_ids: &Vec<Uuid>,
@@ -2956,7 +2972,18 @@ impl ScyllaConnector {
         let is_present = *present.get(0).unwrap();
         let cql_class_start_ts: CqlTimestamp = scylla::value::CqlTimestamp(class_start_ts);
 
+        if modify_user_id != auth_user_id {
+            // Check if auth_user_id has permission to modify other users
 
+            let permissions = self.get_user_permissions(auth_user_id).await.trace()?;
+            let has_admin_permission = permissions.iter().any(|p| {
+                p.permission == 0 || p.permission == 1  // HyperAdmin (0) or SuperAdmin (1)
+            });
+
+            if !has_admin_permission {
+                return Err(AppError::BadRequest("User does not have permission to modify other users attendance".to_string()));
+            }
+        }
         // mma.attendance (class_id, user_id, class_start_ts, is_instructor, checkin_ts, user_payment_id, user_payment_plan_id) VALUES (?, ?, ?, ?, ?, ?, ?)
 
         let result = self.session
@@ -3559,6 +3586,7 @@ impl ScyllaConnector {
 
     // Helper function to get payment details
     async fn get_payment_details(&self, payment_id: Uuid) -> AppResult<(Option<PaymentInfo>, f64, i32)> {
+        println!("Fetching payment details for payment_id: {}", payment_id);
         let result = self.session
             .query_unpaged(
                 "SELECT captured, status, stripe_payment_id FROM mma.user_payment WHERE user_payment_id = ?",
@@ -3569,7 +3597,7 @@ impl ScyllaConnector {
 
         for row in result.rows().trace()? {
             let (captured, status, stripe_payment_id): (Option<BigDecimal>, i32, Option<String>) = row.trace()?;
-            
+            println!("Payment details - captured: {:?}, status: {}, stripe_payment_id: {:?}", captured, status, stripe_payment_id);
             let amount = captured.map(|c| c.to_f64().unwrap_or(0.0)).unwrap_or(0.0);
             let payment_info = stripe_payment_id.map(|_| PaymentInfo {
                 type_name: "card".to_string(),
@@ -3672,7 +3700,7 @@ impl ScyllaConnector {
 
         let result = self.session
             .query_unpaged(
-                "SELECT payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, working, title, description, cost, duration_id FROM mma.payment_plan where school_id = ? and base_payment_plan_id in ? and payment_plan_id in ?;",
+                "SELECT payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, admin_restricted, title, description, cost, duration_id FROM mma.payment_plan where school_id = ? and base_payment_plan_id in ? and payment_plan_id in ?;",
                 (school_id, base_payment_plan_ids, payment_plan_ids),
             )
             .await.trace()?
@@ -3737,7 +3765,7 @@ impl ScyllaConnector {
                         grouping_id: payment_plan.grouping_id,
                         min_age: payment_plan.min_age,
                         max_age: payment_plan.max_age,
-                        working: payment_plan.working,
+                        admin_restricted: payment_plan.admin_restricted,
                         title: payment_plan.title.clone(),
                         description: payment_plan.description.clone(),
                         cost: payment_plan.cost.clone(),
@@ -3784,8 +3812,8 @@ impl ScyllaConnector {
 
         let result = self.session
             .query_unpaged(
-                "INSERT into mma.payment_plan (school_id, payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, working, title, description, cost, duration_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-                (&school_id, &plan_id, &base_plan_id, plan.grouping_id, plan.min_age, plan.max_age, plan.working, &plan.title, &plan.description, &plan.cost, plan.duration_id),
+                "INSERT into mma.payment_plan (school_id, payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, admin_restricted, title, description, cost, duration_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+                (&school_id, &plan_id, &base_plan_id, plan.grouping_id, plan.min_age, plan.max_age, plan.admin_restricted, &plan.title, &plan.description, &plan.cost, plan.duration_id),
             )
             .await.trace()?;
 
@@ -3799,7 +3827,7 @@ impl ScyllaConnector {
     ) -> AppResult<Vec<PurchasablePaymentPlanData>> {
         let result = self.session
             .query_unpaged(
-                "SELECT payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, working, title, description, cost, duration_id FROM mma.payment_plan where school_id = ?;",
+                "SELECT payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, admin_restricted, title, description, cost, duration_id FROM mma.payment_plan where school_id = ?;",
                 (school_id,),
             )
             .await.trace()?
@@ -3817,7 +3845,7 @@ impl ScyllaConnector {
                     grouping_id: plan.grouping_id,
                     min_age: plan.min_age,
                     max_age: plan.max_age,
-                    working: plan.working,
+                    admin_restricted: plan.admin_restricted,
                     title: plan.title,
                     description: plan.description,
                     cost: plan.cost,
@@ -3859,12 +3887,12 @@ impl ScyllaConnector {
                 // None => None
             //};
         }
-        println!("Years {:?}",age_years);
+        // println!("Years {:?}",age_years);
 
 
         let result = self.session
             .query_unpaged(
-                "SELECT payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, working, title, description, cost, duration_id FROM mma.payment_plan where school_id = ?;",
+                "SELECT payment_plan_id, base_payment_plan_id, grouping_id, min_age, max_age, admin_restricted, title, description, cost, duration_id FROM mma.payment_plan where school_id = ?;",
                 (school_id,),
             )
             .await.trace()?
@@ -3882,7 +3910,7 @@ impl ScyllaConnector {
                     grouping_id: plan.grouping_id,
                     min_age: plan.min_age,
                     max_age: plan.max_age,
-                    working: plan.working,
+                    admin_restricted: plan.admin_restricted,
                     title: plan.title,
                     description: plan.description,
                     cost: plan.cost,

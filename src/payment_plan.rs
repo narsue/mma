@@ -6,7 +6,8 @@ pub enum PaymentPlanDuration {
     SingleClass=0,
     CalenderMonth=1,
     SchoolTerm=2,
-    END=3,
+    LifeTime=3,
+    END=4,
 }
 
 #[repr(i32)]

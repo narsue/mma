@@ -1792,7 +1792,7 @@ pub mod handlers {
         };
 
         // Call the database function to get classes based on the provided filters
-        let result: AppResult<bool> = state_manager.db.set_class_attendance(&class_id, &school_id, &req.user_ids, &req.present, class_start_ts, &school_stripe_client).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
+        let result: AppResult<bool> = state_manager.db.set_class_attendance(&auth_user_id, &class_id, &school_id, &req.user_ids, &req.present, class_start_ts, &school_stripe_client).await; // Use '?' to propagate AppError from get_classes - OH WAIT, get_classes returns AppResult, need match/map_err
 
         // Handle the result of the database operation explicitly
         match result {
@@ -1817,7 +1817,7 @@ pub mod handlers {
 
                 Ok(HttpResponse::BadRequest().json(GenericResponse {
                     success: false,
-                    error_message: Some("Error setting student attendance".to_string()),
+                    error_message: Some(format!("Error setting student attendance: {}", app_err)),
                     message: None,
                 }))
 

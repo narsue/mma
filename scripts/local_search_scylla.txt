@@ -1,0 +1,6 @@
+podman exec -it scylla sh
+cqlsh -u cassandra -p cassandra
+use mma;
+select * from user_payment;
+
+podman exec -it scylla cqlsh -u cassandra -p cassandra -e "use mma; select * from user_payment"
